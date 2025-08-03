@@ -18,6 +18,98 @@ pub struct PyConnection {
     runtime: Arc<tokio::runtime::Runtime>,
 }
 
+impl PyConnection {
+    /// Helper function to establish a database connection
+    /// 
+    /// This function handles the complete connection process including:
+    /// - Establishing TCP connection
+    /// - Setting TCP_NODELAY for better performance
+    /// - Authenticating with the database
+    /// - Storing the client instance
+    async fn establish_connection(
+        client: Arc<Mutex<Option<TiberiusClient>>>,
+        config: Config,
+    ) -> PyResult<()> {
+        let tcp = TcpStream::connect(config.get_addr())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect: {}", e)))?;
+        
+        tcp.set_nodelay(true)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to set nodelay: {}", e)))?;
+        
+        let client_instance = Client::connect(config, tcp.compat_write())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to authenticate: {}", e)))?;
+        
+        *client.lock().await = Some(client_instance);
+        Ok(())
+    }
+
+    /// Helper function to close a database connection
+    /// 
+    /// Safely closes the database connection if one exists
+    async fn close_connection(client: Arc<Mutex<Option<TiberiusClient>>>) {
+        let mut client_guard = client.lock().await;
+        if let Some(client_instance) = client_guard.take() {
+            let _ = client_instance.close().await;
+        }
+    }
+
+    /// Helper function to execute a query and return results
+    /// 
+    /// Executes a SELECT query and returns the results as PyRow objects
+    async fn execute_query_internal(
+        client: Arc<Mutex<Option<TiberiusClient>>>,
+        query: String,
+    ) -> PyResult<Vec<PyRow>> {
+        let mut client_guard = client.lock().await;
+        let client_instance = client_guard.as_mut()
+            .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
+        
+        let stream = client_instance.query(&query, &[])
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        
+        let rows = stream.into_first_result()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
+        
+        Self::convert_rows_to_py(rows)
+    }
+
+    /// Helper function to execute a non-query command
+    /// 
+    /// Executes INSERT, UPDATE, DELETE, or other non-query commands
+    /// Returns the number of affected rows
+    async fn execute_non_query_internal(
+        client: Arc<Mutex<Option<TiberiusClient>>>,
+        query: String,
+    ) -> PyResult<u64> {
+        let mut client_guard = client.lock().await;
+        let client_instance = client_guard.as_mut()
+            .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
+        
+        let result = client_instance.execute(&query, &[])
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        
+        // Sum all affected rows from all statements in the batch
+        let total_affected: u64 = result.rows_affected().iter().sum();
+        Ok(total_affected)
+    }
+
+    /// Helper function to convert Tiberius rows to PyRow objects
+    /// 
+    /// Converts the raw database rows to Python-compatible objects
+    fn convert_rows_to_py(rows: Vec<tiberius::Row>) -> PyResult<Vec<PyRow>> {
+        let mut py_rows = Vec::with_capacity(rows.len());
+        for row in rows {
+            py_rows.push(PyRow::from_tiberius_row(row)?);
+        }
+        Ok(py_rows)
+    }
+}
+
 #[pymethods]
 impl PyConnection {
     #[new]
@@ -36,26 +128,13 @@ impl PyConnection {
             runtime,
         })
     }
-    
     /// Connect to the database (async version)
     pub fn connect_async<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
         let client = self.client.clone();
         let config = self.config.clone();
         
         future_into_py(py, async move {
-            let tcp = TcpStream::connect(config.get_addr())
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect: {}", e)))?;
-            
-            tcp.set_nodelay(true)
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to set nodelay: {}", e)))?;
-            
-            let client_instance = Client::connect(config, tcp.compat_write())
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to authenticate: {}", e)))?;
-            
-            *client.lock().await = Some(client_instance);
-            Ok(())
+            Self::establish_connection(client, config).await
         })
     }
     
@@ -65,22 +144,8 @@ impl PyConnection {
         let config = self.config.clone();
         
         self.runtime.block_on(async move {
-            let tcp = TcpStream::connect(config.get_addr())
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect: {}", e)))?;
-            
-            tcp.set_nodelay(true)
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to set nodelay: {}", e)))?;
-            
-            let client_instance = Client::connect(config, tcp.compat_write())
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to authenticate: {}", e)))?;
-            
-            *client.lock().await = Some(client_instance);
-            Ok::<(), PyErr>(())
-        })?;
-        
-        Ok(())
+            Self::establish_connection(client, config).await
+        })
     }
     
     /// Disconnect from the database (async version)
@@ -88,10 +153,7 @@ impl PyConnection {
         let client = self.client.clone();
         
         future_into_py(py, async move {
-            let mut client_guard = client.lock().await;
-            if let Some(client_instance) = client_guard.take() {
-                let _ = client_instance.close().await;
-            }
+            Self::close_connection(client).await;
             Ok(())
         })
     }
@@ -101,10 +163,7 @@ impl PyConnection {
         let client = self.client.clone();
         
         self.runtime.block_on(async move {
-            let mut client_guard = client.lock().await;
-            if let Some(client_instance) = client_guard.take() {
-                let _ = client_instance.close().await;
-            }
+            Self::close_connection(client).await;
         });
         
         Ok(())
@@ -115,24 +174,7 @@ impl PyConnection {
         let client = self.client.clone();
         
         future_into_py(py, async move {
-            let mut client_guard = client.lock().await;
-            let client_instance = client_guard.as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
-            
-            let stream = client_instance.query(&query, &[])
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-            
-            let rows = stream.into_first_result()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-            
-            let mut py_rows = Vec::new();
-            for row in rows {
-                py_rows.push(PyRow::from_tiberius_row(row)?);
-            }
-            
-            Ok(py_rows)
+            Self::execute_query_internal(client, query).await
         })
     }
     
@@ -141,24 +183,7 @@ impl PyConnection {
         let client = self.client.clone();
         
         self.runtime.block_on(async move {
-            let mut client_guard = client.lock().await;
-            let client_instance = client_guard.as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
-            
-            let stream = client_instance.query(&query, &[])
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-            
-            let rows = stream.into_first_result()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-            
-            let mut py_rows = Vec::new();
-            for row in rows {
-                py_rows.push(PyRow::from_tiberius_row(row)?);
-            }
-            
-            Ok(py_rows)
+            Self::execute_query_internal(client, query).await
         })
     }
     
@@ -167,15 +192,7 @@ impl PyConnection {
         let client = self.client.clone();
         
         future_into_py(py, async move {
-            let mut client_guard = client.lock().await;
-            let client_instance = client_guard.as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
-            
-            let result = client_instance.execute(&query, &[])
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-            
-            Ok(result.rows_affected().len() as u64)
+            Self::execute_non_query_internal(client, query).await
         })
     }
     
@@ -184,15 +201,7 @@ impl PyConnection {
         let client = self.client.clone();
         
         self.runtime.block_on(async move {
-            let mut client_guard = client.lock().await;
-            let client_instance = client_guard.as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
-            
-            let result = client_instance.execute(&query, &[])
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-            
-            Ok(result.rows_affected().len() as u64)
+            Self::execute_non_query_internal(client, query).await
         })
     }
     
@@ -223,7 +232,7 @@ mod tests {
     #[test]
     fn test_connection_establishment() {
         let conn_string = env::var("MSSQL_CONNECTION_STRING").unwrap_or_else(|_| {
-            "Server=localhost;Database=test;Integrated Security=true;".to_string()
+            "Server=localhost;Database=test;Integrated Security=true".to_string()
         });
         
         let connection = PyConnection::new(conn_string).expect("Failed to create connection");
@@ -236,7 +245,7 @@ mod tests {
     #[test] 
     fn test_connection_lifecycle() {
         let conn_string = env::var("MSSQL_CONNECTION_STRING").unwrap_or_else(|_| {
-            "Server=localhost;Database=test;Integrated Security=true;".to_string()
+            "Server=localhost;Database=test;Integrated Security=true".to_string()
         });
         
         let connection = PyConnection::new(conn_string).expect("Failed to create connection");

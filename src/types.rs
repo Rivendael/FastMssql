@@ -3,7 +3,10 @@ use pyo3::types::PyDict;
 use pyo3::exceptions::PyValueError;
 use tiberius::Row;
 use tiberius::numeric::Numeric;
+use tiberius::xml::XmlData;
 use std::collections::HashMap;
+use chrono::{DateTime, NaiveDate, NaiveTime, NaiveDateTime, Utc};
+use uuid::Uuid;
 
 /// A Python-compatible representation of a database row
 #[pyclass(name = "Row")]
@@ -169,6 +172,123 @@ impl PyRow {
                         }
                     }
                 }
+                // Date and Time types
+                tiberius::ColumnType::Daten => {
+                    match row.try_get::<NaiveDate, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_datetime(val.format("%Y-%m-%d").to_string()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                tiberius::ColumnType::Timen => {
+                    match row.try_get::<NaiveTime, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_datetime(val.format("%H:%M:%S%.f").to_string()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                tiberius::ColumnType::Datetime => {
+                    match row.try_get::<NaiveDateTime, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_datetime(val.format("%Y-%m-%d %H:%M:%S%.f").to_string()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                tiberius::ColumnType::Datetimen => {
+                    match row.try_get::<NaiveDateTime, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_datetime(val.format("%Y-%m-%d %H:%M:%S%.f").to_string()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                tiberius::ColumnType::Datetime2 => {
+                    match row.try_get::<NaiveDateTime, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_datetime(val.format("%Y-%m-%d %H:%M:%S%.f").to_string()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                tiberius::ColumnType::DatetimeOffsetn => {
+                    match row.try_get::<DateTime<Utc>, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_datetime(val.to_rfc3339()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                // Binary types
+                tiberius::ColumnType::BigBinary | 
+                tiberius::ColumnType::BigVarBin | 
+                tiberius::ColumnType::Image => {
+                    match row.try_get::<&[u8], usize>(i) {
+                        Ok(Some(val)) => PyValue::new_bytes(val.to_vec()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => PyValue::new_null(),
+                    }
+                }
+                // GUID/UniqueIdentifier
+                tiberius::ColumnType::Guid => {
+                    match row.try_get::<Uuid, usize>(i) {
+                        Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                        Ok(None) => PyValue::new_null(),
+                        Err(_) => {
+                            // Fallback to string
+                            match row.try_get::<&str, usize>(i) {
+                                Ok(Some(val)) => PyValue::new_string(val.to_string()),
+                                _ => PyValue::new_null(),
+                            }
+                        }
+                    }
+                }
+                // XML type
+                tiberius::ColumnType::Xml => {
+                    // Try XmlData first
+                    if let Ok(Some(xml_data)) = row.try_get::<&XmlData, usize>(i) {
+                        PyValue::new_string(xml_data.to_string())
+                    }
+                    // Fallback to string
+                    else if let Ok(Some(val)) = row.try_get::<&str, usize>(i) {
+                        PyValue::new_string(val.to_string())
+                    }
+                    else {
+                        PyValue::new_null()
+                    }
+                }
                 // For other types, try string first, then fallback to generic approaches
                 _ => {
                     // Try string first
@@ -190,6 +310,10 @@ impl PyRow {
                     // Try bool
                     else if let Ok(Some(val)) = row.try_get::<bool, usize>(i) {
                         PyValue::new_bool(val)
+                    }
+                    // Try datetime types as fallback
+                    else if let Ok(Some(val)) = row.try_get::<NaiveDateTime, usize>(i) {
+                        PyValue::new_datetime(val.format("%Y-%m-%d %H:%M:%S%.f").to_string())
                     }
                     // If all conversions fail or value is NULL
                     else {
@@ -220,6 +344,7 @@ pub enum PyValueInner {
     Float(f64),
     String(String),
     Bytes(Vec<u8>),
+    DateTime(String), // Store as ISO string for Python compatibility
 }
 
 impl PyValue {
@@ -246,6 +371,10 @@ impl PyValue {
     pub fn new_bytes(value: Vec<u8>) -> Self {
         Self { inner: PyValueInner::Bytes(value) }
     }
+    
+    pub fn new_datetime(value: String) -> Self {
+        Self { inner: PyValueInner::DateTime(value) }
+    }
 }
 
 // Convenience constants
@@ -269,6 +398,7 @@ impl PyValue {
             PyValueInner::Float(f) => Ok(f.to_object(py)),
             PyValueInner::String(s) => Ok(s.to_object(py)),
             PyValueInner::Bytes(b) => Ok(b.to_object(py)),
+            PyValueInner::DateTime(s) => Ok(s.to_object(py)),
         }
     }
     
@@ -281,6 +411,7 @@ impl PyValue {
             PyValueInner::Float(f) => f.to_string(),
             PyValueInner::String(s) => s.clone(),
             PyValueInner::Bytes(b) => format!("{:?}", b),
+            PyValueInner::DateTime(s) => s.clone(),
         }
     }
     
@@ -293,6 +424,7 @@ impl PyValue {
             PyValueInner::Float(f) => format!("PyValue.Float({})", f),
             PyValueInner::String(s) => format!("PyValue.String('{}')", s),
             PyValueInner::Bytes(b) => format!("PyValue.Bytes({:?})", b),
+            PyValueInner::DateTime(s) => format!("PyValue.DateTime('{}')", s),
         }
     }
 }

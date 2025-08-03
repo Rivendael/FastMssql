@@ -1,0 +1,19 @@
+NOTICE
+
+This project includes and depends on the following third-party libraries:
+
+- Tiberius (https://github.com/prisma/tiberius)
+  Copyright 2017-2025 Prisma Data, Inc. and contributors
+  Licensed under the Apache License, Version 2.0
+
+- PyO3 (https://github.com/PyO3/pyo3)
+  Copyright 2018-2025 PyO3 Project Contributors
+  Licensed under the Apache License, Version 2.0
+
+- pyo3-asyncio (https://github.com/PyO3/pyo3-asyncio)
+  Copyright 2020-2025 PyO3 Project Contributors
+  Licensed under the Apache License, Version 2.0
+
+Other dependencies are licensed under their respective terms. See Cargo.toml for details.
+
+The full text of the Apache License 2.0 is provided in licenses/APACHE_LICENSE_2.0.txt.
