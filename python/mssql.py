@@ -245,7 +245,7 @@ async def execute_async(connection_string: str, sql: str) -> List[Dict[str, Any]
     Returns:
         List of rows as dictionaries
     """
-    async with connect_async(connection_string) as conn:
+    async with _core.Connection(connection_string) as conn:
         return await conn.execute(sql)
 
 def execute_scalar(connection_string: str, sql: str) -> Any:
@@ -271,5 +271,5 @@ async def execute_scalar_async(connection_string: str, sql: str) -> Any:
     Returns:
         First column value of the first row
     """
-    async with connect_async(connection_string) as conn:
+    async with _core.Connection(connection_string) as conn:
         return await conn.execute_scalar(sql)

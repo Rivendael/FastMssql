@@ -19,17 +19,23 @@ pub struct PyRow {
 #[pymethods]
 impl PyRow {
     /// Get a value by column name
-    pub fn get(&self, column: &str) -> PyResult<Option<PyValue>> {
-        Ok(self.data.get(column).cloned())
+    pub fn get(&self, py: Python, column: &str) -> PyResult<PyObject> {
+        match self.data.get(column) {
+            Some(value) => value.to_python(py),
+            None => Ok(py.None()),
+        }
     }
     
     /// Get a value by column index
-    pub fn get_by_index(&self, index: usize) -> PyResult<Option<PyValue>> {
+    pub fn get_by_index(&self, py: Python, index: usize) -> PyResult<PyObject> {
         if index < self.columns.len() {
             let column = &self.columns[index];
-            Ok(self.data.get(column).cloned())
+            match self.data.get(column) {
+                Some(value) => value.to_python(py),
+                None => Ok(py.None()),
+            }
         } else {
-            Ok(None)
+            Ok(py.None())
         }
     }
     
@@ -39,9 +45,14 @@ impl PyRow {
     }
     
     /// Get all values as a list
-    pub fn values(&self) -> Vec<PyValue> {
+    pub fn values(&self, py: Python) -> PyResult<Vec<PyObject>> {
         self.columns.iter()
-            .map(|col| self.data.get(col).cloned().unwrap_or(PyValue::new_null()))
+            .map(|col| {
+                match self.data.get(col) {
+                    Some(value) => value.to_python(py),
+                    None => Ok(py.None()),
+                }
+            })
             .collect()
     }
     
@@ -60,14 +71,13 @@ impl PyRow {
     }
     
     /// Support indexing by column name or index
-    pub fn __getitem__(&self, key: &PyAny) -> PyResult<PyValue> {
+    pub fn __getitem__(&self, py: Python, key: &PyAny) -> PyResult<PyObject> {
         if let Ok(column_name) = key.extract::<String>() {
-            self.data.get(&column_name)
-                .cloned()
-                .ok_or_else(|| PyValueError::new_err(format!("Column '{}' not found", column_name)))
+            let value = self.data.get(&column_name)
+                .ok_or_else(|| PyValueError::new_err(format!("Column '{}' not found", column_name)))?;
+            value.to_python(py)
         } else if let Ok(index) = key.extract::<usize>() {
-            self.get_by_index(index)?
-                .ok_or_else(|| PyValueError::new_err(format!("Index {} out of range", index)))
+            self.get_by_index(py, index)
         } else {
             Err(PyValueError::new_err("Key must be string or integer"))
         }

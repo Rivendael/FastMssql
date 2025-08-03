@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -28,14 +29,14 @@ def test_version():
 
 def test_connection_creation():
     """Test that we can create a connection object."""
-    conn = mssql.connect(TEST_CONNECTION_STRING)
+    conn = Connection(TEST_CONNECTION_STRING)
     assert conn is not None
 
 @pytest.mark.integration
 def test_basic_connection():
     """Test basic database connectivity."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             assert conn.is_connected()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -44,10 +45,12 @@ def test_basic_connection():
 def test_simple_query():
     """Test executing a simple query."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("SELECT 1 as test_value")
             assert len(rows) == 1
-            assert rows[0]['test_value'] == 1
+            # Convert PyValue to native Python type for comparison
+            test_value = int(str(rows[0]['test_value']))
+            assert test_value == 1
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -55,16 +58,16 @@ def test_simple_query():
 def test_multiple_queries():
     """Test executing multiple queries on the same connection."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # First query
             rows1 = conn.execute("SELECT 'first' as query_name")
             assert len(rows1) == 1
-            assert rows1[0]['query_name'] == 'first'
+            assert str(rows1[0]['query_name']) == 'first'
             
             # Second query
             rows2 = conn.execute("SELECT 'second' as query_name")
             assert len(rows2) == 1
-            assert rows2[0]['query_name'] == 'second'
+            assert str(rows2[0]['query_name']) == 'second'
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -72,7 +75,7 @@ def test_multiple_queries():
 def test_data_types():
     """Test various SQL Server data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     42 as int_val,
@@ -97,7 +100,7 @@ def test_data_types():
 def test_execute_non_query():
     """Test executing non-query operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create a test table
             conn.execute_non_query("""
                 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='test_execute_non_query' AND xtype='U')
@@ -126,28 +129,33 @@ def test_execute_non_query():
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_convenience_functions():
-    """Test module-level convenience functions."""
-    # Test direct execution
-    result = mssql.execute(TEST_CONNECTION_STRING, "SELECT 'convenience' as test")
-    assert len(result) == 1
-    assert result[0]['test'] == 'convenience'
-    
-    # Test scalar execution
-    scalar_result = mssql.execute_scalar(TEST_CONNECTION_STRING, "SELECT 42")
-    assert scalar_result == 42
+async def test_convenience_functions():
+    """Test Connection class convenience (now async-only)."""
+    try:
+        # Test direct execution using async Connection
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("SELECT 'convenience' as test")
+            assert len(result) == 1
+            assert result[0]['test'] == 'convenience'
+            
+            # Test scalar-like execution
+            scalar_result = await conn.execute("SELECT 42 as value")
+            assert scalar_result[0]['value'] == 42
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
 
 def test_error_handling():
     """Test that errors are handled properly."""
     # Test invalid connection string
     with pytest.raises(Exception):
-        conn = mssql.connect("Invalid connection string")
+        conn = Connection("Invalid connection string")
         conn.connect()
     
     # Test invalid query (requires database connection)
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             with pytest.raises(Exception):
                 conn.execute("SELECT * FROM non_existent_table_12345")
     except Exception as e:
@@ -158,7 +166,7 @@ def test_error_handling():
 @pytest.mark.integration
 async def test_async_connection_creation():
     """Test that we can create an async connection object."""
-    conn = mssql.connect_async(TEST_CONNECTION_STRING)
+    conn = Connection(TEST_CONNECTION_STRING)
     assert conn is not None
 
 @pytest.mark.asyncio
@@ -166,7 +174,7 @@ async def test_async_connection_creation():
 async def test_async_basic_connection():
     """Test basic async database connectivity."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             assert conn.is_connected()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -176,7 +184,7 @@ async def test_async_basic_connection():
 async def test_async_simple_query():
     """Test executing a simple query asynchronously."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             rows = await conn.execute("SELECT 1 as test_value")
             assert len(rows) == 1
             assert rows[0]['test_value'] == 1
@@ -188,7 +196,7 @@ async def test_async_simple_query():
 async def test_async_multiple_queries():
     """Test executing multiple queries asynchronously on the same connection."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # First query
             rows1 = await conn.execute("SELECT 'first' as query_name")
             assert len(rows1) == 1
@@ -206,7 +214,7 @@ async def test_async_multiple_queries():
 async def test_async_data_types():
     """Test various SQL Server data types with async operations."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             rows = await conn.execute("""
                 SELECT 
                     42 as int_val,
@@ -232,7 +240,7 @@ async def test_async_data_types():
 async def test_async_execute_non_query():
     """Test executing non-query operations asynchronously."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test a simple UPDATE operation that doesn't rely on temporary tables
             # First, create and populate a test table, then verify the operation worked
             setup_and_test_sql = """
@@ -271,7 +279,7 @@ async def test_async_execute_non_query():
 async def test_async_execute_scalar():
     """Test executing scalar queries asynchronously."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test scalar with number
             result = await conn.execute_scalar("SELECT 42")
             assert result == 42
@@ -289,16 +297,17 @@ async def test_async_execute_scalar():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_async_convenience_functions():
-    """Test module-level async convenience functions."""
+    """Test async connection class directly."""
     try:
-        # Test direct async execution
-        result = await mssql.execute_async(TEST_CONNECTION_STRING, "SELECT 'convenience_async' as test")
-        assert len(result) == 1
-        assert result[0]['test'] == 'convenience_async'
-        
-        # Test async scalar execution
-        scalar_result = await mssql.execute_scalar_async(TEST_CONNECTION_STRING, "SELECT 42")
-        assert scalar_result == 42
+        # Test direct async execution using Connection class
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("SELECT 'convenience_async' as test")
+            assert len(result) == 1
+            assert result[0]['test'] == 'convenience_async'
+            
+            # Test async scalar-like execution (get first value from result)
+            scalar_result = await conn.execute("SELECT 42 as value")
+            assert scalar_result[0]['value'] == 42
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -307,7 +316,7 @@ async def test_async_convenience_functions():
 async def test_async_manual_connection_lifecycle():
     """Test manual async connection and disconnection."""
     try:
-        conn = mssql.connect_async(TEST_CONNECTION_STRING)
+        conn = Connection(TEST_CONNECTION_STRING)
         assert not conn.is_connected()
         
         await conn.connect()
@@ -328,7 +337,7 @@ async def test_async_manual_connection_lifecycle():
 async def test_async_error_handling():
     """Test that async errors are handled properly."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             with pytest.raises(Exception):
                 await conn.execute("SELECT * FROM non_existent_table_async_12345")
     except Exception as e:
@@ -339,7 +348,7 @@ async def test_async_error_handling():
 async def test_async_concurrent_queries():
     """Test executing multiple async queries concurrently."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Create coroutines for concurrent execution
             query1 = conn.execute("SELECT 1 as value, 'query1' as name")
             query2 = conn.execute("SELECT 2 as value, 'query2' as name")

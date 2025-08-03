@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection, PoolConfig
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -23,7 +23,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 def test_create_drop_table():
     """Test creating and dropping tables."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create table
             create_sql = """
                 CREATE TABLE test_ddl_table (
@@ -60,7 +60,7 @@ def test_create_drop_table():
 def test_alter_table():
     """Test altering table structure."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create initial table
             conn.execute_non_query("""
                 CREATE TABLE test_alter_table (
@@ -97,7 +97,7 @@ def test_alter_table():
 def test_create_drop_index():
     """Test creating and dropping indexes."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create table first
             conn.execute_non_query("""
                 CREATE TABLE test_index_table (
@@ -154,7 +154,7 @@ def test_create_drop_index():
 def test_create_drop_view():
     """Test creating and dropping views."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test if views are supported by trying to create a simple one
             try:
                 conn.execute_non_query("CREATE VIEW test_feature_check AS SELECT 1 as test_col")
@@ -222,7 +222,7 @@ def test_create_drop_view():
 def test_create_drop_procedure():
     """Test creating and dropping stored procedures."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test if procedures are supported by trying to create a simple one
             try:
                 conn.execute_non_query("CREATE PROCEDURE test_feature_check AS BEGIN SELECT 1 END")
@@ -280,7 +280,7 @@ def test_create_drop_procedure():
 def test_create_drop_function():
     """Test creating and dropping user-defined functions."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test if functions are supported by trying to create a simple one
             try:
                 conn.execute_non_query("CREATE FUNCTION test_feature_check() RETURNS INT AS BEGIN RETURN 1 END")
@@ -327,7 +327,7 @@ def test_create_drop_function():
 def test_constraints():
     """Test creating and dropping constraints."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create table with constraints
             conn.execute_non_query("""
                 CREATE TABLE test_constraints (
@@ -379,7 +379,7 @@ def test_constraints():
 async def test_async_ddl_operations():
     """Test DDL operations with async connections."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Create table
             await conn.execute_non_query("""
                 CREATE TABLE test_async_ddl (
@@ -409,7 +409,7 @@ async def test_async_ddl_operations():
 def test_schema_operations():
     """Test schema creation and management."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test if schemas are supported by trying to create a simple one
             try:
                 conn.execute_non_query("CREATE SCHEMA test_feature_check")

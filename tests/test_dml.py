@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -22,7 +22,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 @pytest.fixture
 def test_table():
     """Setup and teardown test table."""
-    connection = mssql.connect(TEST_CONNECTION_STRING)
+    connection = Connection(TEST_CONNECTION_STRING)
     
     try:
         with connection:
@@ -53,7 +53,7 @@ def test_table():
 @pytest.mark.integration
 def test_insert_operations(test_table):
     """Test various INSERT operations."""
-    with mssql.connect(TEST_CONNECTION_STRING) as conn:
+    with Connection(TEST_CONNECTION_STRING) as conn:
         # Single INSERT
         affected = conn.execute_non_query("""
             INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date)
@@ -85,7 +85,7 @@ def test_insert_operations(test_table):
 def test_select_operations(test_table):
     """Test various SELECT operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Setup test data
             conn.execute_non_query("""
                 INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date) VALUES 
@@ -154,7 +154,7 @@ def test_select_operations(test_table):
 def test_update_operations(test_table):
     """Test various UPDATE operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Setup test data
             conn.execute_non_query("""
                 INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date) VALUES 
@@ -200,7 +200,7 @@ def test_update_operations(test_table):
 def test_delete_operations(test_table):
     """Test various DELETE operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Setup test data
             conn.execute_non_query("""
                 INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date) VALUES 
@@ -250,7 +250,7 @@ def test_delete_operations(test_table):
 def test_upsert_operations(test_table):
     """Test MERGE (UPSERT) operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Setup initial data
             conn.execute_non_query("""
                 INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date) VALUES 
@@ -295,7 +295,7 @@ def test_upsert_operations(test_table):
 def test_bulk_operations(test_table):
     """Test bulk data operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Bulk INSERT using VALUES
             values = []
             for i in range(100):
@@ -330,7 +330,7 @@ def test_bulk_operations(test_table):
 async def test_async_dml_operations():
     """Test DML operations with async connections."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Clean up any existing table first
             try:
                 await conn.execute_non_query("IF OBJECT_ID('test_async_dml', 'U') IS NOT NULL DROP TABLE test_async_dml")
@@ -384,7 +384,7 @@ async def test_async_dml_operations():
 def test_transaction_rollback(test_table):
     """Test transaction handling with rollback."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # This test demonstrates what happens when an error occurs
             # Note: Explicit transaction control would need to be added to the library
             

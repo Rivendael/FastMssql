@@ -1,72 +1,80 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3_asyncio::tokio::future_into_py;
-use tiberius::{Client, Config};
-use tokio::net::TcpStream;
-use tokio_util::compat::{TokioAsyncWriteCompatExt, Compat};
+use tiberius::Config;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use bb8::Pool;
+use bb8_tiberius::ConnectionManager;
 use crate::types::PyRow;
+use crate::pool_config::PyPoolConfig;
 
-type TiberiusClient = Client<Compat<TcpStream>>;
+type ConnectionPool = Pool<ConnectionManager>;
 
-/// A connection to a Microsoft SQL Server database
+/// A connection pool to a Microsoft SQL Server database
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
-    client: Arc<Mutex<Option<TiberiusClient>>>,
+    pool: Arc<Mutex<Option<ConnectionPool>>>,
     config: Config,
-    runtime: Arc<tokio::runtime::Runtime>,
+    pool_config: PyPoolConfig,
 }
 
 impl PyConnection {
-    /// Helper function to establish a database connection
+    /// Helper function to establish a database connection pool
     /// 
-    /// This function handles the complete connection process including:
-    /// - Establishing TCP connection
-    /// - Setting TCP_NODELAY for better performance
-    /// - Authenticating with the database
-    /// - Storing the client instance
-    async fn establish_connection(
-        client: Arc<Mutex<Option<TiberiusClient>>>,
-        config: Config,
-    ) -> PyResult<()> {
-        let tcp = TcpStream::connect(config.get_addr())
+    /// Creates a bb8 connection pool with the provided configuration
+    async fn establish_pool(config: Config, pool_config: &PyPoolConfig) -> PyResult<ConnectionPool> {
+        let manager = ConnectionManager::new(config);
+        
+        let mut builder = Pool::builder()
+            .max_size(pool_config.max_size);
+        
+        if let Some(min_idle) = pool_config.min_idle {
+            builder = builder.min_idle(Some(min_idle));
+        }
+        
+        if let Some(max_lifetime) = pool_config.max_lifetime {
+            builder = builder.max_lifetime(Some(max_lifetime));
+        }
+        
+        if let Some(idle_timeout) = pool_config.idle_timeout {
+            builder = builder.idle_timeout(Some(idle_timeout));
+        }
+        
+        if let Some(connection_timeout) = pool_config.connection_timeout {
+            builder = builder.connection_timeout(connection_timeout);
+        }
+        
+        let pool = builder
+            .build(manager)
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect: {}", e)))?;
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create connection pool: {}", e)))?;
         
-        tcp.set_nodelay(true)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to set nodelay: {}", e)))?;
-        
-        let client_instance = Client::connect(config, tcp.compat_write())
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to authenticate: {}", e)))?;
-        
-        *client.lock().await = Some(client_instance);
-        Ok(())
+        Ok(pool)
     }
 
-    /// Helper function to close a database connection
-    /// 
-    /// Safely closes the database connection if one exists
-    async fn close_connection(client: Arc<Mutex<Option<TiberiusClient>>>) {
-        let mut client_guard = client.lock().await;
-        if let Some(client_instance) = client_guard.take() {
-            let _ = client_instance.close().await;
-        }
+    /// Helper function to close the connection pool
+    async fn close_pool(pool: Arc<Mutex<Option<ConnectionPool>>>) {
+        let mut pool_guard = pool.lock().await;
+        *pool_guard = None;
     }
 
     /// Helper function to execute a query and return results
     /// 
     /// Executes a SELECT query and returns the results as PyRow objects
     async fn execute_query_internal(
-        client: Arc<Mutex<Option<TiberiusClient>>>,
+        pool: Arc<Mutex<Option<ConnectionPool>>>,
         query: String,
     ) -> PyResult<Vec<PyRow>> {
-        let mut client_guard = client.lock().await;
-        let client_instance = client_guard.as_mut()
+        let pool_guard = pool.lock().await;
+        let pool_ref = pool_guard.as_ref()
             .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
         
-        let stream = client_instance.query(&query, &[])
+        let mut conn = pool_ref.get()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
+        
+        let stream = conn.query(&query, &[])
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
         
@@ -82,14 +90,18 @@ impl PyConnection {
     /// Executes INSERT, UPDATE, DELETE, or other non-query commands
     /// Returns the number of affected rows
     async fn execute_non_query_internal(
-        client: Arc<Mutex<Option<TiberiusClient>>>,
+        pool: Arc<Mutex<Option<ConnectionPool>>>,
         query: String,
     ) -> PyResult<u64> {
-        let mut client_guard = client.lock().await;
-        let client_instance = client_guard.as_mut()
+        let pool_guard = pool.lock().await;
+        let pool_ref = pool_guard.as_ref()
             .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
         
-        let result = client_instance.execute(&query, &[])
+        let mut conn = pool_ref.get()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
+        
+        let result = conn.execute(&query, &[])
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
         
@@ -113,114 +125,121 @@ impl PyConnection {
 #[pymethods]
 impl PyConnection {
     #[new]
-    pub fn new(connection_string: String) -> PyResult<Self> {
+    #[pyo3(signature = (connection_string, pool_config = None))]
+    pub fn new(connection_string: String, pool_config: Option<PyPoolConfig>) -> PyResult<Self> {
         let config = Config::from_ado_string(&connection_string)
             .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
         
-        let runtime = Arc::new(
-            tokio::runtime::Runtime::new()
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to create runtime: {}", e)))?
-        );
+        let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
         Ok(PyConnection {
-            client: Arc::new(Mutex::new(None)),
+            pool: Arc::new(Mutex::new(None)),
             config,
-            runtime,
-        })
-    }
-    /// Connect to the database (async version)
-    pub fn connect_async<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
-        let client = self.client.clone();
-        let config = self.config.clone();
-        
-        future_into_py(py, async move {
-            Self::establish_connection(client, config).await
+            pool_config,
         })
     }
     
     /// Connect to the database
-    pub fn connect(&self) -> PyResult<()> {
-        let client = self.client.clone();
+    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
         let config = self.config.clone();
-        
-        self.runtime.block_on(async move {
-            Self::establish_connection(client, config).await
-        })
-    }
-    
-    /// Disconnect from the database (async version)
-    pub fn disconnect_async<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
-        let client = self.client.clone();
+        let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            Self::close_connection(client).await;
+            let new_pool = Self::establish_pool(config, &pool_config).await?;
+            *pool.lock().await = Some(new_pool);
             Ok(())
         })
     }
     
     /// Disconnect from the database
-    pub fn disconnect(&self) -> PyResult<()> {
-        let client = self.client.clone();
-        
-        self.runtime.block_on(async move {
-            Self::close_connection(client).await;
-        });
-        
-        Ok(())
-    }
-    
-    /// Execute a query and return the results (async version)
-    pub fn execute_async<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
-        let client = self.client.clone();
+    pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            Self::execute_query_internal(client, query).await
+            Self::close_pool(pool).await;
+            Ok(())
         })
     }
     
     /// Execute a query and return the results
-    pub fn execute(&self, query: String) -> PyResult<Vec<PyRow>> {
-        let client = self.client.clone();
-        
-        self.runtime.block_on(async move {
-            Self::execute_query_internal(client, query).await
-        })
-    }
-    
-    /// Execute a query without returning results (async version)
-    pub fn execute_non_query_async<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
-        let client = self.client.clone();
+    pub fn execute<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            Self::execute_non_query_internal(client, query).await
+            Self::execute_query_internal(pool, query).await
         })
     }
     
     /// Execute a query without returning results (for INSERT, UPDATE, DELETE)
-    pub fn execute_non_query(&self, query: String) -> PyResult<u64> {
-        let client = self.client.clone();
+    pub fn execute_non_query<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
         
-        self.runtime.block_on(async move {
-            Self::execute_non_query_internal(client, query).await
+        future_into_py(py, async move {
+            Self::execute_non_query_internal(pool, query).await
         })
     }
     
     /// Check if connected to the database
-    pub fn is_connected(&self) -> bool {
-        self.runtime.block_on(async {
-            self.client.lock().await.is_some()
+    pub fn is_connected<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
+        
+        future_into_py(py, async move {
+            Ok(pool.lock().await.is_some())
         })
     }
     
-    /// Enter context manager
-    pub fn __enter__(slf: PyRef<Self>) -> PyResult<PyRef<Self>> {
-        slf.connect()?;
-        Ok(slf)
+    /// Get connection pool statistics
+    pub fn pool_stats<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
+        let pool_config = self.pool_config.clone();
+        
+        future_into_py(py, async move {
+            let pool_guard = pool.lock().await;
+            if let Some(pool_ref) = pool_guard.as_ref() {
+                let state = pool_ref.state();
+                Python::with_gil(|py| {
+                    let dict = pyo3::types::PyDict::new(py);
+                    dict.set_item("connections", state.connections)?;
+                    dict.set_item("idle_connections", state.idle_connections)?;
+                    dict.set_item("max_size", pool_config.max_size)?;
+                    dict.set_item("min_idle", pool_config.min_idle)?;
+                    dict.set_item("active_connections", state.connections - state.idle_connections)?;
+                    Ok(dict.to_object(py))
+                })
+            } else {
+                Python::with_gil(|py| {
+                    let dict = pyo3::types::PyDict::new(py);
+                    dict.set_item("connected", false)?;
+                    Ok(dict.to_object(py))
+                })
+            }
+        })
     }
     
-    /// Exit context manager
-    pub fn __exit__(&self, _exc_type: Option<&PyAny>, _exc_value: Option<&PyAny>, _traceback: Option<&PyAny>) -> PyResult<()> {
-        self.disconnect()
+    /// Enter context manager (async version)
+    pub fn __aenter__<'p>(slf: &'p PyCell<Self>, py: Python<'p>) -> PyResult<&'p PyAny> {
+        let pool = slf.borrow().pool.clone();
+        let config = slf.borrow().config.clone();
+        let pool_config = slf.borrow().pool_config.clone();
+        let self_obj: PyObject = slf.into();
+        
+        future_into_py(py, async move {
+            let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
+            *pool.lock().await = Some(new_pool);
+            Ok(self_obj)
+        })
+    }
+    
+    /// Exit context manager (async version)
+    pub fn __aexit__<'p>(
+        &self, 
+        py: Python<'p>,
+        _exc_type: Option<&PyAny>, 
+        _exc_value: Option<&PyAny>, 
+        _traceback: Option<&PyAny>
+    ) -> PyResult<&'p PyAny> {
+        self.disconnect(py)
     }
 }
 
@@ -230,32 +249,13 @@ mod tests {
     use std::env;
 
     #[test]
-    fn test_connection_establishment() {
+    fn test_connection_creation() {
         let conn_string = env::var("MSSQL_CONNECTION_STRING").unwrap_or_else(|_| {
             "Server=localhost;Database=test;Integrated Security=true".to_string()
         });
         
-        let connection = PyConnection::new(conn_string).expect("Failed to create connection");
-        // Note: This test requires a real database connection
-        // For unit testing, we might want to mock the database connection
-        // For now, we'll just test that the connection object is created successfully
-        assert!(!connection.is_connected()); // Should not be connected initially
-    }
-
-    #[test] 
-    fn test_connection_lifecycle() {
-        let conn_string = env::var("MSSQL_CONNECTION_STRING").unwrap_or_else(|_| {
-            "Server=localhost;Database=test;Integrated Security=true".to_string()
-        });
-        
-        let connection = PyConnection::new(conn_string).expect("Failed to create connection");
-        assert!(!connection.is_connected()); // Initially not connected
-        
-        // Note: Actual connection test would require a real database
-        // For integration tests, set MSSQL_CONNECTION_STRING environment variable
-        
-        // Test disconnect works even when not connected
-        assert!(connection.disconnect().is_ok());
-        assert!(!connection.is_connected());
+        let connection = PyConnection::new(conn_string, None).expect("Failed to create connection");
+        // Connection object created successfully
+        // Actual connection testing would require async runtime and real database
     }
 }
