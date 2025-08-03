@@ -98,30 +98,25 @@ def test_execute_non_query():
     """Test executing non-query operations."""
     try:
         with mssql.connect(TEST_CONNECTION_STRING) as conn:
-            # Test a simple UPDATE operation that doesn't rely on temporary tables
-            # First, create and populate a test table, then verify the operation worked
-            setup_and_test_sql = """
-                -- Create a test table if it doesn't exist
+            # Create a test table
+            conn.execute_non_query("""
                 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='test_execute_non_query' AND xtype='U')
                     CREATE TABLE test_execute_non_query (id INT, name NVARCHAR(50), test_flag BIT DEFAULT 0)
-                
-                -- Clear any existing data
-                DELETE FROM test_execute_non_query
-                
-                -- Insert test data
-                INSERT INTO test_execute_non_query (id, name, test_flag) VALUES (1, 'test', 0)
-                
-                -- Update the test_flag to verify non-query execution
-                UPDATE test_execute_non_query SET test_flag = 1 WHERE id = 1
-                
-                -- Return the count for verification
-                SELECT COUNT(*) as updated_count FROM test_execute_non_query WHERE test_flag = 1
-            """
+            """)
             
-            # Execute the complete test as a single batch to avoid session scope issues
-            rows = conn.execute(setup_and_test_sql)
+            # Clear any existing data
+            conn.execute_non_query("DELETE FROM test_execute_non_query")
             
-            # Verify that our update worked
+            # Insert test data
+            rows_affected = conn.execute_non_query("INSERT INTO test_execute_non_query (id, name, test_flag) VALUES (1, 'test', 0)")
+            assert rows_affected == 1
+            
+            # Update the test_flag to verify non-query execution
+            rows_affected = conn.execute_non_query("UPDATE test_execute_non_query SET test_flag = 1 WHERE id = 1")
+            assert rows_affected == 1
+            
+            # Verify the update worked
+            rows = conn.execute("SELECT COUNT(*) as updated_count FROM test_execute_non_query WHERE test_flag = 1")
             assert len(rows) == 1
             assert rows[0]['updated_count'] == 1
             
@@ -131,19 +126,17 @@ def test_execute_non_query():
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
+@pytest.mark.integration
 def test_convenience_functions():
     """Test module-level convenience functions."""
-    try:
-        # Test direct execution
-        result = mssql.execute(TEST_CONNECTION_STRING, "SELECT 'convenience' as test")
-        assert len(result) == 1
-        assert result[0]['test'] == 'convenience'
-        
-        # Test scalar execution
-        scalar_result = mssql.execute_scalar(TEST_CONNECTION_STRING, "SELECT 42")
-        assert scalar_result == 42
-    except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+    # Test direct execution
+    result = mssql.execute(TEST_CONNECTION_STRING, "SELECT 'convenience' as test")
+    assert len(result) == 1
+    assert result[0]['test'] == 'convenience'
+    
+    # Test scalar execution
+    scalar_result = mssql.execute_scalar(TEST_CONNECTION_STRING, "SELECT 42")
+    assert scalar_result == 42
 
 def test_error_handling():
     """Test that errors are handled properly."""

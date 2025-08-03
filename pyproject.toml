@@ -32,8 +32,11 @@ dependencies = []
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.1",
     "black>=23.0",
     "ruff>=0.1",
+    "psutil>=5.9.0",  # For memory and process monitoring in stress tests
 ]
 
 [tool.maturin]
@@ -41,9 +44,36 @@ python-source = "python"
 module-name = "mssql_python_rust"
 
 [tool.pytest.ini_options]
+minversion = "6.0"
 testpaths = ["tests"]
-asyncio_mode = "auto"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Test markers
 markers = [
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
     "asyncio: marks tests as async tests",
+    "integration: marks tests that require a database connection",
+    "performance: marks tests that measure performance characteristics", 
+    "stress: marks tests that perform stress testing",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+]
+
+# Logging configuration
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+# Test configuration
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra"
+]
+
+# Filter warnings
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning"
 ]

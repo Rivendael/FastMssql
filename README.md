@@ -12,6 +12,7 @@ A high-performance Python library for Microsoft SQL Server, built with Rust usin
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **Easy Integration**: Drop-in replacement for other SQL Server libraries
 
+
 ## Installation
 
 ### Prerequisites
@@ -343,151 +344,45 @@ print(result)
 3. **Build Errors**: Ensure you have the Rust toolchain installed
 4. **Windows Issues**: Make sure you have the Microsoft Visual C++ Build Tools
 
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the PolyForm Noncommercial License 1.0.0. See the LICENSE file for details.
+
+## Third-Party Attributions
+
+This project includes and depends on third-party libraries licensed under the Apache License 2.0:
+
+- [Tiberius](https://github.com/prisma/tiberius) (Apache License 2.0)
+- [PyO3](https://github.com/PyO3/pyo3) (Apache License 2.0)
+- [pyo3-asyncio](https://github.com/PyO3/pyo3-asyncio) (Apache License 2.0)
+
+Development and testing tools:
+
+- [pytest](https://github.com/pytest-dev/pytest) (MIT License)
+- [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) (MIT License)
+- [black](https://github.com/psf/black) (MIT License)
+- [ruff](https://github.com/astral-sh/ruff) (MIT License)
+
+Standard library:
+
+- [Python](https://www.python.org/) and [asyncio](https://docs.python.org/3/library/asyncio.html) (Python Software Foundation License)
+
+See the `licenses/NOTICE.txt` file for full attribution and copyright information.
+The full text of the Apache License 2.0 is provided in the `licenses/APACHE_LICENSE_2.0.txt` file.
 
 ## Acknowledgments
 
-- [Tiberius](https://github.com/prisma/tiberius) - The excellent Rust SQL Server driver
-- [PyO3](https://github.com/PyO3/pyo3) - Python bindings for Rust
+- [Tiberius](https://github.com/prisma/tiberius) - Rust SQL Server driver (Apache License 2.0)
+- [PyO3](https://github.com/PyO3/pyo3) - Python bindings for Rust (Apache License 2.0)
+- [pyo3-asyncio](https://github.com/PyO3/pyo3-asyncio) - Async bridge for PyO3 (Apache License 2.0)
+- [pytest](https://github.com/pytest-dev/pytest) - Python testing framework (MIT License)
+- [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) - Async test support for pytest (MIT License)
+- [black](https://github.com/psf/black) - Python code formatter (MIT License)
+- [ruff](https://github.com/astral-sh/ruff) - Python linter (MIT License)
+- [Python](https://www.python.org/) and [asyncio](https://docs.python.org/3/library/asyncio.html) - Python standard library (Python Software Foundation License)
 - [Maturin](https://github.com/PyO3/maturin) - Build tool for Python extensions in Rust
-
-## Usage
-
-### Synchronous Usage
-
-```python
-import mssql_python_rust as mssql
-
-# Basic connection and query
-connection_string = "Server=localhost;Database=test;Integrated Security=true"
-
-with mssql.connect(connection_string) as conn:
-    rows = conn.execute("SELECT * FROM users WHERE active = 1")
-    for row in rows:
-        print(f"User: {row['name']}")
-
-# Non-query operations
-with mssql.connect(connection_string) as conn:
-    affected = conn.execute_non_query("UPDATE users SET last_login = GETDATE()")
-    print(f"Updated {affected} rows")
-```
-
-### Asynchronous Usage
-
-```python
-import asyncio
-import mssql_python_rust as mssql
-
-async def main():
-    connection_string = "Server=localhost;Database=test;Integrated Security=true"
-    
-    # Basic async connection and query
-    async with mssql.connect_async(connection_string) as conn:
-        rows = await conn.execute("SELECT * FROM users WHERE active = 1")
-        for row in rows:
-            print(f"User: {row['name']}")
-    
-    # Concurrent operations for better performance
-    async def get_user_data(user_id):
-        async with mssql.connect_async(connection_string) as conn:
-            return await conn.execute(f"SELECT * FROM users WHERE id = {user_id}")
-    
-    # Execute multiple queries concurrently
-    user_ids = [1, 2, 3, 4, 5]
-    tasks = [get_user_data(uid) for uid in user_ids]
-    results = await asyncio.gather(*tasks)
-    
-    for user_data in results:
-        if user_data:
-            print(f"User: {user_data[0]['name']}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### Performance Comparison
-
-The async version shines when you have multiple independent operations:
-
-```python
-# Synchronous - operations run one after another (slower)
-with mssql.connect(connection_string) as conn:
-    users = conn.execute("SELECT * FROM users")
-    orders = conn.execute("SELECT * FROM orders") 
-    products = conn.execute("SELECT * FROM products")
-
-# Asynchronous - operations run concurrently (faster)
-async def get_all_data():
-    async def get_users():
-        async with mssql.connect_async(connection_string) as conn:
-            return await conn.execute("SELECT * FROM users")
-    
-    async def get_orders():
-        async with mssql.connect_async(connection_string) as conn:
-            return await conn.execute("SELECT * FROM orders")
-            
-    async def get_products():
-        async with mssql.connect_async(connection_string) as conn:
-            return await conn.execute("SELECT * FROM products")
-    
-    return await asyncio.gather(get_users(), get_orders(), get_products())
-
-# This can be 3x faster for independent queries
-users, orders, products = await get_all_data()
-```
-
-## Examples
-
-Run the provided examples to see both sync and async patterns:
-
-```bash
-# Basic synchronous usage
-python examples/basic_usage.py
-
-# Advanced synchronous features  
-python examples/advanced_usage.py
-
-# Asynchronous usage patterns
-python examples/async_usage.py
-
-# Mixed sync/async comparison
-python examples/mixed_usage.py
-```
-
-## Documentation
-
-- [Async Usage Guide](ASYNC_USAGE.md) - Detailed guide on async features
-- [API Reference](API_REFERENCE.md) - Complete API documentation (TODO)
-- [Performance Guide](PERFORMANCE.md) - Performance optimization tips (TODO)
-
-## Async Benefits
-
-- **Non-blocking operations**: Don't block the thread while waiting for database responses
-- **Concurrent execution**: Run multiple database operations simultaneously
-- **Better resource utilization**: More efficient CPU and memory usage
-- **Web framework integration**: Perfect for FastAPI, aiohttp, and other async frameworks
-- **Scalability**: Handle more concurrent requests with the same resources
-
-```python
-from mssql import Connection
-
-conn = Connection("server", "username", "password", "database")
-conn.connect()
-
-result = conn.execute_query("SELECT * FROM my_table")
-print(result)
-```
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for more details.

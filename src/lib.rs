@@ -1,3 +1,9 @@
+//! A high-performance Python library for Microsoft SQL Server using Rust and Tiberius
+
+// Suppress the non_local_definitions warning for PyO3 macros
+// This is a known issue with PyO3 macros and can be safely ignored
+#![allow(non_local_definitions)]
+
 use pyo3::prelude::*;
 
 mod connection;
