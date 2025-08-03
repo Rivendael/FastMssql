@@ -18,18 +18,17 @@ import gc
 import psutil
 import os
 import random
-from typing import List, Dict, Any, Optional
-from contextlib import asynccontextmanager
 
 # Test configuration
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
     MSSQL_AVAILABLE = True
 except ImportError:
     MSSQL_AVAILABLE = False
     mssql = None
+    Connection = None
 
 
 class MemoryTracker:
@@ -74,7 +73,7 @@ async def test_high_volume_concurrent_connections():
             
             for op in range(num_operations):
                 try:
-                    async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(TEST_CONNECTION_STRING) as conn:
                         # Perform a mix of operations
                         query_type = op % 4
                         
@@ -202,7 +201,7 @@ async def test_memory_leak_detection():
             # Create many short-lived connections
             for i in range(50):
                 try:
-                    async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(TEST_CONNECTION_STRING) as conn:
                         connections_created += 1
                         
                         # Perform various operations
@@ -290,7 +289,7 @@ async def test_connection_exhaustion_recovery():
         async def create_and_hold_connection(conn_id: int, hold_time: float):
             """Create a connection and hold it for specified time."""
             try:
-                async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                async with Connection(TEST_CONNECTION_STRING) as conn:
                     # Verify connection is working
                     result = await conn.execute(f"SELECT {conn_id} as conn_id, @@SPID as spid")
                     spid = result[0]['spid'] if result else None
@@ -380,7 +379,7 @@ async def test_rapid_connect_disconnect_stress():
             for i in range(iterations):
                 operation_start = time.time()
                 try:
-                    async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(TEST_CONNECTION_STRING) as conn:
                         # Quick operation to verify connection
                         result = await conn.execute(f"SELECT {worker_id} as worker, {i} as iter")
                         operation_time = time.time() - operation_start
@@ -483,7 +482,7 @@ async def test_large_result_set_handling():
     """Test handling of large result sets in async operations."""
     try:
         # Setup: Create a table with substantial data
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as setup_conn:
+        async with Connection(TEST_CONNECTION_STRING) as setup_conn:
             await setup_conn.execute_non_query("""
                 IF OBJECT_ID('test_large_results', 'U') IS NOT NULL 
                 DROP TABLE test_large_results
@@ -520,7 +519,7 @@ async def test_large_result_set_handling():
         # Test concurrent large result set queries
         async def large_query_worker(worker_id: int, limit: int):
             """Worker that executes queries returning large result sets."""
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 start_time = time.time()
                 
                 # Query for large result set
@@ -561,7 +560,7 @@ async def test_large_result_set_handling():
         memory_tracker.measure("after_large_query")
         
         # Cleanup
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as cleanup_conn:
+        async with Connection(TEST_CONNECTION_STRING) as cleanup_conn:
             await cleanup_conn.execute_non_query("DROP TABLE test_large_results")
         
         memory_tracker.measure("after_cleanup")

@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3::exceptions::PyValueError;
-use crate::types::{PyRow, PyValue};
+use crate::types::{PyValue};
 use crate::connection::PyConnection;
 
 /// A parameterized SQL query
@@ -48,13 +48,13 @@ impl PyQuery {
     }
     
     /// Execute the query on a connection
-    pub fn execute(&self, connection: &PyConnection) -> PyResult<Vec<PyRow>> {
-        connection.execute(self.sql.clone())
+    pub fn execute<'p>(&self, py: Python<'p>, connection: &PyConnection) -> PyResult<&'p PyAny> {
+        connection.execute(py, self.sql.clone())
     }
     
     /// Execute the query without returning results
-    pub fn execute_non_query(&self, connection: &PyConnection) -> PyResult<u64> {
-        connection.execute_non_query(self.sql.clone())
+    pub fn execute_non_query<'p>(&self, py: Python<'p>, connection: &PyConnection) -> PyResult<&'p PyAny> {
+        connection.execute_non_query(py, self.sql.clone())
     }
     
     /// String representation

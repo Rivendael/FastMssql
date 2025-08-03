@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -23,7 +23,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 @pytest.fixture
 def stored_procedures():
     """Setup and teardown stored procedures for testing."""
-    connection = mssql.connect(TEST_CONNECTION_STRING)
+    connection = Connection(TEST_CONNECTION_STRING)
     
     try:
         with connection:
@@ -113,7 +113,7 @@ def stored_procedures():
 @pytest.mark.integration
 def test_simple_stored_procedure_call():
     """Test creating and calling stored procedures using dynamic SQL."""
-    with mssql.connect(TEST_CONNECTION_STRING) as conn:
+    with Connection(TEST_CONNECTION_STRING) as conn:
         try:
             # Create procedure using dynamic SQL
             conn.execute("""
@@ -143,7 +143,7 @@ def test_simple_stored_procedure_call():
 @pytest.mark.integration
 def test_stored_procedure_with_parameters():
     """Test stored procedures with parameters using dynamic SQL."""
-    with mssql.connect(TEST_CONNECTION_STRING) as conn:
+    with Connection(TEST_CONNECTION_STRING) as conn:
         try:
             # Create procedure with parameters using dynamic SQL
             conn.execute("""
@@ -176,7 +176,7 @@ def test_stored_procedure_with_parameters():
 @pytest.mark.integration
 def test_user_defined_functions():
     """Test user-defined functions using dynamic SQL."""
-    with mssql.connect(TEST_CONNECTION_STRING) as conn:
+    with Connection(TEST_CONNECTION_STRING) as conn:
         # Test creating and using a function with dynamic SQL
         try:
             # Create function using dynamic SQL
@@ -211,7 +211,7 @@ def test_user_defined_functions():
 def test_common_table_expressions():
     """Test Common Table Expressions (CTEs)."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test data
             conn.execute_non_query("""
                 CREATE TABLE test_cte_employees (
@@ -292,7 +292,7 @@ def test_common_table_expressions():
 def test_window_functions():
     """Test window functions."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test data
             conn.execute_non_query("""
                 CREATE TABLE test_window_sales (
@@ -379,7 +379,7 @@ def test_window_functions():
 def test_pivot_and_unpivot():
     """Test PIVOT and UNPIVOT operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test data
             conn.execute_non_query("""
                 CREATE TABLE test_pivot_sales (
@@ -431,7 +431,7 @@ def test_pivot_and_unpivot():
 @pytest.mark.integration
 def test_temp_tables_and_variables():
     """Test temporary tables and variables in single batch."""
-    with mssql.connect(TEST_CONNECTION_STRING) as conn:
+    with Connection(TEST_CONNECTION_STRING) as conn:
         # Test local temporary table and variables in a single batch
         rows = conn.execute("""
             -- Create temp table and variables in same batch
@@ -468,7 +468,7 @@ def test_temp_tables_and_variables():
 @pytest.mark.integration
 async def test_async_stored_procedures():
     """Test async stored procedures using dynamic SQL."""
-    async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+    async with Connection(TEST_CONNECTION_STRING) as conn:
         try:
             # Create async procedure using dynamic SQL
             await conn.execute("""

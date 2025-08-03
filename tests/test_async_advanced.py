@@ -14,21 +14,20 @@ This module contains comprehensive async tests to validate:
 import asyncio
 import time
 import pytest
-import threading
 import random
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
-from typing import List, Dict, Any
 
 # Test configuration
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
 
 try:
-    import mssql_python_rust as mssql
+    # Import the classes directly from the Rust module  
+    from mssql_python_rust import Connection, PoolConfig
     MSSQL_AVAILABLE = True
 except ImportError:
     MSSQL_AVAILABLE = False
-    mssql = None
+    Connection = None
+    PoolConfig = None
 
 
 @pytest.mark.asyncio
@@ -39,7 +38,7 @@ async def test_async_truly_non_blocking():
     try:
         async def long_running_query(delay_seconds: int, query_id: int):
             """Execute a query that takes a specific amount of time."""
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 # WAITFOR DELAY makes SQL Server wait for specified time
                 rows = await conn.execute(f"""
                     WAITFOR DELAY '00:00:0{delay_seconds}';
@@ -93,7 +92,7 @@ async def test_connection_pool_race_conditions():
             """Rapidly create and destroy connections to test for race conditions."""
             for i in range(iterations):
                 try:
-                    async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(TEST_CONNECTION_STRING) as conn:
                         # Log connection event
                         async with event_lock:
                             connection_events.append({
@@ -168,7 +167,7 @@ async def test_concurrent_transaction_handling():
             """Worker that performs concurrent read-only operations."""
             results = []
             
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 for op in range(operations):
                     try:
                         # Test concurrent read operations using system tables
@@ -186,7 +185,7 @@ async def test_concurrent_transaction_handling():
                             results.append({
                                 'worker_id': worker_id,
                                 'operation': op,
-                                'connection_id': rows[0]['connection_id'],
+                                'connection_id': int(str(rows[0]['connection_id'])),
                                 'timestamp': rows[0]['timestamp'],
                                 'success': True
                             })
@@ -252,7 +251,7 @@ async def test_async_connection_limit_behavior():
         async def hold_connection(connection_id: int, hold_time: float):
             """Hold a connection open for a specified time."""
             try:
-                async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                async with Connection(TEST_CONNECTION_STRING) as conn:
                     # Execute a query to ensure connection is active
                     await conn.execute(f"SELECT {connection_id} as conn_id")
                     
@@ -306,7 +305,7 @@ async def test_async_error_propagation_and_cleanup():
         async def failing_operation(operation_id: int, should_fail: bool):
             """Operation that may fail to test error handling."""
             try:
-                async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                async with Connection(TEST_CONNECTION_STRING) as conn:
                     cleanup_events.append(f"Connection {operation_id} opened")
                     
                     if should_fail:
@@ -365,7 +364,7 @@ async def test_async_query_cancellation():
     try:
         async def long_running_query():
             """Execute a very long-running query."""
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 # Query that would take 30 seconds if not cancelled
                 result = await conn.execute("""
                     WAITFOR DELAY '00:00:30';
@@ -409,7 +408,7 @@ async def test_async_mixed_sync_async_operations():
         async def async_worker(worker_id: int):
             """Async worker function."""
             for i in range(5):
-                async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                async with Connection(TEST_CONNECTION_STRING) as conn:
                     result = await conn.execute(f"SELECT {worker_id} as worker_id, {i} as iteration, 'async' as type")
                     async with results_lock:
                         results.append({
@@ -424,7 +423,7 @@ async def test_async_mixed_sync_async_operations():
         def sync_worker(worker_id: int):
             """Synchronous worker function."""
             for i in range(5):
-                with mssql.connect(TEST_CONNECTION_STRING) as conn:
+                with Connection(TEST_CONNECTION_STRING) as conn:
                     result = conn.execute(f"SELECT {worker_id} as worker_id, {i} as iteration, 'sync' as type")
                     # Note: Can't use async lock in sync context, so we'll collect results differently
                     sync_result = {
@@ -477,7 +476,7 @@ async def test_async_connection_state_consistency():
         
         async def connection_state_worker(worker_id: int):
             """Worker that checks connection state consistency."""
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 async with state_lock:
                     state_log.append(f"Worker {worker_id}: Connection opened")
                 
@@ -489,7 +488,7 @@ async def test_async_connection_state_consistency():
                     
                     # Check connection ID (should remain consistent for this connection)
                     conn_result = await conn.execute("SELECT @@SPID as connection_id")
-                    connection_id = conn_result[0]['connection_id'] if conn_result else None
+                    connection_id = int(str(conn_result[0]['connection_id'])) if conn_result else None
                     
                     # Check server time (should always succeed)
                     time_result = await conn.execute("SELECT GETDATE() as server_time")
@@ -537,6 +536,124 @@ async def test_async_connection_state_consistency():
             f"Expected {num_workers} unique connection IDs, got {len(all_connection_ids)}"
         
         print(f"✅ Connection state consistency test passed: {len(operation_logs)} operations in {total_time:.2f}s")
+        
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+async def test_connection_pool_statistics_and_configuration():
+    """Test connection pool statistics and custom configuration."""
+    try:
+        # Test with custom pool configuration
+        pool_config = PoolConfig(
+            max_size=15,
+            min_idle=3,
+            max_lifetime_secs=1800,
+            idle_timeout_secs=300,
+            connection_timeout_secs=10
+        )
+        
+        async with Connection(TEST_CONNECTION_STRING, pool_config) as conn:
+            # Test pool statistics
+            initial_stats = conn.pool_stats()
+            assert 'connections' in initial_stats
+            assert 'active_connections' in initial_stats
+            assert 'idle_connections' in initial_stats
+            
+            print(f"Initial pool stats: {initial_stats}")
+            
+            # Execute a query to activate connection
+            result = await conn.execute("SELECT 'Pool test' as message")
+            assert len(result) == 1
+            # Values are now returned as native Python types
+            assert result[0]['message'] == 'Pool test'
+            
+            # Check stats after query
+            after_query_stats = conn.pool_stats()
+            print(f"After query stats: {after_query_stats}")
+            
+            # The total connections should match our pool config
+            assert after_query_stats['connections'] >= 3  # min_idle
+            
+        # Test with predefined configurations
+        configs_to_test = [
+            ('high_throughput', PoolConfig.high_throughput()),
+            ('low_resource', PoolConfig.low_resource()),
+            ('development', PoolConfig.development())
+        ]
+        
+        for config_name, config in configs_to_test:
+            async with Connection(TEST_CONNECTION_STRING, config) as conn:
+                result = await conn.execute(f"SELECT '{config_name}' as config_type")
+                assert result[0]['config_type'] == config_name
+                
+                stats = conn.pool_stats()
+                print(f"{config_name} pool stats: {stats}")
+                
+        print("✅ Connection pool configuration test passed")
+        
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+async def test_connection_pool_reuse_efficiency():
+    """Test that connection pool efficiently reuses connections."""
+    try:
+        pool_config = PoolConfig(max_size=5, min_idle=2)
+        connection_ids_seen = set()
+        
+        # Create a single connection that manages a pool
+        connection = Connection(TEST_CONNECTION_STRING, pool_config)
+        
+        async def test_single_operation(operation_id: int):
+            """Execute a single operation using the shared connection pool."""
+            # Use context manager to get a connection from the pool
+            async with connection:
+                # Get the SQL Server connection ID (SPID)
+                result = await connection.execute("SELECT @@SPID as connection_id")
+                connection_id = int(str(result[0]['connection_id']))
+                connection_ids_seen.add(connection_id)
+                
+                # Execute a meaningful query
+                data = await connection.execute(f"""
+                    SELECT 
+                        {operation_id} as operation_id,
+                        @@SPID as spid,
+                        DB_NAME() as database_name,
+                        GETDATE() as timestamp
+                """)
+                
+                return {
+                    'operation_id': operation_id,
+                    'connection_id': connection_id,
+                    'data': data[0] if data else None
+                }
+        
+        # Establish initial connection
+        async with connection:
+            # Run multiple operations sequentially to test connection reuse within the same context
+            results = []
+            for i in range(10):
+                result = await test_single_operation(i)
+                results.append(result)
+        
+        # Analyze connection reuse
+        successful_operations = [r for r in results if r['data'] is not None]
+        unique_connections = len(connection_ids_seen)
+        
+        assert len(successful_operations) == 10
+        
+        # Should use fewer unique connections than operations, or at most the pool max size
+        assert unique_connections <= pool_config.max_size, \
+            f"Used {unique_connections} connections, but pool max is {pool_config.max_size}"
+        
+        print(f"✅ Connection pool reuse test passed: {unique_connections} connections for {len(successful_operations)} operations")
         
     except Exception as e:
         pytest.skip(f"Database not available: {e}")

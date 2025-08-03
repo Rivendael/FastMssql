@@ -13,6 +13,8 @@ pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
 tokio = { version = "1", features = ["full"] }
 tiberius = { version = "0.12", features = ["chrono"] }
 tokio-util = { version = "0.7", features = ["compat"] }
+bb8 = "0.9"
+bb8-tiberius = "0.16"
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

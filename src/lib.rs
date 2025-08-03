@@ -9,10 +9,12 @@ use pyo3::prelude::*;
 mod connection;
 mod query;
 mod types;
+mod pool_config;
 
 pub use connection::PyConnection;
 pub use query::PyQuery;
 pub use types::{PyRow, PyValue};
+pub use pool_config::PyPoolConfig;
 
 /// A high-performance Python library for Microsoft SQL Server using Rust and Tiberius
 #[pymodule]
@@ -26,6 +28,7 @@ fn mssql_python_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyQuery>()?;
     m.add_class::<PyRow>()?;
     m.add_class::<PyValue>()?;
+    m.add_class::<PyPoolConfig>()?;
     
     // Add module-level functions
     m.add_function(wrap_pyfunction!(connect, m)?)?;
@@ -38,6 +41,7 @@ fn mssql_python_rust(_py: Python, m: &PyModule) -> PyResult<()> {
 /// 
 /// Args:
 ///     connection_string (str): The connection string for the database
+///     pool_config (PoolConfig, optional): Configuration for the connection pool
 ///     
 /// Returns:
 ///     PyConnection: A connection object for executing queries
@@ -45,9 +49,13 @@ fn mssql_python_rust(_py: Python, m: &PyModule) -> PyResult<()> {
 /// Example:
 ///     >>> import mssql_python_rust
 ///     >>> conn = mssql_python_rust.connect("Server=localhost;Database=test;Integrated Security=true")
+///     >>> # Or with custom pool config:
+///     >>> pool_config = mssql_python_rust.PoolConfig(max_size=20, min_idle=5)
+///     >>> conn = mssql_python_rust.connect("Server=localhost;Database=test;Integrated Security=true", pool_config)
 #[pyfunction]
-fn connect(connection_string: String) -> PyResult<PyConnection> {
-    PyConnection::new(connection_string)
+#[pyo3(signature = (connection_string, pool_config = None))]
+fn connect(connection_string: String, pool_config: Option<PyPoolConfig>) -> PyResult<PyConnection> {
+    PyConnection::new(connection_string, pool_config)
 }
 
 /// Get the version of the mssql-python-rust library

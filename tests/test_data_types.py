@@ -15,7 +15,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -26,7 +26,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 def test_numeric_types():
     """Test all numeric SQL Server data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     CAST(127 AS TINYINT) as tinyint_val,
@@ -62,7 +62,7 @@ def test_numeric_types():
 def test_string_types():
     """Test all string SQL Server data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     CAST('Hello' AS CHAR(10)) as char_val,
@@ -94,7 +94,7 @@ def test_string_types():
 def test_datetime_types():
     """Test all date/time SQL Server data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     CAST('2023-12-25' AS DATE) as date_val,
@@ -123,7 +123,7 @@ def test_datetime_types():
 def test_binary_types():
     """Test binary SQL Server data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     CAST(0x48656C6C6F AS BINARY(10)) as binary_val,
@@ -148,7 +148,7 @@ def test_binary_types():
 def test_special_types():
     """Test special SQL Server data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     CAST(1 AS BIT) as bit_true,
@@ -176,7 +176,7 @@ def test_special_types():
 def test_null_values():
     """Test NULL handling across different data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             rows = conn.execute("""
                 SELECT 
                     CAST(NULL AS INT) as null_int,
@@ -204,7 +204,7 @@ def test_null_values():
 def test_large_values():
     """Test handling of large values."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test large string
             large_string = 'A' * 8000  # 8KB string
             rows = conn.execute(f"SELECT '{large_string}' as large_string")
@@ -226,7 +226,7 @@ async def test_async_data_types():
     # Note: Async operations are currently experiencing issues with certain data types
     # This test is temporarily simplified to avoid hangs in the async implementation
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test with simpler query to avoid potential datetime issues in async context
             rows = await conn.execute("""
                 SELECT 

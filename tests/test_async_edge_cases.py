@@ -14,18 +14,18 @@ import asyncio
 import time
 import pytest
 import weakref
-from typing import List, Dict, Any, Optional
-from contextlib import asynccontextmanager
+from typing import List, Dict, Any
 
 # Test configuration
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
     MSSQL_AVAILABLE = True
 except ImportError:
     MSSQL_AVAILABLE = False
     mssql = None
+    Connection = None
 
 
 class ConnectionTracker:
@@ -73,7 +73,7 @@ async def test_async_context_manager_exception_handling():
         connection_id = f"conn_{test_id}"
         
         try:
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 await tracker.log_event('opened', connection_id)
                 
                 # Execute a successful query first
@@ -151,7 +151,7 @@ async def test_nested_async_context_managers():
         worker_log = []
         
         # Outer context manager
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as outer_conn:
+        async with Connection(TEST_CONNECTION_STRING) as outer_conn:
             worker_log.append(f"Worker {worker_id}: Outer connection opened")
             
             # Execute query in outer connection
@@ -159,7 +159,7 @@ async def test_nested_async_context_managers():
             worker_log.append(f"Worker {worker_id}: Outer query executed")
             
             # Inner context manager (different connection)
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as inner_conn:
+            async with Connection(TEST_CONNECTION_STRING) as inner_conn:
                 worker_log.append(f"Worker {worker_id}: Inner connection opened")
                 
                 # Execute query in inner connection
@@ -227,7 +227,7 @@ async def test_async_timeout_and_cancellation():
     """Test timeout behavior and task cancellation with async connections."""
     async def long_running_operation(operation_id: int, duration: int):
         """Operation that runs for a specified duration."""
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Use SQL Server's WAITFOR DELAY to simulate long operation
             result = await conn.execute(f"""
                 WAITFOR DELAY '00:00:{duration:02d}';
@@ -344,7 +344,7 @@ async def test_async_connection_resource_cleanup():
         
         async def create_tracked_connection(conn_id: int):
             """Create a connection and track it with weak reference."""
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 # Create weak reference to track connection cleanup
                 weak_ref = weakref.ref(conn)
                 connection_refs.append({'id': conn_id, 'ref': weak_ref, 'created': time.time()})
@@ -405,7 +405,7 @@ async def test_async_context_manager_with_background_tasks():
             
             for i in range(iterations):
                 try:
-                    async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(TEST_CONNECTION_STRING) as conn:
                         result = await conn.execute(f"""
                             SELECT 
                                 {task_id} as task_id,
@@ -432,7 +432,7 @@ async def test_async_context_manager_with_background_tasks():
             main_results = []
             
             for main_op in range(5):
-                async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+                async with Connection(TEST_CONNECTION_STRING) as conn:
                     result = await conn.execute(f"""
                         SELECT 
                             {main_op} as main_operation,

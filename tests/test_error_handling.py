@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -25,17 +25,17 @@ def test_invalid_connection_string():
     """Test error handling for invalid connection strings."""
     # Completely malformed connection string
     with pytest.raises(Exception):
-        conn = mssql.connect("This is not a valid connection string")
+        conn = Connection("This is not a valid connection string")
         
     # Valid format but invalid server
     with pytest.raises(Exception):
-        conn = mssql.connect(INVALID_CONNECTION_STRING)
+        conn = Connection(INVALID_CONNECTION_STRING)
         conn.connect()
 
 def test_connection_without_connect():
     """Test operations on unconnected connection objects."""
     try:
-        conn = mssql.connect(TEST_CONNECTION_STRING)
+        conn = Connection(TEST_CONNECTION_STRING)
         # Don't call connect() manually
         
         # Check if connection is established automatically or needs explicit connect
@@ -65,7 +65,7 @@ def test_connection_without_connect():
 def test_sql_syntax_errors():
     """Test handling of SQL syntax errors."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Invalid SQL syntax
             with pytest.raises(Exception):
                 conn.execute("INVALID SQL STATEMENT")
@@ -87,7 +87,7 @@ def test_sql_syntax_errors():
 def test_constraint_violations():
     """Test handling of database constraint violations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test table with constraints
             conn.execute_non_query("""
                 CREATE TABLE test_constraints_error (
@@ -146,7 +146,7 @@ def test_constraint_violations():
 def test_data_type_conversion_errors():
     """Test data type conversion errors."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test invalid date formats
             with pytest.raises(Exception):
                 conn.execute("SELECT CAST('invalid-date' AS DATETIME)")
@@ -170,7 +170,7 @@ def test_data_type_conversion_errors():
 def test_long_query_strings():
     """Test handling of very long query strings."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create a very long query string
             long_select_list = ', '.join([f"'{i}' as col_{i}" for i in range(1000)])
             long_query = f"SELECT {long_select_list}"
@@ -193,7 +193,7 @@ def test_connection_interruption():
     """Test behavior when connection is interrupted."""
     try:
         # Create connection
-        conn = mssql.connect(TEST_CONNECTION_STRING)
+        conn = Connection(TEST_CONNECTION_STRING)
         conn.connect()
         
         # Verify it works
@@ -224,7 +224,7 @@ def test_connection_interruption():
 def test_null_and_empty_values():
     """Test handling of NULL and empty values."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test table
             conn.execute_non_query("""
                 CREATE TABLE test_null_empty (
@@ -276,7 +276,7 @@ def test_null_and_empty_values():
 def test_special_characters():
     """Test handling of special characters in data."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test table
             conn.execute_non_query("""
                 CREATE TABLE test_special_chars (
@@ -326,7 +326,7 @@ def test_special_characters():
 def test_boundary_values():
     """Test boundary values for different data types."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test numeric boundaries
             rows = conn.execute("""
                 SELECT 
@@ -361,7 +361,7 @@ def test_boundary_values():
 async def test_async_error_handling():
     """Test error handling in async operations."""
     try:
-        async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test async syntax error
             with pytest.raises(Exception):
                 await conn.execute("INVALID ASYNC SQL")
@@ -394,7 +394,7 @@ async def test_async_error_handling():
 def test_empty_result_sets():
     """Test handling of empty result sets."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Query that returns no rows
             rows = conn.execute("SELECT 1 as test WHERE 1 = 0")
             assert len(rows) == 0
@@ -412,7 +412,7 @@ def test_empty_result_sets():
 def test_multiple_result_sets():
     """Test queries that return multiple result sets."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Test if procedures are supported by trying to create a simple one
             try:
                 conn.execute_non_query("CREATE PROCEDURE test_feature_check AS BEGIN SELECT 1 END")

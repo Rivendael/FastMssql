@@ -28,6 +28,7 @@ try:
         Query,
         Row,
         Value,
+        PoolConfig,
         connect,
         version,
     )
@@ -39,6 +40,7 @@ except ImportError:
             Query,
             Row,
             Value,
+            PoolConfig,
             connect,
             version,
         )
@@ -49,6 +51,7 @@ except ImportError:
         Query = mssql_python_rust.Query
         Row = mssql_python_rust.Row
         Value = mssql_python_rust.Value
+        PoolConfig = mssql_python_rust.PoolConfig
         connect = mssql_python_rust.connect
         version = mssql_python_rust.version
 
@@ -71,6 +74,7 @@ __all__ = [
     'Query', 
     'Row',
     'Value',
+    'PoolConfig',
     # Simplified API
     'connect',
     'connect_async',

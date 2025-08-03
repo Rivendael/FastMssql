@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     import mssql_python_rust as mssql
+    from mssql_python_rust import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -28,7 +29,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 def test_large_result_set():
     """Test handling of large result sets."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Create test table with large dataset
             conn.execute_non_query("""
                 CREATE TABLE test_large_data (
@@ -90,7 +91,7 @@ def test_concurrent_connections():
     try:
         def run_query(thread_id):
             """Function to run in each thread."""
-            with mssql.connect(TEST_CONNECTION_STRING) as conn:
+            with Connection(TEST_CONNECTION_STRING) as conn:
                 # Each thread runs its own queries
                 rows = conn.execute(f"SELECT {thread_id} as thread_id, GETDATE() as execution_time")
                 return {
@@ -128,7 +129,7 @@ def test_concurrent_connections():
 def test_bulk_insert_performance():
     """Test performance of bulk insert operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Clean up any existing table first
             try:
                 conn.execute_non_query("""
@@ -192,7 +193,7 @@ def test_bulk_insert_performance():
 def test_repeated_query_performance():
     """Test performance of repeated query execution."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Setup test data
             conn.execute_non_query("""
                 CREATE TABLE test_repeated_queries (
@@ -241,7 +242,7 @@ async def test_async_concurrent_queries():
     try:
         async def run_async_query(query_id):
             """Function to run async queries concurrently."""
-            async with mssql.connect_async(TEST_CONNECTION_STRING) as conn:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
                 rows = await conn.execute(f"""
                     SELECT 
                         {query_id} as query_id,
@@ -282,7 +283,7 @@ async def test_async_concurrent_queries():
 def test_memory_usage_with_large_strings():
     """Test memory handling with large string data."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Clean up any existing table first
             try:
                 conn.execute_non_query("""
@@ -339,7 +340,7 @@ def test_connection_pool_simulation():
         start_time = time.time()
         
         for i in range(num_connections):
-            with mssql.connect(TEST_CONNECTION_STRING) as conn:
+            with Connection(TEST_CONNECTION_STRING) as conn:
                 rows = conn.execute("SELECT 1 as test_value")
                 assert rows[0]['test_value'] == 1
         
@@ -360,7 +361,7 @@ def test_connection_pool_simulation():
 def test_long_running_query():
     """Test handling of long-running queries."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Run a query that takes some time to execute
             start_time = time.time()
             rows = conn.execute("""
@@ -394,7 +395,7 @@ def test_long_running_query():
 def test_stress_mixed_operations():
     """Stress test with mixed read/write operations."""
     try:
-        with mssql.connect(TEST_CONNECTION_STRING) as conn:
+        with Connection(TEST_CONNECTION_STRING) as conn:
             # Setup stress test table
             conn.execute_non_query("""
                 CREATE TABLE test_stress_operations (
