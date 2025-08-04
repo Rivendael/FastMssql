@@ -98,6 +98,80 @@ async def main():
 asyncio.run(main())
 ```
 
+### Connection Methods
+
+The library supports two ways to connect to SQL Server:
+
+#### 1. Connection String (Traditional)
+
+```python
+import asyncio
+from mssql_python_rust import Connection
+
+async def main():
+    # Traditional connection string approach
+    connection_string = "Server=localhost;Database=master;Integrated Security=true"
+    
+    async with Connection(connection_string=connection_string) as conn:
+        result = await conn.execute("SELECT @@VERSION as version")
+        for row in result.rows():
+            print(row['version'])
+
+asyncio.run(main())
+```
+
+#### 2. Individual Parameters (New!)
+
+```python
+import asyncio
+from mssql_python_rust import Connection
+
+async def main():
+    # Using individual connection parameters
+    
+    # Windows Authentication
+    async with Connection(
+        server="localhost",
+        database="master",
+        trusted_connection=True
+    ) as conn:
+        result = await conn.execute("SELECT DB_NAME() as database")
+        for row in result.rows():
+            print(f"Connected to: {row['database']}")
+    
+    # SQL Server Authentication  
+    async with Connection(
+        server="localhost",
+        database="master",
+        username="myuser",
+        password="mypassword"
+    ) as conn:
+        result = await conn.execute("SELECT SUSER_NAME() as login")
+        for row in result.rows():
+            print(f"Logged in as: {row['login']}")
+
+asyncio.run(main())
+```
+
+#### 3. Convenience Functions
+
+```python
+import asyncio
+import mssql_python_rust as mssql
+
+async def main():
+    # Execute queries without manual connection management
+    
+    # Using connection string
+    result = await mssql.execute(
+        "SELECT @@SERVERNAME as server",
+        connection_string="Server=localhost;Database=master;Trusted_Connection=true"
+    )
+
+
+asyncio.run(main())
+```
+
 ### Connection Pool Configuration
 
 Configure the connection pool for your specific needs:
@@ -304,6 +378,9 @@ python examples/async_usage.py
 
 # Advanced pool configuration
 python examples/advanced_pool_config.py
+
+# Connection parameters demonstration
+python examples/connection_parameters_demo.py
 ```
 
 ### Key API Improvements

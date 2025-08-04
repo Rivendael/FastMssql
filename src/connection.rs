@@ -6,7 +6,7 @@ use bb8_tiberius::ConnectionManager;
 use tokio::sync::Mutex;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use tiberius::Config;
+use tiberius::{Config, AuthMethod};
 use std::sync::Arc;
 use bb8::Pool;
 
@@ -239,10 +239,41 @@ fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
 #[pymethods]
 impl PyConnection {
     #[new]
-    #[pyo3(signature = (connection_string, pool_config = None))]
-    pub fn new(connection_string: String, pool_config: Option<PyPoolConfig>) -> PyResult<Self> {
-        let config = Config::from_ado_string(&connection_string)
-            .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
+    #[pyo3(signature = (connection_string = None, pool_config = None, server = None, database = None, username = None, password = None, trusted_connection = None))]
+    pub fn new(
+        connection_string: Option<String>, 
+        pool_config: Option<PyPoolConfig>,
+        server: Option<String>,
+        database: Option<String>,
+        username: Option<String>,
+        password: Option<String>,
+        trusted_connection: Option<bool>
+    ) -> PyResult<Self> {
+        let config = if let Some(conn_str) = connection_string {
+            // Use provided connection string
+            Config::from_ado_string(&conn_str)
+                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
+        } else if let Some(srv) = server {
+            // Build config from individual parameters
+            let mut config = Config::new();
+            config.host(&srv);
+            
+            if let Some(db) = database {
+                config.database(&db);
+            }
+            
+            if let Some(user) = username {
+                config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default()));
+            } else if trusted_connection.unwrap_or(true) {
+                config.authentication(AuthMethod::windows("", ""));
+            }
+            
+            config
+        } else {
+            return Err(PyValueError::new_err(
+                "Either connection_string or server must be provided"
+            ));
+        };
         
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
@@ -426,8 +457,54 @@ mod tests {
             "Server=localhost;Database=test;Integrated Security=true".to_string()
         });
         
-        let connection = PyConnection::new(conn_string, None).expect("Failed to create connection");
+        let connection = PyConnection::new(Some(conn_string), None, None, None, None, None, None).expect("Failed to create connection");
         // Connection object created successfully
         // Actual connection testing would require async runtime and real database
+    }
+    
+    #[test]
+    fn test_connection_with_individual_params() {
+        let connection = PyConnection::new(
+            None, // no connection string
+            None, // default pool config
+            Some("localhost".to_string()), // server
+            Some("test".to_string()), // database
+            None, // no username (will use Windows auth)
+            None, // no password
+            Some(true) // trusted connection
+        ).expect("Failed to create connection with individual params");
+        
+        // Connection object created successfully
+    }
+    
+    #[test]
+    fn test_connection_with_sql_auth() {
+        let connection = PyConnection::new(
+            None, // no connection string
+            None, // default pool config
+            Some("localhost".to_string()), // server
+            Some("test".to_string()), // database
+            Some("testuser".to_string()), // username
+            Some("testpass".to_string()), // password
+            Some(false) // not trusted connection
+        ).expect("Failed to create connection with SQL auth");
+        
+        // Connection object created successfully
+    }
+    
+    #[test]
+    fn test_connection_requires_server_or_connection_string() {
+        let result = PyConnection::new(
+            None, // no connection string
+            None, // default pool config
+            None, // no server
+            None, // no database
+            None, // no username
+            None, // no password
+            None  // no trusted connection
+        );
+        
+        // Should fail because neither connection_string nor server was provided
+        assert!(result.is_err());
     }
 }

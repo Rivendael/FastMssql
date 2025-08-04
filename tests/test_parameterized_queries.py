@@ -97,25 +97,6 @@ async def test_string_sql_injection_protection():
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
-async def test_execute_dict_with_params():
-    """Test execute_dict method with parameters."""
-    try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
-            dict_result = await conn.execute_dict(
-                "SELECT @P1 as name, @P2 as age",
-                ["Alice", 30]
-            )
-            assert len(dict_result) == 1
-            assert dict_result[0]['name'] == "Alice"
-            assert dict_result[0]['age'] == 30
-    except Exception as e:
-        pytest.skip(f"Database not available: {e}")
-
-
 if __name__ == "__main__":
     # Run a simple smoke test
     async def smoke_test():

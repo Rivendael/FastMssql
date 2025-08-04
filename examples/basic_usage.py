@@ -13,9 +13,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql_python_rust import Connection
+    from mssql import Connection
 except ImportError as e:
-    print(f"Error importing mssql_python_rust: {e}")
+    print(f"Error importing mssql: {e}")
     print("Make sure you've built the extension with 'maturin develop'")
     sys.exit(1)
 
