@@ -475,9 +475,6 @@ async with Connection(conn_str) as conn:
 
 **Methods:**
 - `execute(sql: str) -> List[Row]` - Execute a query synchronously
-- `execute_async(sql: str) -> List[Row]` - Execute a query asynchronously
-- `execute_non_query(sql: str) -> int` - Execute without returning results (sync)
-- `execute_non_query_async(sql: str) -> int` - Execute without returning results (async)
 - `pool_stats() -> dict` - Get connection pool statistics
 - `disconnect()` - Close the connection pool
 - `is_connected() -> bool` - Check if pool is active

@@ -4,10 +4,10 @@ use pyo3_asyncio::tokio::future_into_py;
 use crate::pool_config::PyPoolConfig;
 use crate::ssl_config::PySslConfig;
 use bb8_tiberius::ConnectionManager;
+use tiberius::{Config, AuthMethod};
+use pyo3::types::PyList;
 use tokio::sync::Mutex;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
-use tiberius::{Config, AuthMethod};
 use std::sync::Arc;
 use bb8::Pool;
 
@@ -219,7 +219,7 @@ impl PyConnection {
     }
 }
 
-/// Convert a Python object to PyValue
+/// Convert a Python object to PyValue, with support for iterable expansion
 fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
     if obj.is_none() {
         Ok(PyValue::new_null())
@@ -236,6 +236,52 @@ fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
     } else {
         Err(PyValueError::new_err(format!("Unsupported parameter type: {}", obj.get_type().name()?)))
     }
+}
+
+/// Convert Python objects to PyValue with automatic iterable expansion
+/// 
+/// This function handles both regular values and iterables. Iterables (except strings and bytes)
+/// are automatically expanded into multiple parameters for use in IN clauses.
+fn python_params_to_pyvalues(params: &PyList) -> PyResult<Vec<PyValue>> {
+    let mut result = Vec::new();
+    
+    for param in params.iter() {
+        if is_expandable_iterable(param)? {
+            // Expand iterable into individual parameters
+            expand_iterable_to_params(param, &mut result)?;
+        } else {
+            // Regular parameter
+            result.push(python_to_pyvalue(param)?);
+        }
+    }
+    
+    Ok(result)
+}
+
+/// Check if a Python object is an iterable that should be expanded
+/// 
+/// Returns true for lists, tuples, sets, etc., but false for strings and bytes
+/// which should be treated as single values.
+fn is_expandable_iterable(obj: &PyAny) -> PyResult<bool> {
+    // Don't expand strings or bytes
+    if obj.extract::<String>().is_ok() || obj.extract::<Vec<u8>>().is_ok() {
+        return Ok(false);
+    }
+    
+    // Check if object has __iter__ method (is iterable)
+    Ok(obj.hasattr("__iter__")?)
+}
+
+/// Expand a Python iterable into individual PyValue parameters
+fn expand_iterable_to_params(iterable: &PyAny, result: &mut Vec<PyValue>) -> PyResult<()> {
+    let iter = iterable.iter()?;
+    
+    for item in iter {
+        let item = item?;
+        result.push(python_to_pyvalue(&item)?);
+    }
+    
+    Ok(())
 }
 
 #[pymethods]
@@ -360,16 +406,14 @@ impl PyConnection {
 
     /// Execute a SQL statement with Python parameters and return appropriate results
     /// 
-    /// This method accepts raw Python objects and converts them internally
+    /// This method accepts raw Python objects and converts them internally.
+    /// Iterables (lists, tuples, sets, etc.) are automatically expanded for IN clauses,
+    /// except strings and bytes which are treated as single values.
     pub fn execute_with_python_params<'p>(&self, py: Python<'p>, query: String, params: &PyList) -> PyResult<&'p PyAny> {
         let pool = self.pool.clone();
         
-        // Convert Python objects to PyValue objects
-        let mut parameters = Vec::new();
-        for param in params.iter() {
-            let py_value = python_to_pyvalue(param)?;
-            parameters.push(py_value);
-        }
+        // Convert Python objects to PyValue objects with automatic expansion
+        let parameters = python_params_to_pyvalues(params)?;
         
         future_into_py(py, async move {
             Self::execute_internal_with_params(pool, query, parameters).await

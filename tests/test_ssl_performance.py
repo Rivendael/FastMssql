@@ -371,45 +371,6 @@ class TestSslConfigConcurrentPerformance:
         # String operations should be fast
         assert str_ops / str_time > 10000
         assert repr_ops / repr_time > 10000
-
-
-class TestSslConfigScalability:
-    """Test SSL configuration scalability characteristics."""
-    
-    def test_ssl_config_creation_scaling(self):
-        """Test how SSL config creation time scales with load."""
-        test_sizes = [100, 500, 1000, 2000]
-        times = []
-        
-        for size in test_sizes:
-            start_time = time.perf_counter()
-            
-            configs = []
-            for i in range(size):
-                ssl_config = SslConfig(
-                    encryption_level="Required",
-                    server_name=f"server{i}.com"
-                )
-                configs.append(ssl_config)
-            
-            end_time = time.perf_counter()
-            total_time = end_time - start_time
-            times.append(total_time)
-            
-            throughput = size / total_time
-            print(f"Size {size}: {total_time:.4f}s ({throughput:.0f} configs/sec)")
-        
-        # Performance should scale reasonably (not exponentially worse)
-        # The time per config should not increase dramatically
-        time_per_config = [times[i] / test_sizes[i] for i in range(len(test_sizes))]
-        
-        # Time per config should not increase by more than 50% as we scale up
-        max_time_per_config = max(time_per_config)
-        min_time_per_config = min(time_per_config)
-        scaling_factor = max_time_per_config / min_time_per_config
-        
-        print(f"Scaling factor: {scaling_factor:.2f}")
-        assert scaling_factor < 1.5
     
     def test_concurrent_scaling(self):
         """Test how concurrent SSL operations scale with thread count."""

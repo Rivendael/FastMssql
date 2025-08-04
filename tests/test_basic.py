@@ -117,39 +117,6 @@ async def test_data_types():
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
-@pytest.mark.integration 
-@pytest.mark.asyncio
-async def test_execute_non_query():
-    """Test executing non-query operations."""
-    try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
-            # Create a test table
-            await conn.execute("""
-                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='test_execute_non_query' AND xtype='U')
-                    CREATE TABLE test_execute_non_query (id INT, name NVARCHAR(50), test_flag BIT DEFAULT 0)
-            """)
-            
-            # Clear any existing data
-            await conn.execute("DELETE FROM test_execute_non_query")
-            
-            # Insert test data
-            result = await conn.execute("INSERT INTO test_execute_non_query (id, name, test_flag) VALUES (1, 'test', 0)")
-            
-            # Update the test_flag to verify non-query execution
-            result = await conn.execute("UPDATE test_execute_non_query SET test_flag = 1 WHERE id = 1")
-            
-            # Verify the update worked
-            result = await conn.execute("SELECT COUNT(*) as updated_count FROM test_execute_non_query WHERE test_flag = 1")
-            rows = result.rows()
-            assert len(rows) == 1
-            assert rows[0]['updated_count'] == 1
-            
-            # Clean up - remove the test table
-            await conn.execute("DROP TABLE IF EXISTS test_execute_non_query")
-            
-    except Exception as e:
-        pytest.skip(f"Database not available: {e}")
-
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_convenience_functions():

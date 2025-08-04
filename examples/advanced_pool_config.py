@@ -92,7 +92,7 @@ async def concurrent_load_testing():
                     details = result[0]['worker_id']
                 elif worker_id % 3 == 1:
                     # Non-query operation (if you have a test table)
-                    affected = await conn.execute_non_query(f"-- Worker {worker_id} placeholder operation")
+                    affected = await conn.execute(f"-- Worker {worker_id} placeholder operation")
                     operation = "NonQuery"
                     details = f"affected: {affected}"
                 else:

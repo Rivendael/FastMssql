@@ -100,7 +100,7 @@ async def main():
         insert_query.set_parameters(["Alice", 30, True])
         
         try:
-            affected_rows = await insert_query.execute_non_query(conn)
+            affected_rows = await insert_query.execute(conn)
             print(f"Inserted {affected_rows} rows")
         except Exception as e:
             print(f"Insert failed (expected if table doesn't exist): {e}")

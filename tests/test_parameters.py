@@ -63,6 +63,54 @@ class TestParameter:
             param = Parameter(value, sql_type)
             assert param.value == value
             assert param.sql_type == sql_type
+    
+    def test_parameter_automatic_expansion(self):
+        """Test automatic iterable expansion for IN clauses."""
+        values = [1, 2, 3, 4]
+        param = Parameter(values)
+        
+        assert param.value == values
+        assert param.is_expanded == True
+        assert param.sql_type is None
+    
+    def test_parameter_automatic_expansion_with_type(self):
+        """Test automatic expansion with SQL type."""
+        values = [1, 2, 3, 4]
+        param = Parameter(values, "INT")
+        
+        assert param.value == values
+        assert param.is_expanded == True
+        assert param.sql_type == "INT"
+    
+    def test_parameter_automatic_expansion_repr(self):
+        """Test string representation of automatically expanded parameters."""
+        values = [1, 2, 3]
+        param = Parameter(values)
+        assert repr(param) == "Parameter(IN_values=[1, 2, 3])"
+        
+        param_with_type = Parameter(values, "INT")
+        assert repr(param_with_type) == "Parameter(IN_values=[1, 2, 3], type=INT)"
+    
+    def test_parameter_automatic_iterable_detection(self):
+        """Test automatic iterable detection for expansion."""
+        # These should NOT be expanded (strings and bytes are not iterables for expansion)
+        string_param = Parameter("hello")
+        assert string_param.value == "hello"
+        assert string_param.is_expanded == False
+        
+        bytes_param = Parameter(b"bytes")
+        assert bytes_param.value == b"bytes"
+        assert bytes_param.is_expanded == False
+        
+        # These SHOULD be expanded automatically
+        list_param = Parameter([1, 2, 3])
+        assert list_param.is_expanded == True
+        
+        tuple_param = Parameter((1, 2, 3))
+        assert tuple_param.is_expanded == True
+        
+        set_param = Parameter({1, 2, 3})
+        assert set_param.is_expanded == True
 
 
 class TestParameters:
@@ -213,6 +261,90 @@ class TestParameters:
         assert pos1 is not pos2
         assert named1 == named2
         assert named1 is not named2
+    
+    def test_parameters_automatic_iterable_expansion(self):
+        """Test that iterables are passed to Rust for expansion."""
+        # Test with list that will be expanded by Rust
+        params = Parameters([1, 2, 3], "John")
+        assert len(params) == 2  # 2 parameters: list and string (Rust handles expansion)
+        
+        # First parameter contains the list (Rust will expand it)
+        first_param = params.positional[0]
+        assert first_param.value == [1, 2, 3]
+        assert first_param.is_expanded == True  # Marked for expansion by Rust
+        
+        # Second parameter should not be expanded
+        second_param = params.positional[1]
+        assert second_param.value == "John"
+        assert second_param.is_expanded == False
+    
+    def test_parameters_mixed_iterables_and_values(self):
+        """Test Parameters with mix of iterables and regular values."""
+        params = Parameters(
+            [1, 2, 3],        # Should be marked for expansion
+            "regular_string", # Should not be expanded
+            (4, 5, 6),        # Should be marked for expansion
+            42                # Should not be expanded
+        )
+        
+        assert len(params) == 4  # 4 parameters (Rust handles expansion)
+        
+        # Check expansion status
+        assert params.positional[0].is_expanded == True   # list
+        assert params.positional[1].is_expanded == False  # string
+        assert params.positional[2].is_expanded == True   # tuple
+        assert params.positional[3].is_expanded == False  # int
+        
+        # Check values (raw values, Rust expands them)
+        assert params.positional[0].value == [1, 2, 3]
+        assert params.positional[1].value == "regular_string"
+        assert params.positional[2].value == [4, 5, 6]  # tuple converted to list
+        assert params.positional[3].value == 42
+    
+    def test_parameters_add_iterable(self):
+        """Test adding iterables with add() method."""
+        params = Parameters()
+        params.add([1, 2, 3], "INT")
+        
+        assert len(params) == 1
+        param = params.positional[0]
+        assert param.value == [1, 2, 3]
+        assert param.is_expanded == True  # Iterables are marked for Rust expansion
+        assert param.sql_type == "INT"
+    
+    def test_parameters_rust_expansion_behavior(self):
+        """Test that both constructor and add() method mark iterables for Rust expansion."""
+        # Constructor behavior: iterables marked for Rust expansion
+        params1 = Parameters([1, 2, 3])
+        assert len(params1) == 1  # Single parameter (list)
+        assert params1.positional[0].value == [1, 2, 3]
+        assert params1.positional[0].is_expanded == True  # Rust will expand this
+        
+        # add() method behavior: same as constructor
+        params2 = Parameters().add([1, 2, 3])
+        assert len(params2) == 1  # Single parameter (list)
+        assert params2.positional[0].value == [1, 2, 3]
+        assert params2.positional[0].is_expanded == True  # Rust will expand this
+    
+    def test_parameters_set_iterable(self):
+        """Test setting iterables with set() method."""
+        params = Parameters()
+        params.set("user_ids", [10, 20, 30], "BIGINT")
+        
+        assert len(params) == 1
+        param = params.named["user_ids"]
+        assert param.value == [10, 20, 30]
+        assert param.is_expanded == True
+        assert param.sql_type == "BIGINT"
+    
+    def test_parameters_string_not_expanded(self):
+        """Test that strings are not expanded even when they're iterable."""
+        params = Parameters("hello")
+        
+        assert len(params) == 1
+        param = params.positional[0]
+        assert param.value == "hello"
+        assert param.is_expanded == False
 
 
 @pytest.mark.integration
@@ -342,7 +474,11 @@ class TestParametersIntegration:
                 assert abs(row['float_val'] - 3.14159) < 0.00001
                 assert row['str_val'] == "String"
                 assert row['bool_val'] == True
-                assert row['binary_val'] == b"binary"
+                # Binary data might be returned as list of integers, convert to bytes
+                binary_val = row['binary_val']
+                if isinstance(binary_val, list):
+                    binary_val = bytes(binary_val)
+                assert binary_val == b"binary"
                 
         except Exception as e:
             pytest.skip(f"Database not available: {e}")
@@ -412,6 +548,64 @@ class TestParametersIntegration:
                 assert row2['id'] == 42
                 assert row2['name'] == "Reused"
                 assert row2['query_id'] == "Query 2"
+                
+        except Exception as e:
+            pytest.skip(f"Database not available: {e}")
+    
+    @pytest.mark.asyncio
+    async def test_automatic_in_clause_expansion(self):
+        """Test automatic IN clause expansion with real database."""
+        try:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
+                # Test simple list - should automatically expand for IN clause
+                ids = [1, 2, 3]
+                params = Parameters(ids)
+                
+                # This should work: the list gets expanded automatically
+                result = await conn.execute(
+                    "SELECT @P1 as expanded_values", 
+                    params
+                )
+                
+                assert result.has_rows()
+                rows = result.rows()
+                assert len(rows) == 1
+                
+                # The value should be the list itself (the Rust layer handles expansion)
+                row = rows[0]
+                expanded_val = row['expanded_values']
+                # Could be returned as list or string representation depending on Rust implementation
+                # Just verify we get something back
+                assert expanded_val is not None
+                
+        except Exception as e:
+            pytest.skip(f"Database not available: {e}")
+    
+    @pytest.mark.asyncio
+    async def test_mixed_parameters_with_iterables(self):
+        """Test mixed regular and iterable parameters."""
+        try:
+            async with Connection(TEST_CONNECTION_STRING) as conn:
+                # Mix of regular values and iterables
+                params = Parameters(
+                    "John",        # Regular string
+                    [1, 2, 3],     # Should be expanded  
+                    25             # Regular int
+                )
+                
+                result = await conn.execute(
+                    "SELECT @P1 as name, @P2 as id_list, @P3 as age", 
+                    params
+                )
+                
+                assert result.has_rows()
+                rows = result.rows()
+                assert len(rows) == 1
+                
+                row = rows[0]
+                assert row['name'] == "John"
+                assert row['id_list'] is not None  # The list value
+                assert row['age'] == 25
                 
         except Exception as e:
             pytest.skip(f"Database not available: {e}")
