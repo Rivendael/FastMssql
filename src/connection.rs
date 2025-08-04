@@ -2,6 +2,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use crate::types::{PyRow, PyExecutionResult, PyValue};
 use pyo3_asyncio::tokio::future_into_py;
 use crate::pool_config::PyPoolConfig;
+use crate::ssl_config::PySslConfig;
 use bb8_tiberius::ConnectionManager;
 use tokio::sync::Mutex;
 use pyo3::prelude::*;
@@ -18,6 +19,7 @@ pub struct PyConnection {
     pool: Arc<Mutex<Option<ConnectionPool>>>,
     config: Config,
     pool_config: PyPoolConfig,
+    _ssl_config: Option<PySslConfig>, // Prefix with underscore to silence unused warning
 }
 
 impl PyConnection {
@@ -239,17 +241,18 @@ fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
 #[pymethods]
 impl PyConnection {
     #[new]
-    #[pyo3(signature = (connection_string = None, pool_config = None, server = None, database = None, username = None, password = None, trusted_connection = None))]
+    #[pyo3(signature = (connection_string = None, pool_config = None, ssl_config = None, server = None, database = None, username = None, password = None, trusted_connection = None))]
     pub fn new(
         connection_string: Option<String>, 
         pool_config: Option<PyPoolConfig>,
+        ssl_config: Option<PySslConfig>,
         server: Option<String>,
         database: Option<String>,
         username: Option<String>,
         password: Option<String>,
         trusted_connection: Option<bool>
     ) -> PyResult<Self> {
-        let config = if let Some(conn_str) = connection_string {
+        let mut config = if let Some(conn_str) = connection_string {
             // Use provided connection string
             Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
@@ -274,6 +277,11 @@ impl PyConnection {
                 "Either connection_string or server must be provided"
             ));
         };
+
+        // Apply SSL configuration if provided
+        if let Some(ref ssl_cfg) = ssl_config {
+            ssl_cfg.apply_to_config(&mut config);
+        }
         
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
@@ -281,6 +289,7 @@ impl PyConnection {
             pool: Arc::new(Mutex::new(None)),
             config,
             pool_config,
+            _ssl_config: ssl_config,
         })
     }
     
@@ -457,7 +466,7 @@ mod tests {
             "Server=localhost;Database=test;Integrated Security=true".to_string()
         });
         
-        let connection = PyConnection::new(Some(conn_string), None, None, None, None, None, None).expect("Failed to create connection");
+        let connection = PyConnection::new(Some(conn_string), None, None, None, None, None, None, None).expect("Failed to create connection");
         // Connection object created successfully
         // Actual connection testing would require async runtime and real database
     }
@@ -467,6 +476,7 @@ mod tests {
         let connection = PyConnection::new(
             None, // no connection string
             None, // default pool config
+            None, // no SSL config
             Some("localhost".to_string()), // server
             Some("test".to_string()), // database
             None, // no username (will use Windows auth)
@@ -482,6 +492,7 @@ mod tests {
         let connection = PyConnection::new(
             None, // no connection string
             None, // default pool config
+            None, // no SSL config
             Some("localhost".to_string()), // server
             Some("test".to_string()), // database
             Some("testuser".to_string()), // username
@@ -497,6 +508,7 @@ mod tests {
         let result = PyConnection::new(
             None, // no connection string
             None, // default pool config
+            None, // no SSL config
             None, // no server
             None, // no database
             None, // no username
@@ -506,5 +518,23 @@ mod tests {
         
         // Should fail because neither connection_string nor server was provided
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_connection_with_ssl_config() {
+        let ssl_config = crate::ssl_config::PySslConfig::development();
+        let connection = PyConnection::new(
+            None, // no connection string
+            None, // default pool config
+            Some(ssl_config), // SSL config
+            Some("localhost".to_string()), // server
+            Some("test".to_string()), // database
+            None, // no username (will use Windows auth)
+            None, // no password
+            Some(true) // trusted connection
+        ).expect("Failed to create connection with SSL config");
+        
+        // Connection object created successfully
+        assert!(connection.ssl_config.is_some());
     }
 }
