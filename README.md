@@ -83,7 +83,7 @@ from mssql_python_rust import Connection
 
 async def main():
     # Connect to SQL Server using async context manager
-    connection_string = "Server=localhost;Database=master;Integrated Security=true"
+    connection_string = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
     
     # Automatic connection pool management
     async with Connection(connection_string) as conn:
@@ -110,7 +110,7 @@ from mssql_python_rust import Connection
 
 async def main():
     # Traditional connection string approach
-    connection_string = "Server=localhost;Database=master;Integrated Security=true"
+    connection_string = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
     
     async with Connection(connection_string=connection_string) as conn:
         result = await conn.execute("SELECT @@VERSION as version")
@@ -128,16 +128,6 @@ from mssql_python_rust import Connection
 
 async def main():
     # Using individual connection parameters
-    
-    # Windows Authentication
-    async with Connection(
-        server="localhost",
-        database="master",
-        trusted_connection=True
-    ) as conn:
-        result = await conn.execute("SELECT DB_NAME() as database")
-        for row in result.rows():
-            print(f"Connected to: {row['database']}")
     
     # SQL Server Authentication  
     async with Connection(
@@ -165,7 +155,7 @@ async def main():
     # Using connection string
     result = await mssql.execute(
         "SELECT @@SERVERNAME as server",
-        connection_string="Server=localhost;Database=master;Trusted_Connection=true"
+        connection_string="Server=localhost;Database=master;User Id=myuser;Password=mypass"
     )
 
 
@@ -224,9 +214,6 @@ The bb8 connection pool provides significant performance improvements:
 The library supports standard SQL Server connection string formats:
 
 ```python
-# Windows Authentication
-conn_str = "Server=localhost;Database=MyDB;Integrated Security=true"
-
 # SQL Server Authentication
 conn_str = "Server=localhost;Database=MyDB;User Id=sa;Password=MyPassword"
 
@@ -326,7 +313,7 @@ import time
 from mssql_python_rust import Connection
 
 async def performance_comparison():
-    connection_string = "Server=localhost;Database=test;Integrated Security=true"
+    connection_string = "Server=localhost;Database=test;User Id=myuser;Password=mypass"
     
     # Sequential async operations (still efficient with pool reuse)
     start = time.time()
@@ -687,9 +674,9 @@ async def olap_operations():
 ### Common Issues
 
 1. **Import Error**: Make sure you've built the extension with `maturin develop`
-2. **Connection Fails**: Check your connection string and SQL Server configuration
+2. **Connection Fails**: Check your connection string and SQL Server configuration. Note that Windows authentication is not supported - use SQL Server authentication with username and password.
 3. **Build Errors**: Ensure you have the Rust toolchain installed
-4. **Windows Issues**: Make sure you have the Microsoft Visual C++ Build Tools
+4. **Build Issues**: Make sure you have the Microsoft Visual C++ Build Tools on Windows
 
 
 ## Contributing
