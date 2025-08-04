@@ -123,75 +123,6 @@ class ExecutionResult:
         else:
             return f"ExecutionResult(affected_rows={self.affected_rows})"
 
-
-class Query:
-    """A parameterized SQL query for safe execution."""
-    
-    def __init__(self, sql: str):
-        """Initialize a new parameterized query.
-        
-        Args:
-            sql: SQL query string with parameter placeholders (?)
-        """
-        self._query = _core.Query(sql)
-    
-    def add_parameter(self, value: Any) -> None:
-        """Add a parameter to the query.
-        
-        Args:
-            value: Parameter value (int, float, str, bool, bytes, None)
-        """
-        self._query.add_parameter(value)
-    
-    def set_parameters(self, params: List[Any]) -> None:
-        """Set all parameters at once.
-        
-        Args:
-            params: List of parameter values
-        """
-        self._query.set_parameters(params)
-    
-    @property
-    def sql(self) -> str:
-        """Get the SQL string."""
-        return self._query.get_sql()
-    
-    @property 
-    def parameters(self) -> List[Any]:
-        """Get the parameter list."""
-        return self._query.get_parameters()
-    
-    async def execute(self, connection: 'Connection') -> ExecutionResult:
-        """Execute the query on a connection.
-        
-        Args:
-            connection: Connection object to execute the query on
-            
-        Returns:
-            ExecutionResult object with rows or affected row count
-        """
-        raw_result = await self._query.execute(connection._conn)
-        return ExecutionResult(raw_result)
-    
-    async def execute_non_query(self, connection: 'Connection') -> int:
-        """Execute the query and return affected row count.
-        
-        Args:
-            connection: Connection object to execute the query on
-            
-        Returns:
-            Number of affected rows
-        """
-        result = await self.execute(connection)
-        return result.affected_rows or 0
-    
-    def __str__(self) -> str:
-        """String representation of the query."""
-        return self._query.__str__()
-    
-    def __repr__(self) -> str:
-        """Representation of the query."""
-        return self._query.__repr__()
 class PoolConfig:
     """Python wrapper around PoolConfig for better documentation."""
     
@@ -267,24 +198,148 @@ class PoolConfig:
         return config
 
 
+class Parameter:
+    """Represents a SQL parameter with value and optional type information."""
+    
+    def __init__(self, value: Any, sql_type: Optional[str] = None):
+        """Initialize a parameter.
+        
+        Args:
+            value: The parameter value (None, bool, int, float, str, bytes)
+            sql_type: Optional SQL type hint (e.g., 'VARCHAR', 'INT', 'DATETIME')
+        """
+        self.value = value
+        self.sql_type = sql_type
+    
+    def __repr__(self) -> str:
+        if self.sql_type:
+            return f"Parameter(value={self.value!r}, type={self.sql_type})"
+        return f"Parameter(value={self.value!r})"
+
+
+class Parameters:
+    """Container for SQL parameters that can be passed to execute()."""
+    
+    def __init__(self, *args, **kwargs):
+        """Initialize parameters container.
+        
+        Args:
+            *args: Positional parameter values (for ? placeholders)
+            **kwargs: Named parameter values (for @name placeholders, if supported)
+        """
+        self._positional = []
+        self._named = {}
+        
+        # Handle positional parameters
+        for arg in args:
+            if isinstance(arg, Parameter):
+                self._positional.append(arg)
+            else:
+                self._positional.append(Parameter(arg))
+        
+        # Handle named parameters
+        for name, value in kwargs.items():
+            if isinstance(value, Parameter):
+                self._named[name] = value
+            else:
+                self._named[name] = Parameter(value)
+    
+    def add(self, value: Any, sql_type: Optional[str] = None) -> 'Parameters':
+        """Add a positional parameter and return self for chaining.
+        
+        Args:
+            value: Parameter value
+            sql_type: Optional SQL type hint
+            
+        Returns:
+            Self for method chaining
+        """
+        self._positional.append(Parameter(value, sql_type))
+        return self
+    
+    def set(self, name: str, value: Any, sql_type: Optional[str] = None) -> 'Parameters':
+        """Set a named parameter and return self for chaining.
+        
+        Args:
+            name: Parameter name
+            value: Parameter value
+            sql_type: Optional SQL type hint
+            
+        Returns:
+            Self for method chaining
+        """
+        self._named[name] = Parameter(value, sql_type)
+        return self
+    
+    @property
+    def positional(self) -> List[Parameter]:
+        """Get positional parameters."""
+        return self._positional.copy()
+    
+    @property
+    def named(self) -> Dict[str, Parameter]:
+        """Get named parameters."""
+        return self._named.copy()
+    
+    def to_list(self) -> List[Any]:
+        """Convert to simple list of values for compatibility."""
+        return [param.value for param in self._positional]
+    
+    def __len__(self) -> int:
+        """Get total number of parameters."""
+        return len(self._positional) + len(self._named)
+    
+    def __repr__(self) -> str:
+        parts = []
+        if self._positional:
+            parts.append(f"positional={len(self._positional)}")
+        if self._named:
+            parts.append(f"named={len(self._named)}")
+        return f"Parameters({', '.join(parts)})"
+
+
 class Connection:
     """Async connection to Microsoft SQL Server database with enhanced type support."""
     
     def __init__(
         self, 
-        connection_string: str, 
+        connection_string: Optional[str] = None, 
         pool_config: Optional[PoolConfig] = None,
-        auto_connect: bool = False
+        auto_connect: bool = False,
+        server: Optional[str] = None,
+        database: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        trusted_connection: Optional[bool] = None
     ):
         """Initialize a new async connection.
         
         Args:
-            connection_string: SQL Server connection string
+            connection_string: SQL Server connection string (if not using individual parameters)
             pool_config: Optional connection pool configuration
             auto_connect: If True, automatically connect on creation (not supported for async)
+            server: Database server hostname or IP address
+            database: Database name to connect to
+            username: Username for SQL Server authentication
+            password: Password for SQL Server authentication
+            trusted_connection: Use Windows integrated authentication (default: True if no username provided)
+            
+        Note:
+            Either connection_string OR server must be provided.
+            If using individual parameters, server is required.
+            If username is provided, password should also be provided for SQL authentication.
+            If username is not provided, Windows integrated authentication will be used.
         """
         py_pool_config = pool_config._config if pool_config else None
-        self._conn = _core.connect(connection_string, py_pool_config)
+        self._conn = _core.Connection(
+            connection_string, 
+            py_pool_config, 
+            server, 
+            database, 
+            username, 
+            password, 
+            trusted_connection
+        )
         self._connected = False
         if auto_connect:
             # Note: Can't await in __init__, so auto_connect won't work for async
@@ -304,38 +359,44 @@ class Connection:
         """Check if connected to the database."""
         return await self._conn.is_connected()
     
-    async def execute(self, sql: str, parameters: Optional[List[Any]] = None) -> ExecutionResult:
+    async def execute(self, sql: str, parameters: Optional[Union[List[Any], Parameters]] = None) -> ExecutionResult:
         """Execute a query asynchronously and return enhanced results.
         
         Args:
             sql: SQL query to execute
-            parameters: Optional list of parameter values for parameterized queries
+            parameters: Optional parameters - can be:
+                       - List of values for @P1 placeholders
+                       - Parameters object for more control
             
         Returns:
             ExecutionResult object with rows or affected row count
+            
+        Examples:
+            # Simple list of parameters
+            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", [18, "John"])
+            
+            # Using Parameters object
+            params = Parameters(18, "John")
+            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", params)
+            
+            # Using Parameters with type hints
+            params = Parameters().add(18, "INT").add("John", "VARCHAR")
+            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", params)
         """
         if not self._connected:
             raise RuntimeError("Not connected to database. Call await conn.connect() first.")
         
         if parameters is None:
             py_result = await self._conn.execute(sql)
+        elif isinstance(parameters, Parameters):
+            # Convert Parameters object to list of values
+            param_values = parameters.to_list()
+            py_result = await self._conn.execute_with_python_params(sql, param_values)
         else:
+            # Assume it's a list
             py_result = await self._conn.execute_with_python_params(sql, parameters)
         
         return ExecutionResult(py_result)
-    
-    async def execute_dict(self, sql: str, parameters: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
-        """Execute a query asynchronously and return results as dictionaries.
-        
-        Args:
-            sql: SQL query to execute
-            parameters: Optional list of parameter values for parameterized queries
-            
-        Returns:
-            List of rows as dictionaries
-        """
-        result = await self.execute(sql, parameters)
-        return [row.to_dict() for row in result.rows()]
     
     async def __aenter__(self):
         """Async context manager entry."""
@@ -347,71 +408,6 @@ class Connection:
         await self.disconnect()
 
 
-# Simplified API - create async connections
-def connect(
-    connection_string: str, 
-    pool_config: Optional[PoolConfig] = None
-) -> Connection:
-    """Create async connection to MSSQL database.
-    
-    Note: You must await conn.connect() or use async with conn: before using.
-    
-    Args:
-        connection_string: SQL Server connection string
-        pool_config: Optional connection pool configuration
-        
-    Returns:
-        Connection instance (not yet connected)
-        
-    Example:
-        async with mssql.connect(conn_string) as conn:
-            result = await conn.execute("SELECT * FROM users")
-            for row in result.rows:
-                print(row['name'])
-                
-        # Or create directly:
-        async with mssql.Connection(conn_string) as conn:
-            result = await conn.execute("SELECT * FROM users")
-    """
-    return Connection(connection_string, pool_config, auto_connect=False)
-
-# Convenience functions for one-off queries
-async def execute_async(
-    connection_string: str, 
-    sql: str,
-    pool_config: Optional[PoolConfig] = None
-) -> ExecutionResult:
-    """Execute a SQL query asynchronously with a connection string.
-    
-    Args:
-        connection_string: SQL Server connection string
-        sql: SQL query to execute
-        pool_config: Optional connection pool configuration
-        
-    Returns:
-        ExecutionResult object with rows or affected row count
-    """
-    async with connect(connection_string, pool_config) as conn:
-        return await conn.execute(sql)
-
-async def execute_dict_async(
-    connection_string: str, 
-    sql: str,
-    pool_config: Optional[PoolConfig] = None
-) -> List[Dict[str, Any]]:
-    """Execute a query asynchronously and return results as dictionaries.
-    
-    Args:
-        connection_string: SQL Server connection string
-        sql: SQL query to execute
-        pool_config: Optional connection pool configuration
-        
-    Returns:
-        List of rows as dictionaries
-    """
-    async with connect(connection_string, pool_config) as conn:
-        return await conn.execute_dict(sql)
-
 def version() -> str:
     """Get the version of the mssql-python-rust library.
     
@@ -422,6 +418,7 @@ def version() -> str:
 
 # Re-export core types for direct access if needed
 RustConnection = _core.Connection  # Rename to avoid conflict with our main connect() function
+RustQuery = _core.Query  # Rename to avoid conflict with our wrapper
 PyRow = _core.Row
 PyValue = _core.Value
 PyExecutionResult = _core.ExecutionResult
@@ -430,16 +427,15 @@ PyQuery = _core.Query
 # Export main API
 __all__ = [
     'Connection',        # Main connection class
-    'Query',            # Parameterized query class
+    'Parameter',        # Individual parameter with optional type
+    'Parameters',       # Parameter container for execute()
     'Row', 
     'ExecutionResult',
     'PoolConfig',
-    'connect',          # Convenience function
-    'execute_async',
-    'execute_dict_async',
     'version',          # Version function
     # Core types for advanced usage
     'RustConnection',
+    'RustQuery',
     'PyRow',
     'PyValue', 
     'PyExecutionResult',

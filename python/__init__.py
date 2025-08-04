@@ -24,10 +24,6 @@ Basic Usage:
 One-off Queries:
     >>> result = await mssql.execute_async(conn_string, "SELECT COUNT(*) FROM users")
     >>> count = result.rows[0][0]
-    
-    >>> rows_dict = await mssql.execute_dict_async(conn_string, "SELECT name, age FROM users")
-    >>> for user in rows_dict:
-    ...     print(f"{user['name']} is {user['age']} years old")
 """
 
 # Import core Rust types
@@ -70,13 +66,10 @@ except ImportError:
 # Import high-level Python API
 from .mssql import (
     Connection,
+    Query,
     Row,
     ExecutionResult,
     PoolConfig,
-    connect,
-    execute_async,
-    execute_scalar_async,
-    execute_dict_async,
 )
 
 __version__ = version()
@@ -85,17 +78,13 @@ __version__ = version()
 __all__ = [
     # High-level async API (recommended)
     'Connection',
-    'connect',
-    'execute_async', 
-    'execute_scalar_async',
-    'execute_dict_async',
+    'Query',
     'Row',
     'ExecutionResult',
     'PoolConfig',
     
     # Lower-level API for advanced usage
     'PyConnection',
-    'Query',
     'PyRow',
     'PyValue', 
     'PyExecutionResult',

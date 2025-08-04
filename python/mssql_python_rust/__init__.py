@@ -21,7 +21,6 @@ try:
     Row = _rust_core.Row
     Value = _rust_core.Value
     PoolConfig = _rust_core.PoolConfig
-    connect = _rust_core.connect
     version = _rust_core.version
 except ImportError:
     # Fallback for development builds
@@ -32,7 +31,6 @@ except ImportError:
         Row = _rust_core.Row
         Value = _rust_core.Value
         PoolConfig = _rust_core.PoolConfig
-        connect = _rust_core.connect
         version = _rust_core.version
     except ImportError:
         # Direct import from the built module
@@ -43,7 +41,6 @@ except ImportError:
         Row = mssql_python_rust.Row
         Value = mssql_python_rust.Value
         PoolConfig = mssql_python_rust.PoolConfig
-        connect = mssql_python_rust.connect
         version = mssql_python_rust.version
 
 __version__ = version()
@@ -55,9 +52,5 @@ __all__ = [
     'Row',
     'Value',
     'PoolConfig',
-    # Async API only
-    'connect_async',
-    'execute_async',
-    'execute_scalar_async',
     'version',
 ]

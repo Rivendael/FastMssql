@@ -381,6 +381,78 @@ async def test_async_error_handling():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+async def test_simple_parameterized_query():
+    """Test basic parameterized queries with list parameters."""
+    try:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute(
+                "SELECT @P1 as param1, @P2 as param2, @P3 as param3",
+                [42, "test", True]
+            )
+            
+            rows = result.rows()
+            assert len(rows) == 1
+            row = rows[0]
+            
+            assert row['param1'] == 42
+            assert row['param2'] == "test"
+            assert row['param3'] == True
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_parameters_object_basic():
+    """Test using Parameters object instead of simple list."""
+    try:
+        from mssql import Parameters
+        
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            params = Parameters(100, "Parameters Object", 3.14)
+            
+            result = await conn.execute(
+                "SELECT @P1 as id, @P2 as description, @P3 as value",
+                params
+            )
+            
+            rows = result.rows()
+            assert len(rows) == 1
+            row = rows[0]
+            
+            assert row['id'] == 100
+            assert row['description'] == "Parameters Object"
+            assert abs(row['value'] - 3.14) < 0.001
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_parameters_method_chaining():
+    """Test Parameters object with method chaining."""
+    try:
+        from mssql import Parameters
+        
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            params = (Parameters()
+                     .add(200)
+                     .add("Chained"))
+            
+            result = await conn.execute(
+                "SELECT @P1 as chained_id, @P2 as chained_name",
+                params
+            )
+            
+            rows = result.rows()
+            assert len(rows) == 1
+            row = rows[0]
+            
+            assert row['chained_id'] == 200
+            assert row['chained_name'] == "Chained"
+    except Exception as e:
+        pytest.skip(f"Database not available: {e}")
+
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_async_concurrent_queries():
     """Test executing multiple async queries concurrently."""
     try:

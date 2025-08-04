@@ -16,14 +16,14 @@ async def example_usage():
     pool_config = mssql.PoolConfig(
         max_size=20,
         min_idle=5,
-        max_lifetime=3600,  # 1 hour
-        idle_timeout=300,   # 5 minutes
-        connection_timeout=30
+        max_lifetime_secs=3600,  # 1 hour
+        idle_timeout_secs=300,   # 5 minutes
+        connection_timeout_secs=30
     )
     
-    # Method 1: Using connection manager function (recommended)
-    async with mssql.connect(connection_string, pool_config) as conn:
-        print("=== Using connect() function ===")
+    # Method 1: Using Connection class with connection string (recommended)
+    async with mssql.Connection(connection_string, pool_config) as conn:
+        print("=== Using Connection() class with connection string ===")
         
         # Execute DDL
         await conn.execute("CREATE TABLE IF NOT EXISTS users (id INT, name VARCHAR(50), age INT)")
@@ -37,61 +37,75 @@ async def example_usage():
         print(f"Found {len(select_result)} rows:")
         
         # Iterate over typed Row objects
-        for row in select_result.rows:
+        for row in select_result.rows():
             # IDE will provide autocompletion for these methods
             print(f"Row as dict: {row.to_dict()}")
             print(f"Row as tuple: {row.to_tuple()}")
             print(f"Name: {row['name']}, Age: {row['age']}")
         
-        # Execute scalar query
-        count = await conn.execute_scalar("SELECT COUNT(*) FROM users")
+        # Execute scalar query (get first value from first row)
+        count_result = await conn.execute("SELECT COUNT(*) FROM users")
+        count = count_result.rows()[0][0] if count_result.rows() else 0
         print(f"Total users: {count}")
-        
-        # Get results as dictionaries (convenience method)
-        users_dict = await conn.execute_dict("SELECT name, age FROM users ORDER BY age")
-        for user in users_dict:
-            print(f"{user['name']} is {user['age']} years old")
     
-    # Method 2: Using Connection class directly
-    async with mssql.Connection(connection_string, pool_config) as conn:
-        print("\n=== Using Connection() class directly ===")
+    # Method 2: Using Connection class with individual connection parameters (new feature!)
+    async with mssql.Connection(
+        server="localhost",
+        database="TestDB", 
+        trusted_connection=True,
+        pool_config=pool_config
+    ) as conn:
+        print("\n=== Using Connection() class with individual connection parameters ===")
         
-        # Same API, just different instantiation
+        # Same API, just different connection method
         result = await conn.execute("SELECT COUNT(*) FROM users")
-        print(f"User count: {result.rows[0][0]}")
+        count = result.rows()[0][0] if result.rows() else 0
+        print(f"User count: {count}")
+    
+    # Method 3: Using Connection class directly (alternative syntax)
+    async with mssql.Connection(connection_string=connection_string, pool_config=pool_config) as conn:
+        print("\n=== Using Connection() class with keyword arguments ===")
         
-        # Execute scalar query
-        avg_age = await conn.execute_scalar("SELECT AVG(CAST(age AS FLOAT)) FROM users")
+        # Same API, just different instantiation style
+        result = await conn.execute("SELECT COUNT(*) FROM users")
+        count = result.rows()[0][0] if result.rows() else 0
+        print(f"User count: {count}")
+        
+        # Execute scalar query (get average age)
+        avg_result = await conn.execute("SELECT AVG(CAST(age AS FLOAT)) FROM users")
+        avg_age = avg_result.rows()[0][0] if avg_result.rows() else 0
         print(f"Average age: {avg_age}")
     
-    # Method 3: One-off queries (for simple operations)
-    print("\n=== Using convenience functions ===")
+    # Method 4: Alternative patterns showing different ways to use Connection
+    print("\n=== Additional Connection patterns ===")
     
-    # Execute with automatic connection management
-    result = await mssql.execute_async(
-        connection_string, 
-        "SELECT COUNT(*) FROM users",
-        pool_config
-    )
-    print(f"User count: {result.rows[0][0]}")
+    # Pattern A: Create connection and manage manually (not recommended for production)
+    conn = mssql.Connection(connection_string, pool_config)
+    await conn.connect()
+    try:
+        result = await conn.execute("SELECT COUNT(*) FROM users")
+        count = result.rows()[0][0] if result.rows() else 0
+        print(f"Manual connection - User count: {count}")
+    finally:
+        await conn.disconnect()
     
-    # Get scalar value directly
-    avg_age = await mssql.execute_scalar_async(
-        connection_string,
-        "SELECT AVG(CAST(age AS FLOAT)) FROM users",
-        pool_config
-    )
-    print(f"Average age: {avg_age}")
+    # Pattern B: Using Connection with individual parameters and explicit keywords
+    async with mssql.Connection(
+        connection_string=None,  # Explicitly don't use connection string
+        server="localhost",
+        database="TestDB",
+        trusted_connection=True,
+        pool_config=pool_config
+    ) as conn:
+        result = await conn.execute("SELECT AVG(CAST(age AS FLOAT)) FROM users")
+        avg_age = result.rows()[0][0] if result.rows() else 0
+        print(f"Individual params - Average age: {avg_age}")
     
-    # Get results as dictionaries
-    users = await mssql.execute_dict_async(
-        connection_string,
-        "SELECT * FROM users ORDER BY name",
-        pool_config
-    )
-    print("All users:")
-    for user in users:
-        print(f"  {user}")
+    async with mssql.Connection(connection_string, pool_config) as conn:
+        users = await conn.execute("SELECT * FROM users ORDER BY name")
+        print("All users (as dictionaries):")
+        for user in users.rows():
+            print(f"  {user}")
 
 async def compare_apis():
     """Compare the enhanced API vs direct Rust API."""
@@ -99,11 +113,11 @@ async def compare_apis():
     connection_string = "Server=localhost;Database=TestDB;Integrated Security=true"
     
     print("=== Enhanced Python API (with type hints and wrappers) ===")
-    async with mssql.connect(connection_string) as conn:
+    async with mssql.Connection(connection_string) as conn:
         result = await conn.execute("SELECT 'Hello' as message, 42 as number")
         
         # Enhanced API provides rich type information
-        for row in result.rows:
+        for row in result.rows():
             # IDE autocomplete works here
             data = row.to_dict()
             print(f"Message: {data['message']}, Number: {data['number']}")
@@ -114,12 +128,11 @@ async def compare_apis():
     
     print("\n=== Direct Rust API (minimal wrapping) ===")
     # You can still access the lower-level API when needed
-    async with mssql.connect(connection_string) as conn:
-        # Convert to proper async connection for consistency
+    async with mssql.Connection(connection_string) as conn:
         result = await conn.execute("SELECT 'Hello' as message, 42 as number")
         
         # Enhanced API provides better type information
-        for row in result.rows:
+        for row in result.rows():
             data = row.to_dict()
             print(f"Message: {data['message']}, Number: {data['number']}")
 

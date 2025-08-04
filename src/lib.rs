@@ -32,31 +32,9 @@ fn mssql_python_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPoolConfig>()?;
     
     // Add module-level functions
-    m.add_function(wrap_pyfunction!(connect, m)?)?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
     
     Ok(())
-}
-
-/// Connect to a Microsoft SQL Server database
-/// 
-/// Args:
-///     connection_string (str): The connection string for the database
-///     pool_config (PoolConfig, optional): Configuration for the connection pool
-///     
-/// Returns:
-///     PyConnection: A connection object for executing queries
-///     
-/// Example:
-///     >>> import mssql_python_rust
-///     >>> conn = mssql_python_rust.connect("Server=localhost;Database=test;Integrated Security=true")
-///     >>> # Or with custom pool config:
-///     >>> pool_config = mssql_python_rust.PoolConfig(max_size=20, min_idle=5)
-///     >>> conn = mssql_python_rust.connect("Server=localhost;Database=test;Integrated Security=true", pool_config)
-#[pyfunction]
-#[pyo3(signature = (connection_string, pool_config = None))]
-fn connect(connection_string: String, pool_config: Option<PyPoolConfig>) -> PyResult<PyConnection> {
-    PyConnection::new(connection_string, pool_config)
 }
 
 /// Get the version of the mssql-python-rust library
