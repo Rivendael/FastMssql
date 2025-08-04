@@ -1,5 +1,5 @@
 
-# mssql-python-rust
+# Fastmssql
 
 A high-performance Python library for Microsoft SQL Server, built with Rust using the [Tiberius](https://github.com/prisma/tiberius) driver, [PyO3](https://github.com/PyO3/pyo3), and [bb8](https://github.com/djc/bb8) connection pooling.
 
@@ -120,7 +120,7 @@ async def main():
 asyncio.run(main())
 ```
 
-#### 2. Individual Parameters (New!)
+#### 2. Individual Parameters
 
 ```python
 import asyncio
@@ -696,31 +696,41 @@ async def olap_operations():
 
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
 
+
 ## License
 
 This project is licensed under the PolyForm Noncommercial License 1.0.0. See the LICENSE file for details.
 
 ## Third-Party Attributions
 
-This project includes and depends on third-party libraries licensed under the Apache License 2.0:
+This project includes and depends on third-party libraries licensed under the Apache License 2.0 and MIT License, as well as other open source licenses.
+
+**Note:** Additional third-party libraries and their license information are listed in `licenses/NOTICE.txt`.
 
 - [Tiberius](https://github.com/prisma/tiberius) (Apache License 2.0)
 - [PyO3](https://github.com/PyO3/pyo3) (Apache License 2.0)
 - [pyo3-asyncio](https://github.com/PyO3/pyo3-asyncio) (Apache License 2.0)
-
-Development and testing tools:
-
+- [bb8](https://github.com/djc/bb8) (MIT or Apache License 2.0)
+- [bb8-tiberius](https://github.com/prisma/tiberius) (Apache License 2.0)
+- [tokio](https://github.com/tokio-rs/tokio) (MIT or Apache License 2.0)
+- [tokio-util](https://github.com/tokio-rs/tokio) (MIT or Apache License 2.0)
+- [futures](https://github.com/rust-lang/futures-rs) (MIT or Apache License 2.0)
+- [serde](https://github.com/serde-rs/serde) (MIT or Apache License 2.0)
+- [serde_json](https://github.com/serde-rs/json) (MIT or Apache License 2.0)
+- [anyhow](https://github.com/dtolnay/anyhow) (MIT or Apache License 2.0)
+- [chrono](https://github.com/chronotope/chrono) (MIT or Apache License 2.0)
+- [uuid](https://github.com/uuid-rs/uuid) (MIT or Apache License 2.0)
+- [tempfile](https://github.com/Stebalien/tempfile) (MIT or Apache License 2.0)
 - [pytest](https://github.com/pytest-dev/pytest) (MIT License)
 - [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) (MIT License)
 - [black](https://github.com/psf/black) (MIT License)
 - [ruff](https://github.com/astral-sh/ruff) (MIT License)
-
-Standard library:
-
+- [maturin](https://github.com/PyO3/maturin) (Apache License 2.0 or MIT License)
 - [Python](https://www.python.org/) and [asyncio](https://docs.python.org/3/library/asyncio.html) (Python Software Foundation License)
 
 See the `licenses/NOTICE.txt` file for full attribution and copyright information.
 The full text of the Apache License 2.0 is provided in the `licenses/APACHE_LICENSE_2.0.txt` file.
+The full text of the MIT License is provided in the `licenses/MIT_LICENSE.txt` file.
 
 ## Acknowledgments
 
