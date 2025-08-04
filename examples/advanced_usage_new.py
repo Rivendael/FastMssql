@@ -15,9 +15,9 @@ from typing import List, Dict, Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from fastmssql_core import Connection
+    from fastmssql import Connection
 except ImportError as e:
-    print(f"Error importing mssql_python_rust: {e}")
+    print(f"Error importing fastmssql: {e}")
     print("Make sure you've built the extension with 'maturin develop'")
     sys.exit(1)
 
