@@ -31,8 +31,6 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/Rivendael/pymssql-rs"
 
-dependencies = []
-
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
