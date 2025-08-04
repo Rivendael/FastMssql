@@ -8,15 +8,15 @@ Supports asynchronous operations only.
 from typing import List, Dict, Any, Optional, Union, Iterable
 
 try:
-    # Try to import the compiled Rust module directly
-    import fastmssql_core as _core
+    # Try to import the compiled Rust module from the package
+    from . import fastmssql_core as _core
 except ImportError:
-    # Fallback for development
+    # Fallback for development - try absolute import
     try:
         import fastmssql_core as _core
     except ImportError as e:
         import sys
-        print(f"ERROR: mssql_python_rust module not found: {e}")
+        print(f"ERROR: fastmssql_core module not found: {e}")
         print("Solution: Build the extension with 'maturin develop' or 'maturin develop --release'")
         print("Make sure you're in the project root directory and have Rust/Maturin installed.")
         sys.exit(1)
@@ -149,7 +149,7 @@ class PoolConfig:
             idle_timeout_secs: How long a connection can be idle before being closed (seconds)
             connection_timeout_secs: Timeout for establishing new connections (seconds)
         """
-        self._config = _core.PyPoolConfig(
+        self._config = _core.PoolConfig(
             max_size=max_size,
             min_idle=min_idle,
             max_lifetime_secs=max_lifetime_secs,
@@ -186,21 +186,21 @@ class PoolConfig:
     def high_throughput() -> 'PoolConfig':
         """Create configuration for high-throughput scenarios."""
         config = PoolConfig.__new__(PoolConfig)
-        config._config = _core.PyPoolConfig.high_throughput()
+        config._config = _core.PoolConfig.high_throughput()
         return config
     
     @staticmethod
     def low_resource() -> 'PoolConfig':
         """Create configuration for low-resource scenarios."""
         config = PoolConfig.__new__(PoolConfig)
-        config._config = _core.PyPoolConfig.low_resource()
+        config._config = _core.PoolConfig.low_resource()
         return config
     
     @staticmethod 
     def development() -> 'PoolConfig':
         """Create configuration for development scenarios."""
         config = PoolConfig.__new__(PoolConfig)
-        config._config = _core.PyPoolConfig.development()
+        config._config = _core.PoolConfig.development()
         return config
 
 
@@ -459,7 +459,7 @@ class SslConfig:
             "Off": _core.EncryptionLevel.OFF
         }
         
-        self._config = _core.PySslConfig(
+        self._config = _core.SslConfig(
             encryption_level=encryption_level_map[encryption_level],
             trust_server_certificate=trust_server_certificate,
             ca_certificate_path=ca_certificate_path,
@@ -474,7 +474,7 @@ class SslConfig:
         Warning: This configuration is insecure and should only be used in development.
         """
         config = SslConfig.__new__(SslConfig)
-        config._config = _core.PySslConfig.development()
+        config._config = _core.SslConfig.development()
         return config
     
     @staticmethod
@@ -485,21 +485,21 @@ class SslConfig:
             ca_cert_path: Path to CA certificate file (.pem, .crt, or .der)
         """
         config = SslConfig.__new__(SslConfig)
-        config._config = _core.PySslConfig.with_ca_certificate(ca_cert_path)
+        config._config = _core.SslConfig.with_ca_certificate(ca_cert_path)
         return config
     
     @staticmethod
     def login_only() -> 'SslConfig':
         """Create SSL config that only encrypts login (legacy mode)."""
         config = SslConfig.__new__(SslConfig)
-        config._config = _core.PySslConfig.login_only()
+        config._config = _core.SslConfig.login_only()
         return config
     
     @staticmethod
     def disabled() -> 'SslConfig':
         """Create SSL config with no encryption (not recommended)."""
         config = SslConfig.__new__(SslConfig)
-        config._config = _core.PySslConfig.disabled()
+        config._config = _core.SslConfig.disabled()
         return config
     
     @property
@@ -567,7 +567,7 @@ class Connection:
         """
         py_pool_config = pool_config._config if pool_config else None
         py_ssl_config = ssl_config._config if ssl_config else None
-        self._conn = _core.PyConnection(
+        self._conn = _core.Connection(
             connection_string, 
             py_pool_config, 
             py_ssl_config,
@@ -679,12 +679,12 @@ def version() -> str:
     return _core.version()
 
 # Re-export core types for direct access if needed
-RustConnection = _core.PyConnection  # Rename to avoid conflict with our main connect() function
-RustQuery = _core.PyQuery  # Rename to avoid conflict with our wrapper
-PyRow = _core.PyRow
-PyValue = _core.PyValue
-PyExecutionResult = _core.PyExecutionResult
-PyQuery = _core.PyQuery
+RustConnection = _core.Connection  # Rename to avoid conflict with our main connect() function
+RustQuery = _core.Query  # Rename to avoid conflict with our wrapper
+PyRow = _core.Row
+PyValue = _core.Value
+PyExecutionResult = _core.ExecutionResult
+PyQuery = _core.Query
 
 # Export main API
 __all__ = [

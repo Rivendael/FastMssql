@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
 authors = [
-    { name = "Your Name", email = "your.email@example.com" },
+    { name = "Rivendael", email = "riverb514@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -41,7 +41,7 @@ dev = [
 
 [tool.maturin]
 python-source = "python"
-module-name = "fastmssql_core"
+module-name = "fastmssql.fastmssql_core"
 
 [tool.pytest.ini_options]
 minversion = "6.0"

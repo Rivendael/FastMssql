@@ -1,0 +1,55 @@
+name: Build and publish wheels
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-wheels:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Install maturin
+      run: pip install maturin
+      
+    - name: Build wheels
+      run: maturin build --release --out dist
+      
+    - name: Upload wheels
+      uses: actions/upload-artifact@v3
+      with:
+        name: wheels
+        path: dist
+
+  publish:
+    needs: [build-wheels]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download wheels
+      uses: actions/download-artifact@v3
+      with:
+        name: wheels
+        path: dist
+        
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        packages_dir: dist/
