@@ -152,25 +152,6 @@ async def main():
 asyncio.run(main())
 ```
 
-#### 3. Convenience Functions
-
-```python
-import asyncio
-import mssql_python_rust as mssql
-
-async def main():
-    # Execute queries without manual connection management
-    
-    # Using connection string
-    result = await mssql.execute(
-        "SELECT @@SERVERNAME as server",
-        connection_string="Server=localhost;Database=master;User Id=myuser;Password=mypass"
-    )
-
-
-asyncio.run(main())
-```
-
 ### Connection Pool Configuration
 
 Configure the connection pool for your specific needs:
