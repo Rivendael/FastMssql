@@ -14,12 +14,14 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from fastmssql_core import Connection
+    from fastmssql import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
-TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
+TEST_CONNECTION_STRING = os.getenv(
+    "FASTMSSQL_TEST_CONNECTION_STRING",
+)
 
 @pytest_asyncio.fixture
 async def stored_procedures():
