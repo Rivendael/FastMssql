@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 try:
     from fastmssql import Connection, Parameter, Parameters
 except ImportError:
-    print("mssql_python_rust not available - run 'maturin develop' first")
+    print("fastmssql not available - run 'maturin develop' first")
     sys.exit(1)
 
 # Connection string - modify as needed

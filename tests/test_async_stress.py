@@ -61,7 +61,7 @@ class MemoryTracker:
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_high_volume_concurrent_connections():
     """Stress test with high volume of concurrent connections."""
     try:
@@ -197,7 +197,7 @@ async def test_high_volume_concurrent_connections():
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_memory_leak_detection():
     """Test for memory leaks in async operations."""
     try:
@@ -291,7 +291,7 @@ async def test_memory_leak_detection():
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_connection_exhaustion_recovery():
     """Test behavior when approaching connection limits and recovery."""
     try:
@@ -377,7 +377,7 @@ async def test_connection_exhaustion_recovery():
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_rapid_connect_disconnect_stress():
     """Stress test rapid connection creation and destruction."""
     try:
@@ -507,7 +507,7 @@ async def test_rapid_connect_disconnect_stress():
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_large_result_set_handling():
     """Test handling of large result sets in async operations."""
     try:

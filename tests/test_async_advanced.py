@@ -33,7 +33,7 @@ except ImportError:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_truly_non_blocking():
     """Test that async operations are truly non-blocking."""
     try:
@@ -82,7 +82,7 @@ async def test_async_truly_non_blocking():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_connection_pool_race_conditions():
     """Test for race conditions in connection pooling/management."""
     try:
@@ -156,7 +156,7 @@ async def test_connection_pool_race_conditions():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_concurrent_transaction_handling():
     """Test concurrent transactions for proper isolation and deadlock prevention."""
     try:
@@ -233,7 +233,7 @@ async def test_concurrent_transaction_handling():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_connection_limit_behavior():
     """Test behavior when approaching connection limits."""
     try:
@@ -287,7 +287,7 @@ async def test_async_connection_limit_behavior():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_error_propagation_and_cleanup():
     """Test that errors in async operations are properly propagated and resources cleaned up."""
     try:
@@ -349,7 +349,7 @@ async def test_async_error_propagation_and_cleanup():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_query_cancellation():
     """Test that long-running async queries can be properly cancelled."""
     try:
@@ -388,7 +388,7 @@ async def test_async_query_cancellation():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_connection_state_consistency():
     """Test that connection state remains consistent under concurrent access."""
     try:
@@ -453,7 +453,7 @@ async def test_async_connection_state_consistency():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_connection_pool_statistics_and_configuration():
     """Test connection pool statistics and custom configuration."""
     try:
@@ -521,7 +521,7 @@ async def test_connection_pool_statistics_and_configuration():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_connection_pool_reuse_efficiency():
     """Test that connection pool efficiently reuses connections."""
     try:
