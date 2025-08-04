@@ -32,17 +32,17 @@ class AsyncMSSQLConnection:
     
     async def connect(self) -> None:
         """Connect to the database asynchronously."""
-        await self._conn.connect_async()
+        await self._conn.connect()
         self._connected = True
     
     async def disconnect(self) -> None:
         """Disconnect from the database asynchronously."""
-        await self._conn.disconnect_async()
+        await self._conn.disconnect()
         self._connected = False
     
-    def is_connected(self) -> bool:
+    async def is_connected(self) -> bool:
         """Check if connected to the database."""
-        return self._conn.is_connected()
+        return await self._conn.is_connected()
     
     async def execute(self, sql: str) -> List[Dict[str, Any]]:
         """Execute a query asynchronously and return results as dictionaries.

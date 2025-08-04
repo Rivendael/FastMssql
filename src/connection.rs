@@ -1,13 +1,14 @@
-use pyo3::prelude::*;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use crate::types::{PyRow, PyExecutionResult, PyValue};
 use pyo3_asyncio::tokio::future_into_py;
+use crate::pool_config::PyPoolConfig;
+use bb8_tiberius::ConnectionManager;
+use tokio::sync::Mutex;
+use pyo3::prelude::*;
+use pyo3::types::PyList;
 use tiberius::Config;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use bb8::Pool;
-use bb8_tiberius::ConnectionManager;
-use crate::types::PyRow;
-use crate::pool_config::PyPoolConfig;
 
 type ConnectionPool = Pool<ConnectionManager>;
 
@@ -59,40 +60,28 @@ impl PyConnection {
         *pool_guard = None;
     }
 
-    /// Helper function to execute a query and return results
+    /// Helper function to execute a query and automatically determine return type
     /// 
-    /// Executes a SELECT query and returns the results as PyRow objects
-    async fn execute_query_internal(
+    /// Executes any SQL statement and returns appropriate results:
+    /// - For SELECT queries: Returns rows as PyRow objects
+    /// - For INSERT/UPDATE/DELETE/DDL: Returns affected row count
+    async fn execute_internal(
         pool: Arc<Mutex<Option<ConnectionPool>>>,
         query: String,
-    ) -> PyResult<Vec<PyRow>> {
-        let pool_guard = pool.lock().await;
-        let pool_ref = pool_guard.as_ref()
-            .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
-        
-        let mut conn = pool_ref.get()
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
-        
-        let stream = conn.query(&query, &[])
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-        
-        let rows = stream.into_first_result()
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-        
-        Self::convert_rows_to_py(rows)
+    ) -> PyResult<PyExecutionResult> {
+        Self::execute_internal_with_params(pool, query, Vec::new()).await
     }
 
-    /// Helper function to execute a non-query command
+    /// Helper function to execute a parameterized query and automatically determine return type
     /// 
-    /// Executes INSERT, UPDATE, DELETE, or other non-query commands
-    /// Returns the number of affected rows
-    async fn execute_non_query_internal(
+    /// Executes any SQL statement with parameters and returns appropriate results:
+    /// - For SELECT queries: Returns rows as PyRow objects
+    /// - For INSERT/UPDATE/DELETE/DDL: Returns affected row count
+    async fn execute_internal_with_params(
         pool: Arc<Mutex<Option<ConnectionPool>>>,
         query: String,
-    ) -> PyResult<u64> {
+        parameters: Vec<PyValue>,
+    ) -> PyResult<PyExecutionResult> {
         let pool_guard = pool.lock().await;
         let pool_ref = pool_guard.as_ref()
             .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
@@ -101,13 +90,42 @@ impl PyConnection {
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
         
-        let result = conn.execute(&query, &[])
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        // Convert PyValue parameters to Tiberius parameter types
+        let mut sql_params = Vec::new();
+        for param in &parameters {
+            sql_params.push(param.to_sql()
+                .map_err(|e| PyRuntimeError::new_err(format!("Parameter conversion failed: {}", e)))?);
+        }
+        let tiberius_params: Vec<&dyn tiberius::ToSql> = sql_params.iter()
+            .map(|p| p.as_ref() as &dyn tiberius::ToSql)
+            .collect();
         
-        // Sum all affected rows from all statements in the batch
-        let total_affected: u64 = result.rows_affected().iter().sum();
-        Ok(total_affected)
+        // Improved SQL analysis to detect if the batch might return results
+        // This handles multi-statement batches, comments, and complex scenarios
+        let trimmed_query = query.trim();
+        let is_result_returning_query = Self::contains_result_returning_statements(&trimmed_query);
+        
+        if is_result_returning_query {
+            // Use query() for statements that return results
+            let stream = conn.query(&query, &tiberius_params)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+            
+            let rows = stream.into_first_result()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
+            
+            let py_rows = Self::convert_rows_to_py(rows)?;
+            Ok(PyExecutionResult::with_rows(py_rows))
+        } else {
+            // Use execute() for INSERT/UPDATE/DELETE/DDL to get affected row count
+            let result = conn.execute(&query, &tiberius_params)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+            
+            let total_affected: u64 = result.rows_affected().iter().sum();
+            Ok(PyExecutionResult::with_affected_count(total_affected))
+        }
     }
 
     /// Helper function to convert Tiberius rows to PyRow objects
@@ -119,6 +137,102 @@ impl PyConnection {
             py_rows.push(PyRow::from_tiberius_row(row)?);
         }
         Ok(py_rows)
+    }
+    
+    /// Determine if a SQL string contains result-returning statements
+    /// 
+    /// This function analyzes SQL text to detect if it contains statements that
+    /// would return a result set (SELECT, WITH, EXEC procedures that return results, etc.)
+    fn contains_result_returning_statements(sql: &str) -> bool {
+        // Remove SQL comments and normalize whitespace
+        let normalized_sql = Self::remove_sql_comments(sql);
+        let lowercased = normalized_sql.to_lowercase();
+        
+        // Split by semicolons to handle multi-statement batches
+        let statements: Vec<&str> = lowercased.split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        
+        // Check if any statement returns results
+        for statement in statements {
+            let trimmed = statement.trim();
+            
+            // Direct SELECT or WITH statements
+            if trimmed.starts_with("select") || trimmed.starts_with("with") {
+                return true;
+            }
+            
+            // EXEC calls that might return results (heuristic approach)
+            if trimmed.starts_with("exec") || trimmed.starts_with("execute") {
+                return true;
+            }
+            
+            // Handle complex multi-line statements that might contain SELECT
+            // Look for SELECT keyword anywhere in the statement (could be subquery, CTE, etc.)
+            if trimmed.contains("select") {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Remove SQL comments from a string
+    /// 
+    /// Removes both single-line (--) and multi-line (/* */) comments
+    fn remove_sql_comments(sql: &str) -> String {
+        let mut result = String::new();
+        let mut chars = sql.chars().peekable();
+        
+        while let Some(ch) = chars.next() {
+            match ch {
+                '-' if chars.peek() == Some(&'-') => {
+                    // Single-line comment, skip until newline
+                    chars.next(); // consume second '-'
+                    while let Some(c) = chars.next() {
+                        if c == '\n' || c == '\r' {
+                            result.push(c);
+                            break;
+                        }
+                    }
+                },
+                '/' if chars.peek() == Some(&'*') => {
+                    // Multi-line comment, skip until */
+                    chars.next(); // consume '*'
+                    let mut prev_char = ' ';
+                    while let Some(c) = chars.next() {
+                        if prev_char == '*' && c == '/' {
+                            break;
+                        }
+                        prev_char = c;
+                    }
+                    result.push(' '); // Replace comment with space
+                },
+                _ => result.push(ch),
+            }
+        }
+        
+        result
+    }
+}
+
+/// Convert a Python object to PyValue
+fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
+    if obj.is_none() {
+        Ok(PyValue::new_null())
+    } else if let Ok(b) = obj.extract::<bool>() {
+        Ok(PyValue::new_bool(b))
+    } else if let Ok(i) = obj.extract::<i64>() {
+        Ok(PyValue::new_int(i))
+    } else if let Ok(f) = obj.extract::<f64>() {
+        Ok(PyValue::new_float(f))
+    } else if let Ok(s) = obj.extract::<String>() {
+        Ok(PyValue::new_string(s))
+    } else if let Ok(b) = obj.extract::<Vec<u8>>() {
+        Ok(PyValue::new_bytes(b))
+    } else {
+        Err(PyValueError::new_err(format!("Unsupported parameter type: {}", obj.get_type().name()?)))
     }
 }
 
@@ -162,21 +276,79 @@ impl PyConnection {
         })
     }
     
-    /// Execute a query and return the results
+    /// Execute a SQL statement and return appropriate results
+    /// 
+    /// For SELECT queries: Returns rows as PyRow objects
+    /// For INSERT/UPDATE/DELETE/DDL: Returns affected row count
+    /// The result type can be checked using has_rows() and has_affected_count() methods
     pub fn execute<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            Self::execute_query_internal(pool, query).await
+            Self::execute_internal(pool, query).await
         })
     }
     
-    /// Execute a query without returning results (for INSERT, UPDATE, DELETE)
-    pub fn execute_non_query<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
+    /// Execute a query and return only the rows (backward compatibility)
+    /// 
+    /// This method is kept for backward compatibility. It executes the query
+    /// and returns only the rows if it's a SELECT query, or an empty list otherwise.
+    pub fn execute_query<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            Self::execute_non_query_internal(pool, query).await
+            let result = Self::execute_internal(pool, query).await?;
+            match result.rows() {
+                Some(rows) => Ok(rows),
+                None => Ok(Vec::<PyRow>::new()), // Return empty vec if no rows
+            }
+        })
+    }
+
+    /// Execute a SQL statement with parameters and return appropriate results
+    /// 
+    /// For SELECT queries: Returns rows as PyRow objects
+    /// For INSERT/UPDATE/DELETE/DDL: Returns affected row count
+    /// The result type can be checked using has_rows() and has_affected_count() methods
+    pub fn execute_with_params<'p>(&self, py: Python<'p>, query: String, parameters: Vec<PyValue>) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
+        
+        future_into_py(py, async move {
+            Self::execute_internal_with_params(pool, query, parameters).await
+        })
+    }
+
+    /// Execute a SQL statement with Python parameters and return appropriate results
+    /// 
+    /// This method accepts raw Python objects and converts them internally
+    pub fn execute_with_python_params<'p>(&self, py: Python<'p>, query: String, params: &PyList) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
+        
+        // Convert Python objects to PyValue objects
+        let mut parameters = Vec::new();
+        for param in params.iter() {
+            let py_value = python_to_pyvalue(param)?;
+            parameters.push(py_value);
+        }
+        
+        future_into_py(py, async move {
+            Self::execute_internal_with_params(pool, query, parameters).await
+        })
+    }
+    
+    /// Execute a query with parameters and return only the rows (backward compatibility)
+    /// 
+    /// This method executes the query with parameters and returns only the rows 
+    /// if it's a SELECT query, or an empty list otherwise.
+    pub fn execute_query_with_params<'p>(&self, py: Python<'p>, query: String, parameters: Vec<PyValue>) -> PyResult<&'p PyAny> {
+        let pool = self.pool.clone();
+        
+        future_into_py(py, async move {
+            let result = Self::execute_internal_with_params(pool, query, parameters).await?;
+            match result.rows() {
+                Some(rows) => Ok(rows),
+                None => Ok(Vec::<PyRow>::new()), // Return empty vec if no rows
+            }
         })
     }
     

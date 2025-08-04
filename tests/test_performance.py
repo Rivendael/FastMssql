@@ -10,28 +10,30 @@ import sys
 import os
 import asyncio
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add the parent directory to Python path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
-    from mssql_python_rust import Connection
+    from mssql import Connection
 except ImportError:
-    pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
 
 @pytest.mark.performance
 @pytest.mark.integration
-def test_large_result_set():
+@pytest.mark.asyncio
+async def test_large_result_set():
     """Test handling of large result sets."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            # Clean up any existing table first
+            await conn.execute("DROP TABLE IF EXISTS test_large_data")
+            
             # Create test table with large dataset
-            conn.execute_non_query("""
+            await conn.execute("""
                 CREATE TABLE test_large_data (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     data_text NVARCHAR(100),
@@ -41,81 +43,86 @@ def test_large_result_set():
                 )
             """)
             
-            # Insert large amount of data in batches
-            batch_size = 1000
-            total_records = 5000
-            
-            for batch_start in range(0, total_records, batch_size):
-                values = []
-                for i in range(batch_start, min(batch_start + batch_size, total_records)):
-                    values.append(f"('Record {i}', {i}, {i * 1.5})")
+            try:
+                # Insert large amount of data in batches
+                batch_size = 1000
+                total_records = 5000
                 
-                insert_sql = f"""
-                    INSERT INTO test_large_data (data_text, data_number, data_decimal) VALUES 
-                    {', '.join(values)}
-                """
-                conn.execute_non_query(insert_sql)
-            
-            # Test retrieving large result set
-            start_time = time.time()
-            rows = conn.execute("SELECT * FROM test_large_data ORDER BY id")
-            end_time = time.time()
-            
-            assert len(rows) == total_records
-            assert rows[0]['data_number'] == 0
-            assert rows[-1]['data_number'] == total_records - 1
-            
-            query_time = end_time - start_time
-            print(f"Query time for {total_records} records: {query_time:.3f} seconds")
-            assert query_time < 10.0  # Should complete within 10 seconds
-            
-            # Test filtering on large dataset
-            start_time = time.time()
-            filtered_rows = conn.execute("SELECT * FROM test_large_data WHERE data_number > 4000")
-            end_time = time.time()
-            
-            assert len(filtered_rows) < total_records
-            filter_time = end_time - start_time
-            print(f"Filter query time: {filter_time:.3f} seconds")
-            
-            # Clean up
-            conn.execute_non_query("DROP TABLE test_large_data")
+                for batch_start in range(0, total_records, batch_size):
+                    values = []
+                    for i in range(batch_start, min(batch_start + batch_size, total_records)):
+                        values.append(f"('Record {i}', {i}, {i * 1.5})")
+                    
+                    insert_sql = f"""
+                        INSERT INTO test_large_data (data_text, data_number, data_decimal) VALUES 
+                        {', '.join(values)}
+                    """
+                    await conn.execute(insert_sql)
+                
+                # Test retrieving large result set
+                start_time = time.time()
+                result = await conn.execute("SELECT * FROM test_large_data ORDER BY id")
+                end_time = time.time()
+                
+                rows = result.rows()
+                assert len(rows) == total_records
+                assert rows[0]['data_number'] == 0
+                assert rows[-1]['data_number'] == total_records - 1
+                
+                query_time = end_time - start_time
+                print(f"Query time for {total_records} records: {query_time:.3f} seconds")
+                assert query_time < 10.0  # Should complete within 10 seconds
+                
+                # Test filtering on large dataset
+                start_time = time.time()
+                filtered_result = await conn.execute("SELECT * FROM test_large_data WHERE data_number > 4000")
+                end_time = time.time()
+                
+                filtered_rows = filtered_result.rows()
+                assert len(filtered_rows) < total_records
+                filter_time = end_time - start_time
+                print(f"Filter query time: {filter_time:.3f} seconds")
+                
+            finally:
+                # Clean up - always execute this
+                await conn.execute("DROP TABLE IF EXISTS test_large_data")
             
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration
-def test_concurrent_connections():
-    """Test multiple concurrent database connections."""
+@pytest.mark.asyncio
+async def test_concurrent_connections():
+    """Test multiple concurrent database connections using async concurrency."""
     try:
-        def run_query(thread_id):
-            """Function to run in each thread."""
-            with Connection(TEST_CONNECTION_STRING) as conn:
-                # Each thread runs its own queries
-                rows = conn.execute(f"SELECT {thread_id} as thread_id, GETDATE() as execution_time")
+        async def run_query(connection_id):
+            """Function to run concurrent async queries."""
+            async with Connection(TEST_CONNECTION_STRING) as conn:
+                # Each connection runs its own queries
+                result = await conn.execute(f"SELECT {connection_id} as connection_id, GETDATE() as execution_time")
                 return {
-                    'thread_id': thread_id,
-                    'result': rows[0],
+                    'connection_id': connection_id,
+                    'result': result.rows()[0],
                     'success': True
                 }
         
-        # Test with multiple concurrent connections
-        num_threads = 10
+        # Test with multiple concurrent async connections
+        num_connections = 10
         start_time = time.time()
         
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            futures = [executor.submit(run_query, i) for i in range(num_threads)]
-            results = [future.result() for future in as_completed(futures)]
+        # Use asyncio.gather to run multiple async operations concurrently
+        tasks = [run_query(i) for i in range(num_connections)]
+        results = await asyncio.gather(*tasks)
         
         end_time = time.time()
         
-        assert len(results) == num_threads
+        assert len(results) == num_connections
         assert all(r['success'] for r in results)
         
-        # Check that all threads completed
-        thread_ids = [r['thread_id'] for r in results]
-        assert set(thread_ids) == set(range(num_threads))
+        # Check that all connections completed
+        connection_ids = [r['connection_id'] for r in results]
+        assert set(connection_ids) == set(range(num_connections))
         
         total_time = end_time - start_time
         print(f"Concurrent connections test time: {total_time:.3f} seconds")
@@ -126,13 +133,14 @@ def test_concurrent_connections():
 
 @pytest.mark.performance
 @pytest.mark.integration
-def test_bulk_insert_performance():
+@pytest.mark.asyncio
+async def test_bulk_insert_performance():
     """Test performance of bulk insert operations."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Clean up any existing table first
             try:
-                conn.execute_non_query("""
+                await conn.execute("""
                     IF OBJECT_ID('test_bulk_insert', 'U') IS NOT NULL 
                     DROP TABLE test_bulk_insert
                 """)
@@ -140,7 +148,7 @@ def test_bulk_insert_performance():
                 pass
             
             # Create test table
-            conn.execute_non_query("""
+            await conn.execute("""
                 CREATE TABLE test_bulk_insert (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     name NVARCHAR(100),
@@ -164,9 +172,9 @@ def test_bulk_insert_performance():
                     INSERT INTO test_bulk_insert (name, value, description) VALUES 
                     {', '.join(values)}
                 """
-                affected = conn.execute_non_query(insert_sql)
+                result = await conn.execute(insert_sql)
                 end_time = time.time()
-                
+                affected = result.affected_rows()
                 assert affected == batch_size
                 insert_time = end_time - start_time
                 records_per_second = batch_size / insert_time if insert_time > 0 else float('inf')
@@ -174,11 +182,11 @@ def test_bulk_insert_performance():
                 print(f"Batch size {batch_size}: {insert_time:.3f}s, {records_per_second:.0f} records/sec")
                 
                 # Clear table for next test
-                conn.execute_non_query("DELETE FROM test_bulk_insert")
-            
+                await conn.execute("DELETE FROM test_bulk_insert")
+
             # Clean up
             try:
-                conn.execute_non_query("""
+                await conn.execute("""
                     IF OBJECT_ID('test_bulk_insert', 'U') IS NOT NULL 
                     DROP TABLE test_bulk_insert
                 """)
@@ -190,12 +198,16 @@ def test_bulk_insert_performance():
 
 @pytest.mark.performance
 @pytest.mark.integration
-def test_repeated_query_performance():
+@pytest.mark.asyncio
+async def test_repeated_query_performance():
     """Test performance of repeated query execution."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            # Clean up any existing table first
+            await conn.execute("DROP TABLE IF EXISTS test_repeated_queries")
+            
             # Setup test data
-            conn.execute_non_query("""
+            await conn.execute("""
                 CREATE TABLE test_repeated_queries (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     category NVARCHAR(50),
@@ -203,34 +215,36 @@ def test_repeated_query_performance():
                 )
             """)
             
-            # Insert test data
-            conn.execute_non_query("""
-                INSERT INTO test_repeated_queries (category, value) VALUES 
-                ('A', 100.0), ('B', 200.0), ('C', 300.0), ('A', 150.0), ('B', 250.0)
-            """)
-            
-            # Test repeated execution of the same query
-            query = "SELECT category, SUM(value) as total FROM test_repeated_queries GROUP BY category"
-            num_iterations = 100
-            
-            start_time = time.time()
-            for i in range(num_iterations):
-                rows = conn.execute(query)
-                assert len(rows) == 3  # Should always return 3 categories
-            end_time = time.time()
-            
-            total_time = end_time - start_time
-            avg_time_per_query = total_time / num_iterations
-            queries_per_second = num_iterations / total_time if total_time > 0 else float('inf')
-            
-            print(f"Repeated queries: {total_time:.3f}s total, {avg_time_per_query:.4f}s avg, {queries_per_second:.0f} queries/sec")
-            
-            # Should be able to execute at least 10 queries per second
-            assert queries_per_second > 10
-            
-            # Clean up
-            conn.execute_non_query("DROP TABLE test_repeated_queries")
-            
+            try:
+                # Insert test data
+                await conn.execute("""
+                    INSERT INTO test_repeated_queries (category, value) VALUES 
+                    ('A', 100.0), ('B', 200.0), ('C', 300.0), ('A', 150.0), ('B', 250.0)
+                """)
+                
+                # Test repeated execution of the same query
+                query = "SELECT category, SUM(value) as total FROM test_repeated_queries GROUP BY category"
+                num_iterations = 100
+                
+                start_time = time.time()
+                for i in range(num_iterations):
+                    result = await conn.execute(query)
+                    assert len(result.rows()) == 3  # Should always return 3 categories
+                end_time = time.time()
+                
+                total_time = end_time - start_time
+                avg_time_per_query = total_time / num_iterations
+                queries_per_second = num_iterations / total_time if total_time > 0 else float('inf')
+                
+                print(f"Repeated queries: {total_time:.3f}s total, {avg_time_per_query:.4f}s avg, {queries_per_second:.0f} queries/sec")
+                
+                # Should be able to execute at least 10 queries per second
+                assert queries_per_second > 10
+                
+            finally:
+                # Clean up - always execute this
+                await conn.execute("DROP TABLE IF EXISTS test_repeated_queries")
+
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -243,7 +257,7 @@ async def test_async_concurrent_queries():
         async def run_async_query(query_id):
             """Function to run async queries concurrently."""
             async with Connection(TEST_CONNECTION_STRING) as conn:
-                rows = await conn.execute(f"""
+                result = await conn.execute(f"""
                     SELECT 
                         {query_id} as query_id,
                         GETDATE() as execution_time,
@@ -251,7 +265,7 @@ async def test_async_concurrent_queries():
                 """)
                 return {
                     'query_id': query_id,
-                    'result': rows[0],
+                    'result': result.rows()[0],
                     'success': True
                 }
         
@@ -280,13 +294,14 @@ async def test_async_concurrent_queries():
 
 @pytest.mark.performance
 @pytest.mark.integration
-def test_memory_usage_with_large_strings():
+@pytest.mark.asyncio
+async def test_memory_usage_with_large_strings():
     """Test memory handling with large string data."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Clean up any existing table first
             try:
-                conn.execute_non_query("""
+                await conn.execute("""
                     IF OBJECT_ID('test_large_strings', 'U') IS NOT NULL 
                     DROP TABLE test_large_strings
                 """)
@@ -294,7 +309,7 @@ def test_memory_usage_with_large_strings():
                 pass
             
             # Create table for large string test
-            conn.execute_non_query("""
+            await conn.execute("""
                 CREATE TABLE test_large_strings (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     large_text NVARCHAR(MAX)
@@ -307,20 +322,23 @@ def test_memory_usage_with_large_strings():
             for size in sizes:
                 large_string = 'A' * size
                 
-                # Insert large string
-                conn.execute_non_query(f"INSERT INTO test_large_strings (large_text) VALUES (N'{large_string}')")
+                # Clear table before each test
+                await conn.execute("DELETE FROM test_large_strings")
                 
-                # Retrieve and verify
-                rows = conn.execute("SELECT large_text FROM test_large_strings WHERE id = SCOPE_IDENTITY()")
-                assert len(rows) == 1
-                assert len(rows[0]['large_text']) == size
-                assert rows[0]['large_text'] == large_string
+                # Insert large string
+                await conn.execute(f"INSERT INTO test_large_strings (large_text) VALUES (N'{large_string}')")
+
+                # Retrieve and verify - use a simple SELECT instead of SCOPE_IDENTITY()
+                result = await conn.execute("SELECT large_text FROM test_large_strings")
+                assert len(result.rows()) == 1
+                assert len(result.rows()[0]['large_text']) == size
+                assert result.rows()[0]['large_text'] == large_string
                 
                 print(f"Successfully handled {size} byte string")
             
             # Clean up
             try:
-                conn.execute_non_query("""
+                await conn.execute("""
                     IF OBJECT_ID('test_large_strings', 'U') IS NOT NULL 
                     DROP TABLE test_large_strings
                 """)
@@ -332,7 +350,8 @@ def test_memory_usage_with_large_strings():
 
 @pytest.mark.performance
 @pytest.mark.integration 
-def test_connection_pool_simulation():
+@pytest.mark.asyncio
+async def test_connection_pool_simulation():
     """Simulate connection pooling behavior."""
     try:
         # Test rapid connection creation/destruction
@@ -340,10 +359,10 @@ def test_connection_pool_simulation():
         start_time = time.time()
         
         for i in range(num_connections):
-            with Connection(TEST_CONNECTION_STRING) as conn:
-                rows = conn.execute("SELECT 1 as test_value")
-                assert rows[0]['test_value'] == 1
-        
+            async with Connection(TEST_CONNECTION_STRING) as conn:
+                result = await conn.execute("SELECT 1 as test_value")
+                assert result.rows()[0]['test_value'] == 1
+
         end_time = time.time()
         total_time = end_time - start_time
         connections_per_second = num_connections / total_time if total_time > 0 else float('inf')
@@ -358,13 +377,14 @@ def test_connection_pool_simulation():
 
 @pytest.mark.performance
 @pytest.mark.integration
-def test_long_running_query():
+@pytest.mark.asyncio
+async def test_long_running_query():
     """Test handling of long-running queries."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Run a query that takes some time to execute
             start_time = time.time()
-            rows = conn.execute("""
+            result = await conn.execute("""
                 WITH NumberSequence AS (
                     SELECT 1 as n
                     UNION ALL
@@ -377,10 +397,10 @@ def test_long_running_query():
                 OPTION (MAXRECURSION 10000)
             """)
             end_time = time.time()
-            
-            assert len(rows) == 1
-            assert rows[0]['total_count'] == 10000
-            
+
+            assert len(result.rows()) == 1
+            assert result.rows()[0]['total_count'] == 10000
+
             query_time = end_time - start_time
             print(f"Long-running query time: {query_time:.3f} seconds")
             
@@ -392,12 +412,16 @@ def test_long_running_query():
 
 @pytest.mark.stress
 @pytest.mark.integration
-def test_stress_mixed_operations():
+@pytest.mark.asyncio
+async def test_stress_mixed_operations():
     """Stress test with mixed read/write operations."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            # Clean up any existing table first
+            await conn.execute("DROP TABLE IF EXISTS test_stress_operations")
+            
             # Setup stress test table
-            conn.execute_non_query("""
+            await conn.execute("""
                 CREATE TABLE test_stress_operations (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     operation_type NVARCHAR(20),
@@ -406,46 +430,48 @@ def test_stress_mixed_operations():
                 )
             """)
             
-            # Perform mixed operations
-            num_operations = 1000
-            start_time = time.time()
-            
-            for i in range(num_operations):
-                if i % 3 == 0:
-                    # Insert operation
-                    conn.execute_non_query(f"""
-                        INSERT INTO test_stress_operations (operation_type, data_value) 
-                        VALUES ('INSERT', {i})
-                    """)
-                elif i % 3 == 1:
-                    # Update operation
-                    conn.execute_non_query(f"""
-                        UPDATE test_stress_operations 
-                        SET data_value = data_value + 1 
-                        WHERE id % 10 = {i % 10}
-                    """)
-                else:
-                    # Select operation
-                    rows = conn.execute(f"""
-                        SELECT COUNT(*) as count 
-                        FROM test_stress_operations 
-                        WHERE data_value > {i // 2}
-                    """)
-                    assert len(rows) == 1
-            
-            end_time = time.time()
-            total_time = end_time - start_time
-            ops_per_second = num_operations / total_time if total_time > 0 else float('inf')
-            
-            print(f"Stress test: {num_operations} operations in {total_time:.3f}s, {ops_per_second:.0f} ops/sec")
-            
-            # Verify final state
-            rows = conn.execute("SELECT COUNT(*) as total FROM test_stress_operations")
-            insert_count = num_operations // 3 + (1 if num_operations % 3 > 0 else 0)
-            assert rows[0]['total'] == insert_count
-            
-            # Clean up
-            conn.execute_non_query("DROP TABLE test_stress_operations")
-            
+            try:
+                # Perform mixed operations
+                num_operations = 1000
+                start_time = time.time()
+                
+                for i in range(num_operations):
+                    if i % 3 == 0:
+                        # Insert operation
+                        await conn.execute_non_query(f"""
+                            INSERT INTO test_stress_operations (operation_type, data_value) 
+                            VALUES ('INSERT', {i})
+                        """)
+                    elif i % 3 == 1:
+                        # Update operation
+                        await conn.execute_non_query(f"""
+                            UPDATE test_stress_operations 
+                            SET data_value = data_value + 1 
+                            WHERE id % 10 = {i % 10}
+                        """)
+                    else:
+                        # Select operation
+                        result = await conn.execute(f"""
+                            SELECT COUNT(*) as count 
+                            FROM test_stress_operations 
+                            WHERE data_value > {i // 2}
+                        """)
+                        assert len(result.rows()) == 1
+                
+                end_time = time.time()
+                total_time = end_time - start_time
+                ops_per_second = num_operations / total_time if total_time > 0 else float('inf')
+                
+                print(f"Stress test: {num_operations} operations in {total_time:.3f}s, {ops_per_second:.0f} ops/sec")
+                
+                # Verify final state
+                result = await conn.execute("SELECT COUNT(*) as total FROM test_stress_operations")
+                insert_count = num_operations // 3 + (1 if num_operations % 3 > 0 else 0)
+                assert result.rows()[0]['total'] == insert_count
+
+            finally:
+                # Clean up - always execute this
+                await conn.execute("DROP TABLE IF EXISTS test_stress_operations")
+
     except Exception as e:
         pytest.skip(f"Database not available: {e}")

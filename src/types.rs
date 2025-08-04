@@ -1,12 +1,61 @@
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use pyo3::exceptions::PyValueError;
-use tiberius::Row;
-use tiberius::numeric::Numeric;
-use tiberius::xml::XmlData;
-use std::collections::HashMap;
 use chrono::{DateTime, NaiveDate, NaiveTime, NaiveDateTime, Utc};
+use pyo3::exceptions::PyValueError;
+use tiberius::numeric::Numeric;
+use std::collections::HashMap;
+use tiberius::xml::XmlData;
+use pyo3::types::PyDict;
+use pyo3::prelude::*;
+use tiberius::Row;
 use uuid::Uuid;
+
+/// Result of executing a query - either rows returned or affected row count
+#[pyclass(name = "ExecutionResult")]
+#[derive(Clone)]
+pub struct PyExecutionResult {
+    rows: Option<Vec<PyRow>>,
+    affected_rows: Option<u64>,
+}
+
+#[pymethods]
+impl PyExecutionResult {
+    /// Get the returned rows (if any)
+    pub fn rows(&self) -> Option<Vec<PyRow>> {
+        self.rows.clone()
+    }
+    
+    /// Get the number of affected rows (if applicable)
+    pub fn affected_rows(&self) -> Option<u64> {
+        self.affected_rows
+    }
+    
+    /// Check if this result contains rows
+    pub fn has_rows(&self) -> bool {
+        self.rows.is_some()
+    }
+    
+    /// Check if this result contains affected row count
+    pub fn has_affected_count(&self) -> bool {
+        self.affected_rows.is_some()
+    }
+}
+
+impl PyExecutionResult {
+    /// Create a result with rows
+    pub fn with_rows(rows: Vec<PyRow>) -> Self {
+        Self {
+            rows: Some(rows),
+            affected_rows: None,
+        }
+    }
+    
+    /// Create a result with affected row count
+    pub fn with_affected_count(count: u64) -> Self {
+        Self {
+            rows: None,
+            affected_rows: Some(count),
+        }
+    }
+}
 
 /// A Python-compatible representation of a database row
 #[pyclass(name = "Row")]
@@ -384,6 +433,35 @@ impl PyValue {
     
     pub fn new_datetime(value: String) -> Self {
         Self { inner: PyValueInner::DateTime(value) }
+    }
+
+    /// Convert PyValue to a Tiberius ToSql parameter
+    pub fn to_sql(&self) -> Result<Box<dyn tiberius::ToSql>, String> {
+        match &self.inner {
+            PyValueInner::Null => Ok(Box::new(Option::<i32>::None)),
+            PyValueInner::Bool(b) => Ok(Box::new(*b)),
+            PyValueInner::Int(i) => Ok(Box::new(*i)),
+            PyValueInner::Float(f) => Ok(Box::new(*f)),
+            PyValueInner::String(s) => Ok(Box::new(s.clone())),
+            PyValueInner::Bytes(b) => Ok(Box::new(b.clone())),
+            PyValueInner::DateTime(s) => {
+                // Try to parse as various datetime formats
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f") {
+                    Ok(Box::new(dt))
+                } else if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+                    Ok(Box::new(dt))
+                } else if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                    Ok(Box::new(date))
+                } else if let Ok(time) = chrono::NaiveTime::parse_from_str(s, "%H:%M:%S%.f") {
+                    Ok(Box::new(time))
+                } else if let Ok(time) = chrono::NaiveTime::parse_from_str(s, "%H:%M:%S") {
+                    Ok(Box::new(time))
+                } else {
+                    // Fall back to string if parsing fails
+                    Ok(Box::new(s.clone()))
+                }
+            }
+        }
     }
 }
 
