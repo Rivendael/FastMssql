@@ -314,7 +314,9 @@ impl PyConnection {
             if let Some(user) = username {
                 config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default()));
             } else if trusted_connection.unwrap_or(true) {
-                config.authentication(AuthMethod::windows("", ""));
+                return Err(PyValueError::new_err(
+                    "Windows authentication is not supported. Please provide username and password for SQL Server authentication."
+                ));
             }
             
             config
@@ -523,9 +525,9 @@ mod tests {
             None, // no SSL config
             Some("localhost".to_string()), // server
             Some("test".to_string()), // database
-            None, // no username (will use Windows auth)
-            None, // no password
-            Some(true) // trusted connection
+            Some("testuser".to_string()), // username
+            Some("testpass".to_string()), // password
+            Some(false) // not trusted connection
         ).expect("Failed to create connection with individual params");
         
         // Connection object created successfully
@@ -573,12 +575,12 @@ mod tests {
             Some(ssl_config), // SSL config
             Some("localhost".to_string()), // server
             Some("test".to_string()), // database
-            None, // no username (will use Windows auth)
-            None, // no password
-            Some(true) // trusted connection
+            Some("testuser".to_string()), // username
+            Some("testpass".to_string()), // password
+            Some(false) // not trusted connection
         ).expect("Failed to create connection with SSL config");
         
         // Connection object created successfully
-        assert!(connection.ssl_config.is_some());
+        assert!(connection._ssl_config.is_some());
     }
 }
