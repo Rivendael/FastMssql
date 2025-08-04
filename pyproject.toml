@@ -26,6 +26,10 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+urls = { 
+  "Homepage" = "https://github.com/Rivendael/pymssql-rs",
+}
+
 dependencies = []
 
 [project.optional-dependencies]
