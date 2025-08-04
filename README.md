@@ -25,15 +25,6 @@ This library uses the high-performance **bb8 connection pool** which provides:
 - **Thread Safety**: Safe concurrent access from multiple threads
 - **Resource Management**: Automatic connection cleanup and lifecycle management
 
-### Performance Improvements
-
-| Scenario | Single Connection | With Pool | Improvement |
-|----------|-------------------|-----------|-------------|
-| Sequential queries | Recreate each time | Reuse connections | **2-3x faster** |
-| Concurrent operations | Serialized access | Parallel execution | **5-10x faster** |
-| High-throughput workloads | Connection bottleneck | Pool scaling | **10-20x faster** |
-
-
 ## Installation
 
 ### From PyPI (Recommended)
@@ -72,12 +63,6 @@ pip install maturin
 
 4. Build and install the package:
 ```bash
-# On Windows
-build.bat
-
-# On Unix-like systems
-./build.sh
-
 # Or manually
 maturin develop --release
 ```
@@ -88,7 +73,7 @@ maturin develop --release
 
 ```python
 import asyncio
-from mssql_python_rust import Connection
+from fastmssql import Connection
 
 async def main():
     # Connect to SQL Server using async context manager
@@ -115,7 +100,7 @@ The library supports two ways to connect to SQL Server:
 
 ```python
 import asyncio
-from mssql_python_rust import Connection
+from fastmssql import Connection
 
 async def main():
     # Traditional connection string approach
@@ -133,7 +118,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from mssql_python_rust import Connection
+from fastmssql import Connection
 
 async def main():
     # Using individual connection parameters
@@ -158,7 +143,7 @@ Configure the connection pool for your specific needs:
 
 ```python
 import asyncio
-from mssql_python_rust import Connection, PoolConfig
+from fastmssql import Connection, PoolConfig
 
 async def main():
     # Custom pool configuration
@@ -218,7 +203,7 @@ conn_str = "Server=tcp:myserver.database.windows.net,1433;Database=MyDB;User Id=
 
 ```python
 import asyncio
-from mssql_python_rust import Connection
+from fastmssql import Connection
 
 async def main():
     async with Connection(connection_string) as conn:
@@ -261,7 +246,7 @@ Full async/await support with automatic connection pool management:
 
 ```python
 import asyncio
-from mssql_python_rust import Connection
+from fastmssql import Connection
 
 async def main():
     connection_string = "Server=localhost;Database=test;Integrated Security=true"
@@ -300,7 +285,7 @@ The bb8 connection pool dramatically improves performance, especially under load
 ```python
 import asyncio
 import time
-from mssql_python_rust import Connection
+from fastmssql import Connection
 
 async def performance_comparison():
     connection_string = "Server=localhost;Database=test;User Id=myuser;Password=mypass"
@@ -576,7 +561,7 @@ async with mssql.connect_async(conn_str) as conn:
 ### Custom Pool Configuration for Different Scenarios
 
 ```python
-from mssql_python_rust import Connection, PoolConfig
+from fastmssql import Connection, PoolConfig
 
 # High-load web application
 web_config = PoolConfig(

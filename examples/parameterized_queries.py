@@ -10,7 +10,7 @@ import os
 
 # Try to import the module - adjust import based on your environment
 try:
-    import fastmssql_core as fastmssql
+    import fastmssql as fastmssql
 except ImportError:
     try:
         import sys

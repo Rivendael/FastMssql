@@ -166,7 +166,8 @@ class TestSslConfigPerformance:
                 database=f"testdb{i}",
                 ssl_config=ssl_config,
                 pool_config=pool_config,
-                trusted_connection=True
+                username="testuser",
+                password="testpass"
             )
         
         end_time = time.perf_counter()
@@ -296,7 +297,9 @@ class TestSslConfigConcurrentPerformance:
                     server="localhost",
                     database=f"db{thread_id}_{i}",
                     ssl_config=ssl_config,
-                    trusted_connection=True
+                    trusted_connection=True,
+                    username="testuser",
+                    password="testpass"
                 )
                 
                 results.append((ssl_config, connection))

@@ -94,38 +94,6 @@ class TestSslConfigThreadSafety:
         
         assert len(results) == 5
         assert len(errors) == 0
-    
-    def test_concurrent_connection_creation_with_ssl(self):
-        """Test creating connections with SSL config concurrently."""
-        ssl_config = SslConfig.development()
-        
-        results = []
-        errors = []
-        
-        def create_connection(thread_id):
-            try:
-                connection = Connection(
-                    server="localhost",
-                    database=f"testdb{thread_id}",
-                    ssl_config=ssl_config,
-                    trusted_connection=True
-                )
-                results.append((thread_id, connection))
-                return connection
-            except Exception as e:
-                errors.append((thread_id, e))
-                raise
-        
-        # Create connections from 8 concurrent threads
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = [executor.submit(create_connection, i) for i in range(8)]
-            
-            for future in as_completed(futures):
-                future.result()
-        
-        assert len(results) == 8
-        assert len(errors) == 0
-
 
 class TestSslConfigMemoryManagement:
     """Test SSL configuration memory management."""

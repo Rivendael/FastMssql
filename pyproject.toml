@@ -5,6 +5,7 @@ build-backend = "maturin"
 [project]
 name = "fastmssql"
 version = "0.1.7"
+
 description = "A high-performance Python library for Microsoft SQL Server using Rust and Tiberius"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -26,11 +27,9 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-urls = { 
-  "Homepage" = "https://github.com/Rivendael/pymssql-rs",
-}
 
-dependencies = []
+[project.urls]
+Homepage = "https://github.com/Rivendael/pymssql-rs"
 
 [project.optional-dependencies]
 dev = [
