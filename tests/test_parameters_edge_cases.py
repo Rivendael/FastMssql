@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql import Connection, Parameter, Parameters
+    from fastmssql import Connection, Parameter, Parameters
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 

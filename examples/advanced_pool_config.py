@@ -9,7 +9,7 @@ for different scenarios and workloads.
 import asyncio
 import time
 import concurrent.futures
-from mssql_python_rust import Connection, PoolConfig
+from fastmssql_core import Connection, PoolConfig
 
 # Connection string - adjust as needed for your environment
 CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"

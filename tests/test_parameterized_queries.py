@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql import Connection
+    from fastmssql import Connection
     MSSQL_AVAILABLE = True
 except ImportError:
     MSSQL_AVAILABLE = False

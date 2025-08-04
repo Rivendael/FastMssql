@@ -16,39 +16,39 @@ Example (async):
 
 try:
     from . import fastmssql_core as _rust_core
-    Connection = _rust_core.PyConnection
-    Query = _rust_core.PyQuery
-    Row = _rust_core.PyRow
-    Value = _rust_core.PyValue
-    ExecutionResult = _rust_core.PyExecutionResult
-    PoolConfig = _rust_core.PyPoolConfig
-    SslConfig = _rust_core.PySslConfig
+    PyConnection = _rust_core.Connection
+    PyQuery = _rust_core.Query
+    PyRow = _rust_core.Row
+    PyValue = _rust_core.Value
+    PyExecutionResult = _rust_core.ExecutionResult
+    PyPoolConfig = _rust_core.PoolConfig
+    PySslConfig = _rust_core.SslConfig
     EncryptionLevel = _rust_core.EncryptionLevel
     version = _rust_core.version
 except ImportError:
     # Fallback for development builds
     try:
         import fastmssql_core as _rust_core
-        Connection = _rust_core.PyConnection
-        Query = _rust_core.PyQuery
-        Row = _rust_core.PyRow
-        Value = _rust_core.PyValue
-        ExecutionResult = _rust_core.PyExecutionResult
-        PoolConfig = _rust_core.PyPoolConfig
-        SslConfig = _rust_core.PySslConfig
+        PyConnection = _rust_core.Connection
+        PyQuery = _rust_core.Query
+        PyRow = _rust_core.Row
+        PyValue = _rust_core.Value
+        PyExecutionResult = _rust_core.ExecutionResult
+        PyPoolConfig = _rust_core.PoolConfig
+        PySslConfig = _rust_core.SslConfig
         EncryptionLevel = _rust_core.EncryptionLevel
         version = _rust_core.version
     except ImportError:
         # Direct import from the built module
         print("Warning: Using direct module import")
         import fastmssql_core
-        Connection = fastmssql_core.PyConnection
-        Query = fastmssql_core.PyQuery
-        Row = fastmssql_core.PyRow
-        Value = fastmssql_core.PyValue
-        ExecutionResult = fastmssql_core.PyExecutionResult
-        PoolConfig = fastmssql_core.PyPoolConfig
-        SslConfig = fastmssql_core.PySslConfig
+        PyConnection = fastmssql_core.Connection
+        PyQuery = fastmssql_core.Query
+        PyRow = fastmssql_core.Row
+        PyValue = fastmssql_core.Value
+        PyExecutionResult = fastmssql_core.ExecutionResult
+        PyPoolConfig = fastmssql_core.PoolConfig
+        PySslConfig = fastmssql_core.SslConfig
         EncryptionLevel = fastmssql_core.EncryptionLevel
         version = fastmssql_core.version
 
@@ -56,13 +56,13 @@ __version__ = version()
 
 __all__ = [
     # Core Rust types
-    'Connection',
-    'Query', 
-    'Row',
-    'Value',
-    'ExecutionResult',
-    'PoolConfig',
-    'SslConfig',
+    'PyConnection',
+    'PyQuery', 
+    'PyRow',
+    'PyValue',
+    'PyExecutionResult',
+    'PyPoolConfig',
+    'PySslConfig',
     'EncryptionLevel',
     'version',
 ]

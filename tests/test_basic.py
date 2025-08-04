@@ -27,8 +27,8 @@ async def test_error_handling():
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql
-    from mssql import Connection
+    import fastmssql
+    from fastmssql import Connection
 except ImportError:
     pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
@@ -37,7 +37,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 
 def test_version():
     """Test that we can get the library version."""
-    version = mssql.version()
+    version = fastmssql.version()
     assert isinstance(version, str)
     assert len(version) > 0
 
@@ -372,7 +372,7 @@ async def test_simple_parameterized_query():
 async def test_parameters_object_basic():
     """Test using Parameters object instead of simple list."""
     try:
-        from mssql import Parameters
+        from fastmssql import Parameters
         
         async with Connection(TEST_CONNECTION_STRING) as conn:
             params = Parameters(100, "Parameters Object", 3.14)
@@ -397,7 +397,7 @@ async def test_parameters_object_basic():
 async def test_parameters_method_chaining():
     """Test Parameters object with method chaining."""
     try:
-        from mssql import Parameters
+        from fastmssql import Parameters
         
         async with Connection(TEST_CONNECTION_STRING) as conn:
             params = (Parameters()

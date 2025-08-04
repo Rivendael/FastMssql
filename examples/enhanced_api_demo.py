@@ -5,7 +5,7 @@ This demonstrates the benefits of the Python wrapper classes over direct Rust ac
 """
 
 import asyncio
-import mssql
+import fastmssql
 
 async def example_usage():
     """Demonstrate enhanced Python API with better type hints and IDE support."""
@@ -13,7 +13,7 @@ async def example_usage():
     connection_string = "Server=localhost;Database=TestDB;Integrated Security=true"
     
     # Create connection with pool configuration
-    pool_config = mssql.PoolConfig(
+    pool_config = fastmssql.PoolConfig(
         max_size=20,
         min_idle=5,
         max_lifetime_secs=3600,  # 1 hour
@@ -22,7 +22,7 @@ async def example_usage():
     )
     
     # Method 1: Using Connection class with connection string (recommended)
-    async with mssql.Connection(connection_string, pool_config) as conn:
+    async with fastmssql.Connection(connection_string, pool_config) as conn:
         print("=== Using Connection() class with connection string ===")
         
         # Execute DDL
@@ -49,7 +49,7 @@ async def example_usage():
         print(f"Total users: {count}")
     
     # Method 2: Using Connection class with individual connection parameters (new feature!)
-    async with mssql.Connection(
+    async with fastmssql.Connection(
         server="localhost",
         database="TestDB", 
         trusted_connection=True,
@@ -63,7 +63,7 @@ async def example_usage():
         print(f"User count: {count}")
     
     # Method 3: Using Connection class directly (alternative syntax)
-    async with mssql.Connection(connection_string=connection_string, pool_config=pool_config) as conn:
+    async with fastmssql.Connection(connection_string=connection_string, pool_config=pool_config) as conn:
         print("\n=== Using Connection() class with keyword arguments ===")
         
         # Same API, just different instantiation style
@@ -80,7 +80,7 @@ async def example_usage():
     print("\n=== Additional Connection patterns ===")
     
     # Pattern A: Create connection and manage manually (not recommended for production)
-    conn = mssql.Connection(connection_string, pool_config)
+    conn = fastmssql.Connection(connection_string, pool_config)
     await conn.connect()
     try:
         result = await conn.execute("SELECT COUNT(*) FROM users")
@@ -90,7 +90,7 @@ async def example_usage():
         await conn.disconnect()
     
     # Pattern B: Using Connection with individual parameters and explicit keywords
-    async with mssql.Connection(
+    async with fastmssql.Connection(
         connection_string=None,  # Explicitly don't use connection string
         server="localhost",
         database="TestDB",
@@ -101,7 +101,7 @@ async def example_usage():
         avg_age = result.rows()[0][0] if result.rows() else 0
         print(f"Individual params - Average age: {avg_age}")
     
-    async with mssql.Connection(connection_string, pool_config) as conn:
+    async with fastmssql.Connection(connection_string, pool_config) as conn:
         users = await conn.execute("SELECT * FROM users ORDER BY name")
         print("All users (as dictionaries):")
         for user in users.rows():
@@ -113,7 +113,7 @@ async def compare_apis():
     connection_string = "Server=localhost;Database=TestDB;Integrated Security=true"
     
     print("=== Enhanced Python API (with type hints and wrappers) ===")
-    async with mssql.Connection(connection_string) as conn:
+    async with fastmssql.Connection(connection_string) as conn:
         result = await conn.execute("SELECT 'Hello' as message, 42 as number")
         
         # Enhanced API provides rich type information
@@ -128,7 +128,7 @@ async def compare_apis():
     
     print("\n=== Direct Rust API (minimal wrapping) ===")
     # You can still access the lower-level API when needed
-    async with mssql.Connection(connection_string) as conn:
+    async with fastmssql.Connection(connection_string) as conn:
         result = await conn.execute("SELECT 'Hello' as message, 42 as number")
         
         # Enhanced API provides better type information

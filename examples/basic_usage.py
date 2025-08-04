@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql import Connection
+    from fastmssql import Connection
 except ImportError as e:
     print(f"Error importing mssql: {e}")
     print("Make sure you've built the extension with 'maturin develop'")

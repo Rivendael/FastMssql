@@ -19,7 +19,7 @@ from typing import List, Dict, Any
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
 
 try:
-    from mssql_python_rust import Connection
+    from fastmssql import Connection
     MSSQL_AVAILABLE = True
 except ImportError:
     MSSQL_AVAILABLE = False

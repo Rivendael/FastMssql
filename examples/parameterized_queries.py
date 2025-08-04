@@ -10,12 +10,12 @@ import os
 
 # Try to import the module - adjust import based on your environment
 try:
-    import mssql_python_rust as mssql
+    import fastmssql_core as fastmssql
 except ImportError:
     try:
         import sys
         sys.path.append('../python')
-        import mssql
+        import fastmssql
     except ImportError:
         print("Please build the module with 'maturin develop' or install it")
         exit(1)
@@ -29,16 +29,16 @@ async def main():
     )
     
     # Create a connection with optimized pool settings
-    pool_config = mssql.PoolConfig(max_size=5, min_idle=1)
+    pool_config = fastmssql.PoolConfig(max_size=5, min_idle=1)
     
-    async with mssql.connect(connection_string, pool_config) as conn:
+    async with fastmssql.connect(connection_string, pool_config) as conn:
         print("Connected to SQL Server")
         
         # Example 1: Using Query class for parameterized queries
         print("\n=== Example 1: Using Query class ===")
         
         # Create a parameterized query
-        query = mssql.Query("SELECT ?, ? + ? AS sum, ? AS message")
+        query = fastmssql.Query("SELECT ?, ? + ? AS sum, ? AS message")
         query.add_parameter(42)
         query.add_parameter(10)
         query.add_parameter(5)
@@ -66,7 +66,7 @@ async def main():
         # Example 3: Multiple parameter types
         print("\n=== Example 3: Multiple parameter types ===")
         
-        query3 = mssql.Query("""
+        query3 = fastmssql.Query("""
             SELECT 
                 ? AS null_value,
                 ? AS boolean_value,

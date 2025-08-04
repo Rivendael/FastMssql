@@ -1,10 +1,10 @@
 [package]
-name = "mssql-python-rust"
+name = "fastmssql_core"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "mssql_python_rust"
+name = "fastmssql_core"
 crate-type = ["cdylib"]
 
 [dependencies]
