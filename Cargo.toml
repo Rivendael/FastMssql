@@ -1,6 +1,6 @@
 [package]
 name = "fastmssql_core"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 
 [lib]
@@ -10,17 +10,17 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.20", features = ["extension-module"] }
 pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
-tokio = { version = "1", features = ["full"] }
-tiberius = { version = "0.12", features = ["chrono"] }
-tokio-util = { version = "0.7", features = ["compat"] }
+tokio = { version = "1.47.1", features = ["full"] }
+tiberius = { version = "0.12.3", features = ["chrono"] }
+tokio-util = { version = "0.7.16", features = ["compat"] }
 bb8 = "0.9"
 bb8-tiberius = "0.16"
-futures = "0.3"
+futures = "0.3.31"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
+uuid = { version = "1.17.0", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.0"
