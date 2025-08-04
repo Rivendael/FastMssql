@@ -33,7 +33,7 @@ jobs:
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels
+        name: wheels-${{ matrix.os }}
         path: dist
 
   publish:
@@ -45,11 +45,12 @@ jobs:
     - name: Download wheels
       uses: actions/download-artifact@v4
       with:
-        name: wheels
+        pattern: wheels-*
         path: dist
+        merge-multiple: true
         
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
-        packages_dir: dist/
+        packages-dir: dist/
