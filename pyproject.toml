@@ -4,18 +4,18 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.1.0"
+version = "0.1.1"
 description = "A high-performance Python library for Microsoft SQL Server using Rust and Tiberius"
 readme = "README.md"
 requires-python = ">=3.8"
-license = { file = "LICENSE" }
+license = { text  = "PolyForm Noncommercial License 1.0.0" }
 authors = [
-    { name = "Rivendael", email = "riverb514@gmail.com" },
+    { name = "Riveranda", email = "riverb514@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",

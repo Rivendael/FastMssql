@@ -14,6 +14,72 @@ This project includes and depends on the following third-party libraries:
   Copyright 2020-2025 PyO3 Project Contributors
   Licensed under the Apache License, Version 2.0
 
-Other dependencies are licensed under their respective terms. See Cargo.toml for details.
+Additional dependencies used in this project:
+
+- bb8 (https://github.com/djc/bb8)
+  Copyright 2017-2025 David McLaughlin and contributors
+  Licensed under MIT or Apache License, Version 2.0
+
+- bb8-tiberius (https://github.com/prisma/tiberius)
+  Copyright 2017-2025 Prisma Data, Inc. and contributors
+  Licensed under Apache License, Version 2.0
+
+- tokio (https://github.com/tokio-rs/tokio)
+  Copyright 2016-2025 Tokio Contributors
+  Licensed under MIT or Apache License, Version 2.0
+
+- tokio-util (https://github.com/tokio-rs/tokio)
+  Copyright 2016-2025 Tokio Contributors
+  Licensed under MIT or Apache License, Version 2.0
+
+- futures (https://github.com/rust-lang/futures-rs)
+  Copyright 2015-2025 The Rust Project Developers
+  Licensed under MIT or Apache License, Version 2.0
+
+- serde (https://github.com/serde-rs/serde)
+  Copyright 2014-2025 Serde Project Developers
+  Licensed under MIT or Apache License, Version 2.0
+
+- serde_json (https://github.com/serde-rs/json)
+  Copyright 2014-2025 Serde Project Developers
+  Licensed under MIT or Apache License, Version 2.0
+
+- anyhow (https://github.com/dtolnay/anyhow)
+  Copyright 2019-2025 David Tolnay
+  Licensed under MIT or Apache License, Version 2.0
+
+- chrono (https://github.com/chronotope/chrono)
+  Copyright 2014-2025 Chronotope Developers
+  Licensed under MIT or Apache License, Version 2.0
+
+- uuid (https://github.com/uuid-rs/uuid)
+  Copyright 2015-2025 UUID Project Developers
+  Licensed under MIT or Apache License, Version 2.0
+
+- tempfile (https://github.com/Stebalien/tempfile)
+  Copyright 2016-2025 Steven Allen
+  Licensed under MIT or Apache License, Version 2.0
+
+# Python development and testing tools
+- pytest (https://github.com/pytest-dev/pytest)
+  Copyright 2004-2025 Holger Krekel and contributors
+  Licensed under MIT License
+
+- pytest-asyncio (https://github.com/pytest-dev/pytest-asyncio)
+  Copyright 2015-2025 pytest-asyncio contributors
+  Licensed under MIT License
+
+- black (https://github.com/psf/black)
+  Copyright 2018-2025 Python Software Foundation
+  Licensed under MIT License
+
+- ruff (https://github.com/astral-sh/ruff)
+  Copyright 2022-2025 Astral Software Inc.
+  Licensed under MIT License
+
+- maturin (https://github.com/PyO3/maturin)
+  Copyright 2018-2025 PyO3 Project Contributors
+  Licensed under Apache License, Version 2.0 or MIT License
 
 The full text of the Apache License 2.0 is provided in licenses/APACHE_LICENSE_2.0.txt.
+The full text of the MIT License is provided in licenses/MIT_LICENSE.txt.
