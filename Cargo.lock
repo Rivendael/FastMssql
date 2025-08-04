@@ -657,6 +657,7 @@ dependencies = [
  "pyo3-asyncio",
  "serde",
  "serde_json",
+ "tempfile",
  "tiberius",
  "tokio",
  "tokio-util",

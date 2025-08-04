@@ -298,6 +298,119 @@ class Parameters:
         return f"Parameters({', '.join(parts)})"
 
 
+class SslConfig:
+    """SSL/TLS configuration for database connections."""
+    
+    def __init__(
+        self,
+        encryption_level: Optional[str] = None,
+        trust_server_certificate: bool = False,
+        ca_certificate_path: Optional[str] = None,
+        enable_sni: bool = True,
+        server_name: Optional[str] = None
+    ):
+        """Initialize SSL configuration.
+        
+        Args:
+            encryption_level: Encryption level - "Required", "LoginOnly", or "Off" (default: "Required")
+            trust_server_certificate: Trust server certificate without validation (dangerous in production)
+            ca_certificate_path: Path to custom CA certificate file (.pem, .crt, or .der)
+            enable_sni: Enable Server Name Indication (default: True)
+            server_name: Custom server name for certificate validation
+            
+        Note:
+            trust_server_certificate and ca_certificate_path are mutually exclusive.
+            For production, either use a valid certificate in the system trust store,
+            or provide a ca_certificate_path to a trusted CA certificate.
+        """
+        # Set default encryption level
+        if encryption_level is None:
+            encryption_level = "Required"
+        
+        # Validate encryption level
+        valid_levels = ["Required", "LoginOnly", "Off"]
+        if encryption_level not in valid_levels:
+            raise ValueError(f"Invalid encryption_level. Must be one of: {valid_levels}")
+        
+        # Map string encryption levels to enum values
+        encryption_level_map = {
+            "Required": _core.EncryptionLevel.REQUIRED,
+            "LoginOnly": _core.EncryptionLevel.LOGIN_ONLY,
+            "Off": _core.EncryptionLevel.OFF
+        }
+        
+        self._config = _core.SslConfig(
+            encryption_level=encryption_level_map[encryption_level],
+            trust_server_certificate=trust_server_certificate,
+            ca_certificate_path=ca_certificate_path,
+            enable_sni=enable_sni,
+            server_name=server_name
+        )
+    
+    @staticmethod
+    def development() -> 'SslConfig':
+        """Create SSL config for development (trusts all certificates).
+        
+        Warning: This configuration is insecure and should only be used in development.
+        """
+        config = SslConfig.__new__(SslConfig)
+        config._config = _core.SslConfig.development()
+        return config
+    
+    @staticmethod
+    def with_ca_certificate(ca_cert_path: str) -> 'SslConfig':
+        """Create SSL config for production with custom CA certificate.
+        
+        Args:
+            ca_cert_path: Path to CA certificate file (.pem, .crt, or .der)
+        """
+        config = SslConfig.__new__(SslConfig)
+        config._config = _core.SslConfig.with_ca_certificate(ca_cert_path)
+        return config
+    
+    @staticmethod
+    def login_only() -> 'SslConfig':
+        """Create SSL config that only encrypts login (legacy mode)."""
+        config = SslConfig.__new__(SslConfig)
+        config._config = _core.SslConfig.login_only()
+        return config
+    
+    @staticmethod
+    def disabled() -> 'SslConfig':
+        """Create SSL config with no encryption (not recommended)."""
+        config = SslConfig.__new__(SslConfig)
+        config._config = _core.SslConfig.disabled()
+        return config
+    
+    @property
+    def encryption_level(self) -> str:
+        """Get the encryption level."""
+        return str(self._config.encryption_level)
+    
+    @property
+    def trust_server_certificate(self) -> bool:
+        """Get trust server certificate setting."""
+        return self._config.trust_server_certificate
+    
+    @property
+    def ca_certificate_path(self) -> Optional[str]:
+        """Get CA certificate path."""
+        return self._config.ca_certificate_path
+    
+    @property
+    def enable_sni(self) -> bool:
+        """Get SNI setting."""
+        return self._config.enable_sni
+    
+    @property
+    def server_name(self) -> Optional[str]:
+        """Get custom server name."""
+        return self._config.server_name
+    
+    def __repr__(self) -> str:
+        return f"SslConfig(encryption={self.encryption_level}, trust_cert={self.trust_server_certificate})"
+
+
 class Connection:
     """Async connection to Microsoft SQL Server database with enhanced type support."""
     
@@ -305,6 +418,7 @@ class Connection:
         self, 
         connection_string: Optional[str] = None, 
         pool_config: Optional[PoolConfig] = None,
+        ssl_config: Optional['SslConfig'] = None,
         auto_connect: bool = False,
         server: Optional[str] = None,
         database: Optional[str] = None,
@@ -317,6 +431,7 @@ class Connection:
         Args:
             connection_string: SQL Server connection string (if not using individual parameters)
             pool_config: Optional connection pool configuration
+            ssl_config: Optional SSL/TLS configuration
             auto_connect: If True, automatically connect on creation (not supported for async)
             server: Database server hostname or IP address
             database: Database name to connect to
@@ -331,9 +446,11 @@ class Connection:
             If username is not provided, Windows integrated authentication will be used.
         """
         py_pool_config = pool_config._config if pool_config else None
+        py_ssl_config = ssl_config._config if ssl_config else None
         self._conn = _core.Connection(
             connection_string, 
             py_pool_config, 
+            py_ssl_config,
             server, 
             database, 
             username, 
@@ -432,6 +549,7 @@ __all__ = [
     'Row', 
     'ExecutionResult',
     'PoolConfig',
+    'SslConfig',        # SSL/TLS configuration
     'version',          # Version function
     # Core types for advanced usage
     'RustConnection',

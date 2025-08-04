@@ -10,11 +10,13 @@ mod connection;
 mod query;
 mod types;
 mod pool_config;
+mod ssl_config;
 
 pub use connection::PyConnection;
 pub use query::PyQuery;
 pub use types::{PyRow, PyValue, PyExecutionResult};
 pub use pool_config::PyPoolConfig;
+pub use ssl_config::{PySslConfig, EncryptionLevel};
 
 /// A high-performance Python library for Microsoft SQL Server using Rust and Tiberius
 #[pymodule]
@@ -30,6 +32,8 @@ fn mssql_python_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyValue>()?;
     m.add_class::<PyExecutionResult>()?;
     m.add_class::<PyPoolConfig>()?;
+    m.add_class::<PySslConfig>()?;
+    m.add_class::<EncryptionLevel>()?;
     
     // Add module-level functions
     m.add_function(wrap_pyfunction!(version, m)?)?;
