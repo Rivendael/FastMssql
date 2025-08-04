@@ -20,8 +20,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql import SslConfig, Connection, PoolConfig
-    import mssql_python_rust as core
+    from fastmssql import SslConfig, Connection, PoolConfig
 except ImportError as e:
     pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
 

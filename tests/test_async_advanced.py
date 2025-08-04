@@ -21,7 +21,7 @@ TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_te
 
 try:
     # Import the classes from the Python wrapper module  
-    from mssql import Connection, PoolConfig
+    from fastmssql import Connection, PoolConfig
     MSSQL_AVAILABLE = True
 except ImportError:
     MSSQL_AVAILABLE = False

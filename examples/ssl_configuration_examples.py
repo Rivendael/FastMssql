@@ -6,7 +6,7 @@ to Microsoft SQL Server.
 """
 
 import asyncio
-from mssql import Connection, PoolConfig, SslConfig
+from fastmssql import Connection, PoolConfig, SslConfig
 
 
 async def example_default_ssl():

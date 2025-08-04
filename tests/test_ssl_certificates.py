@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql import SslConfig
+    from fastmssql import SslConfig
 except ImportError as e:
     pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
 

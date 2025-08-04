@@ -5,7 +5,7 @@ Test SSL configuration implementation
 import pytest
 import tempfile
 import os
-from mssql import SslConfig
+from fastmssql import SslConfig
 
 
 def test_ssl_config_creation():

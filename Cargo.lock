@@ -252,6 +252,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastmssql_core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bb8",
+ "bb8-tiberius",
+ "chrono",
+ "futures",
+ "pyo3",
+ "pyo3-asyncio",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tiberius",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -642,26 +662,6 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "mssql-python-rust"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bb8",
- "bb8-tiberius",
- "chrono",
- "futures",
- "pyo3",
- "pyo3-asyncio",
- "serde",
- "serde_json",
- "tempfile",
- "tiberius",
- "tokio",
- "tokio-util",
- "uuid",
 ]
 
 [[package]]
