@@ -5,7 +5,7 @@ This module provides convenient Python functions that wrap the Rust core functio
 Supports asynchronous operations only.
 """
 
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Iterable
 
 try:
     # Try to import the compiled Rust module directly
@@ -14,16 +14,22 @@ except ImportError:
     # Fallback for development
     try:
         import mssql_python_rust as _core
-    except ImportError:
+    except ImportError as e:
         import sys
-        print("mssql_python_rust module not found. Make sure you've built it with 'maturin develop'")
+        print(f"ERROR: mssql_python_rust module not found: {e}")
+        print("Solution: Build the extension with 'maturin develop' or 'maturin develop --release'")
+        print("Make sure you're in the project root directory and have Rust/Maturin installed.")
         sys.exit(1)
 
 class Row:
     """Python wrapper around Row for better type hints and documentation."""
     
-    def __init__(self, py_row):
-        """Initialize with a Row instance."""
+    def __init__(self, py_row: Any) -> None:
+        """Initialize with a Row instance.
+        
+        Args:
+            py_row: The underlying Rust Row instance
+        """
         self._row = py_row
     
     def get(self, column: Union[str, int]) -> Any:
@@ -201,18 +207,87 @@ class PoolConfig:
 class Parameter:
     """Represents a SQL parameter with value and optional type information."""
     
-    def __init__(self, value: Any, sql_type: Optional[str] = None):
+    # Valid SQL parameter types (base types without parameters)
+    VALID_SQL_TYPES = {
+        'VARCHAR', 'NVARCHAR', 'CHAR', 'NCHAR', 'TEXT', 'NTEXT',
+        'INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'BIT',
+        'FLOAT', 'REAL', 'DECIMAL', 'NUMERIC', 'MONEY', 'SMALLMONEY',
+        'DATETIME', 'DATETIME2', 'SMALLDATETIME', 'DATE', 'TIME', 'DATETIMEOFFSET',
+        'BINARY', 'VARBINARY', 'IMAGE',
+        'UNIQUEIDENTIFIER', 'XML', 'JSON'
+    }
+    
+    @staticmethod
+    def _extract_base_type(sql_type: str) -> str:
+        """Extract the base SQL type from a type specification.
+        
+        Examples:
+            VARCHAR(50) -> VARCHAR
+            NVARCHAR(MAX) -> NVARCHAR
+            DECIMAL(10,2) -> DECIMAL
+            INT -> INT
+        """
+        # Find the first opening parenthesis and extract everything before it
+        paren_pos = sql_type.find('(')
+        if paren_pos != -1:
+            return sql_type[:paren_pos].strip().upper()
+        return sql_type.strip().upper()
+    
+    def __init__(self, value: Any, sql_type: Optional[str] = None) -> None:
         """Initialize a parameter.
         
         Args:
-            value: The parameter value (None, bool, int, float, str, bytes)
-            sql_type: Optional SQL type hint (e.g., 'VARCHAR', 'INT', 'DATETIME')
+            value: The parameter value (None, bool, int, float, str, bytes, or iterable for IN clauses)
+            sql_type: Optional SQL type hint. Can include parameters:
+                     - 'VARCHAR(50)', 'NVARCHAR(MAX)', 'DECIMAL(10,2)', etc.
+                     - Base types: 'VARCHAR', 'INT', 'DATETIME', etc.
+            
+        Raises:
+            ValueError: If sql_type is provided but the base type is not recognized
+            
+        Note:
+            Lists, tuples, sets and other iterables (except strings/bytes) are automatically
+            expanded for use in IN clauses. So Parameter([1, 2, 3]) will expand to 
+            placeholder values for "WHERE id IN (@P1, @P2, @P3)".
         """
-        self.value = value
-        self.sql_type = sql_type
+        # Automatically detect iterables for IN clause expansion
+        if self._is_iterable_value(value):
+            self.value = list(value)  # Convert to list for consistency
+            self.is_expanded = True
+        else:
+            self.value = value
+            self.is_expanded = False
+        
+        if sql_type is not None:
+            # Extract base type and validate it
+            base_type = self._extract_base_type(sql_type)
+            if base_type not in self.VALID_SQL_TYPES:
+                raise ValueError(
+                    f"Invalid sql_type '{sql_type}'. Base type '{base_type}' not recognized. "
+                    f"Valid base types: {', '.join(sorted(self.VALID_SQL_TYPES))}"
+                )
+            # Store the original type specification (including parameters)
+            self.sql_type = sql_type.upper()
+        else:
+            self.sql_type = None
+    
+    @staticmethod
+    def _is_iterable_value(value: Any) -> bool:
+        """Check if a value is an iterable that can be expanded for IN clauses.
+        
+        Returns True for lists, tuples, sets, etc., but False for strings and bytes
+        which should be treated as single values.
+        """
+        return (
+            hasattr(value, '__iter__') and 
+            not isinstance(value, (str, bytes))
+        )
     
     def __repr__(self) -> str:
-        if self.sql_type:
+        if self.is_expanded:
+            type_info = f", type={self.sql_type}" if self.sql_type else ""
+            return f"Parameter(IN_values={self.value!r}{type_info})"
+        elif self.sql_type:
             return f"Parameter(value={self.value!r}, type={self.sql_type})"
         return f"Parameter(value={self.value!r})"
 
@@ -224,13 +299,25 @@ class Parameters:
         """Initialize parameters container.
         
         Args:
-            *args: Positional parameter values (for ? placeholders)
+            *args: Positional parameter values. Can be individual values or iterables.
+                  Iterables (lists, tuples, etc.) will be expanded by Rust for performance.
+                  Strings and bytes are treated as single values, not expanded.
             **kwargs: Named parameter values (for @name placeholders, if supported)
+        
+        Examples:
+            # Individual parameters
+            params = Parameters(1, "hello", 3.14)
+            
+            # Mix of individual and iterable parameters (expansion handled in Rust)
+            params = Parameters(1, [2, 3, 4], "hello")  # Rust expands [2,3,4] automatically
+            
+            # All types of iterables work
+            params = Parameters([1, 2], (3, 4), {5, 6})  # All expanded by Rust
         """
         self._positional = []
         self._named = {}
         
-        # Handle positional parameters
+        # Handle positional parameters - let Rust handle expansion
         for arg in args:
             if isinstance(arg, Parameter):
                 self._positional.append(arg)
@@ -248,13 +335,42 @@ class Parameters:
         """Add a positional parameter and return self for chaining.
         
         Args:
-            value: Parameter value
+            value: Parameter value (can be an iterable for automatic expansion by Rust)
             sql_type: Optional SQL type hint
             
         Returns:
             Self for method chaining
+            
+        Examples:
+            params = Parameters().add(42).add("hello")
+            params = Parameters().add([1, 2, 3])  # Rust expands automatically
         """
         self._positional.append(Parameter(value, sql_type))
+        return self
+    
+    def extend(self, other: Union['Parameters', Iterable[Any]]) -> 'Parameters':
+        """Extend parameters with another Parameters object or iterable.
+        
+        Args:
+            other: Another Parameters object or an iterable of values
+            
+        Returns:
+            Self for method chaining
+            
+        Examples:
+            params1 = Parameters(1, 2)
+            params2 = Parameters(3, 4)
+            params1.extend(params2)  # params1 now has [1, 2, 3, 4]
+            
+            params = Parameters(1, 2)
+            params.extend([3, 4, 5])  # params now has [1, 2, [3, 4, 5]] - Rust handles expansion
+        """
+        if isinstance(other, Parameters):
+            self._positional.extend(other._positional)
+            self._named.update(other._named)
+        else:
+            # Add as single parameter - Rust will expand if it's an iterable
+            self._positional.append(Parameter(other))
         return self
     
     def set(self, name: str, value: Any, sql_type: Optional[str] = None) -> 'Parameters':
@@ -282,7 +398,11 @@ class Parameters:
         return self._named.copy()
     
     def to_list(self) -> List[Any]:
-        """Convert to simple list of values for compatibility."""
+        """Convert to simple list of values for compatibility.
+        
+        Note: Iterable expansion is now handled by Rust for performance,
+        so this returns the raw values as-is.
+        """
         return [param.value for param in self._positional]
     
     def __len__(self) -> int:
@@ -476,30 +596,50 @@ class Connection:
         """Check if connected to the database."""
         return await self._conn.is_connected()
     
-    async def execute(self, sql: str, parameters: Optional[Union[List[Any], Parameters]] = None) -> ExecutionResult:
+    async def execute(self, sql: str, parameters: Optional[Union[List[Any], Parameters, Iterable[Any]]] = None) -> ExecutionResult:
         """Execute a query asynchronously and return enhanced results.
         
         Args:
-            sql: SQL query to execute
+            sql: SQL query to execute (must be non-empty)
             parameters: Optional parameters - can be:
                        - List of values for @P1 placeholders
                        - Parameters object for more control
+                       - Any iterable of values (tuple, set, generator, etc.)
             
         Returns:
             ExecutionResult object with rows or affected row count
+            
+        Raises:
+            RuntimeError: If not connected to database
+            ValueError: If sql is empty or None
             
         Examples:
             # Simple list of parameters
             result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", [18, "John"])
             
-            # Using Parameters object
-            params = Parameters(18, "John")
-            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", params)
+            # Using tuple
+            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", (18, "John"))
+            
+            # Automatic IN clause expansion (handled by Rust for performance)
+            result = await conn.execute("SELECT * FROM users WHERE id IN (@P1)", [[1, 2, 3, 4]])
+            # Rust automatically expands to: WHERE id IN (@P1, @P2, @P3, @P4)
+            
+            # Using Parameters with automatic IN clause expansion
+            params = Parameters([1, 2, 3, 4], "John")
+            result = await conn.execute("SELECT * FROM users WHERE id IN (@P1) AND name = @P2", params)
+            # Rust expands the list automatically
             
             # Using Parameters with type hints
-            params = Parameters().add(18, "INT").add("John", "VARCHAR")
-            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND name = @P2", params)
+            params = Parameters(Parameter([1, 2, 3, 4], "INT"), "John")
+            result = await conn.execute("SELECT * FROM users WHERE id IN (@P1) AND name = @P2", params)
+            
+            # Method chaining with iterables
+            params = Parameters().add(18, "INT").add(["admin", "user"])
+            result = await conn.execute("SELECT * FROM users WHERE age > @P1 AND role IN (@P2)", params)
         """
+        if not sql or not sql.strip():
+            raise ValueError("SQL query cannot be empty or None")
+            
         if not self._connected:
             raise RuntimeError("Not connected to database. Call await conn.connect() first.")
         
@@ -509,9 +649,14 @@ class Connection:
             # Convert Parameters object to list of values
             param_values = parameters.to_list()
             py_result = await self._conn.execute_with_python_params(sql, param_values)
+        elif hasattr(parameters, '__iter__') and not isinstance(parameters, (str, bytes)):
+            # Handle any iterable (list, tuple, set, generator, etc.)
+            # Convert to list to ensure we can pass it to the Rust layer
+            param_values = list(parameters)
+            py_result = await self._conn.execute_with_python_params(sql, param_values)
         else:
-            # Assume it's a list
-            py_result = await self._conn.execute_with_python_params(sql, parameters)
+            # Single value - wrap in list
+            py_result = await self._conn.execute_with_python_params(sql, [parameters])
         
         return ExecutionResult(py_result)
     
@@ -543,7 +688,7 @@ PyQuery = _core.Query
 
 # Export main API
 __all__ = [
-    'Connection',        # Main connection class
+    'Connection',       # Main connection class
     'Parameter',        # Individual parameter with optional type
     'Parameters',       # Parameter container for execute()
     'Row', 

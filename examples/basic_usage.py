@@ -70,7 +70,7 @@ async def main():
         async with Connection(connection_string) as conn:
             # This would normally be used for CREATE TABLE, INSERT, etc.
             # For demo purposes, we'll use a SELECT that doesn't return rows
-            rows_affected = await conn.execute_non_query("SELECT 1 WHERE 1=0")
+            rows_affected = await conn.execute("SELECT 1 WHERE 1=0")
             print(f"Rows affected: {rows_affected}")
         
         # Example 5: Concurrent queries

@@ -438,13 +438,13 @@ async def test_stress_mixed_operations():
                 for i in range(num_operations):
                     if i % 3 == 0:
                         # Insert operation
-                        await conn.execute_non_query(f"""
+                        await conn.execute(f"""
                             INSERT INTO test_stress_operations (operation_type, data_value) 
                             VALUES ('INSERT', {i})
                         """)
                     elif i % 3 == 1:
                         # Update operation
-                        await conn.execute_non_query(f"""
+                        await conn.execute(f"""
                             UPDATE test_stress_operations 
                             SET data_value = data_value + 1 
                             WHERE id % 10 = {i % 10}
