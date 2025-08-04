@@ -512,14 +512,14 @@ mod tests {
             "Server=localhost;Database=test;Integrated Security=true".to_string()
         });
         
-        let connection = PyConnection::new(Some(conn_string), None, None, None, None, None, None, None).expect("Failed to create connection");
+        let _connection = PyConnection::new(Some(conn_string), None, None, None, None, None, None, None).expect("Failed to create connection");
         // Connection object created successfully
         // Actual connection testing would require async runtime and real database
     }
     
     #[test]
     fn test_connection_with_individual_params() {
-        let connection = PyConnection::new(
+        let _connection = PyConnection::new(
             None, // no connection string
             None, // default pool config
             None, // no SSL config
@@ -535,7 +535,7 @@ mod tests {
     
     #[test]
     fn test_connection_with_sql_auth() {
-        let connection = PyConnection::new(
+        let _connection = PyConnection::new(
             None, // no connection string
             None, // default pool config
             None, // no SSL config
