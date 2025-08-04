@@ -15,10 +15,12 @@ import asyncio
 import time
 import pytest
 import random
+import os
 
 # Test configuration
-TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
-
+TEST_CONNECTION_STRING = os.getenv(
+    "FASTMSSQL_TEST_CONNECTION_STRING",
+)
 try:
     # Import the classes from the Python wrapper module  
     from fastmssql import Connection, PoolConfig

@@ -20,8 +20,9 @@ except ImportError:
     pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration
-TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
-
+TEST_CONNECTION_STRING = os.getenv(
+    "FASTMSSQL_TEST_CONNECTION_STRING",
+)
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio

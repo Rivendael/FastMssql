@@ -18,8 +18,9 @@ except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
-TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
-
+TEST_CONNECTION_STRING = os.getenv(
+    "FASTMSSQL_TEST_CONNECTION_STRING",
+)
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_numeric_types():

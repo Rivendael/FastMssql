@@ -20,8 +20,9 @@ import os
 import random
 
 # Test configuration
-TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
-
+TEST_CONNECTION_STRING = os.getenv(
+    "FASTMSSQL_TEST_CONNECTION_STRING",
+)
 try:
     from fastmssql import Connection, PoolConfig
     MSSQL_AVAILABLE = True
