@@ -65,7 +65,7 @@ class ConnectionTracker:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_context_manager_exception_handling():
     """Test async context manager behavior when exceptions occur."""
     tracker = ConnectionTracker()
@@ -143,7 +143,7 @@ async def test_async_context_manager_exception_handling():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_nested_async_context_managers():
     """Test nested async context managers and their interaction."""
     operation_log = []
@@ -224,7 +224,7 @@ async def test_nested_async_context_managers():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_timeout_and_cancellation():
     """Test timeout behavior and task cancellation with async connections."""
     async def long_running_operation(operation_id: int, duration: int):
@@ -337,7 +337,7 @@ async def test_async_timeout_and_cancellation():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_connection_resource_cleanup():
     """Test that async connections properly clean up resources."""
     try:
@@ -462,7 +462,7 @@ async def test_async_connection_resource_cleanup():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_async_context_manager_with_background_tasks():
     """Test async context managers with background tasks and complex workflows."""
     try:

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(

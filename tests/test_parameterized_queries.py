@@ -25,7 +25,7 @@ TEST_CONNECTION_STRING = os.getenv(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_simple_parameterized_query():
     """Test executing a simple parameterized query."""
     try:
@@ -44,7 +44,7 @@ async def test_simple_parameterized_query():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_parameter_types():
     """Test different parameter types."""
     try:
@@ -79,7 +79,7 @@ async def test_parameter_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="mssql_python_rust not available")
+@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
 async def test_string_sql_injection_protection():
     """Test that parameterized queries protect against SQL injection."""
     try:
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         print("Running parameterized queries smoke test...")
         
         if not MSSQL_AVAILABLE:
-            print("mssql_python_rust not available - skipping smoke test")
+            print("fastmssql not available - skipping smoke test")
             return
         
         try:
