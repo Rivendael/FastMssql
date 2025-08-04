@@ -36,13 +36,22 @@ This library uses the high-performance **bb8 connection pool** which provides:
 
 ## Installation
 
+### From PyPI (Recommended)
+
+Install fastmssql using pip:
+
+```bash
+pip install fastmssql
+```
+
 ### Prerequisites
 
-- Python 3.8 or higher
-- Rust toolchain (for building from source)
+- Python 3.8 to 3.12
 - Microsoft SQL Server (any recent version)
 
-### From Source
+### From Source (Development)
+
+If you want to build from source or contribute to development:
 
 1. Clone the repository:
 ```bash
