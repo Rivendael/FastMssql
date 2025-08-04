@@ -7,7 +7,7 @@ A high-performance Python library for Microsoft SQL Server, built with Rust usin
 
 - **High Performance**: Built with Rust for memory safety and speed
 - **Connection Pooling**: Advanced bb8-based connection pool for optimal performance
-- **Async-First Design**: Built on Tokio for excellent concurrency with clean async/await API
+- **Async-Only Design**: Built on Tokio for excellent concurrency with clean async/await API
 - **Context Managers**: Automatic resource management with `async with`
 - **Type Safety**: Strong typing with automatic Python type conversion
 - **Thread Safety**: Full support for concurrent operations
@@ -485,35 +485,30 @@ The library uses the bb8 connection pool for efficient resource management:
 
 ```python
 try:
-    with mssql.connect(connection_string) as conn:
-        result = conn.execute("SELECT * FROM invalid_table")
+    async with mssql.connect_async(connection_string) as conn:
+        result = await conn.execute("SELECT * FROM invalid_table")
 except Exception as e:
     print(f"Database error: {e}")
     # Connection automatically returned to pool even on error
 ```
 
-## Migration from Single Connection Architecture
+## Migration to Async-Only Architecture
 
-This library has been upgraded from single connection management to use the bb8 connection pool for improved performance and reliability. The API remains largely compatible:
+This library has been upgraded to use async-only operations with the bb8 connection pool for improved performance and reliability.
 
-**Before (Single Connection):**
-```python
-with mssql.connect(conn_str) as conn:
-    result = conn.execute("SELECT * FROM table")
-```
-
-**After (bb8 Connection Pool):**
+**Async-Only API:**
 ```python  
-# Same API, but now with automatic connection pooling
-with mssql.connect(conn_str) as conn:
-    result = conn.execute("SELECT * FROM table")
+# Async-only with automatic connection pooling
+async with mssql.connect_async(conn_str) as conn:
+    result = await conn.execute("SELECT * FROM table")
     
-    # New: Pool statistics
+    # Pool statistics
     stats = conn.pool_stats()
     print(f"Pool utilization: {stats['active_connections']}/{stats['connections']}")
 ```
 
-**New Features:**
+**Features:**
+- Async-only operations for maximum performance
 - Automatic connection pooling with bb8
 - Configurable pool settings via `PoolConfig`
 - Pool statistics and monitoring

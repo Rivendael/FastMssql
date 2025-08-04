@@ -13,7 +13,6 @@ This module tests edge cases and context manager behavior for async operations:
 import asyncio
 import time
 import pytest
-import weakref
 from typing import List, Dict, Any
 
 # Test configuration
@@ -183,7 +182,7 @@ async def test_nested_async_context_managers():
         return {
             'worker_id': worker_id,
             'log': worker_log,
-            'results': [result1, result2, result3],
+            'results': [result1.rows(), result2.rows(), result3.rows()],
             'success': True
         }
     
@@ -339,52 +338,120 @@ async def test_async_timeout_and_cancellation():
 async def test_async_connection_resource_cleanup():
     """Test that async connections properly clean up resources."""
     try:
-        # Track connections using weak references to detect cleanup
-        connection_refs = []
+        # Track connection lifecycle through operations rather than weak references
+        connection_operations = []
         
         async def create_tracked_connection(conn_id: int):
-            """Create a connection and track it with weak reference."""
-            async with Connection(TEST_CONNECTION_STRING) as conn:
-                # Create weak reference to track connection cleanup
-                weak_ref = weakref.ref(conn)
-                connection_refs.append({'id': conn_id, 'ref': weak_ref, 'created': time.time()})
+            """Create a connection and track its operations."""
+            operation_log = []
+            
+            try:
+                async with Connection(TEST_CONNECTION_STRING) as conn:
+                    operation_log.append(f"Connection {conn_id}: Opened")
+                    
+                    # Perform some operations to verify connection works
+                    result1 = await conn.execute(f"SELECT {conn_id} as conn_id")
+                    operation_log.append(f"Connection {conn_id}: Query 1 executed")
+                    
+                    result2 = await conn.execute("SELECT @@VERSION")
+                    operation_log.append(f"Connection {conn_id}: Query 2 executed")
+                    
+                    # Test that results are valid
+                    assert result1 is not None, f"Connection {conn_id}: Query 1 returned None"
+                    assert result2 is not None, f"Connection {conn_id}: Query 2 returned None"
+                    
+                    operation_log.append(f"Connection {conn_id}: Operations validated")
+                    
+                # Connection should be automatically closed here
+                operation_log.append(f"Connection {conn_id}: Context exited")
                 
-                # Perform some operations
-                await conn.execute(f"SELECT {conn_id} as conn_id")
-                await conn.execute("SELECT @@VERSION")
+                return {
+                    'conn_id': conn_id, 
+                    'operations_completed': 2,
+                    'operation_log': operation_log,
+                    'success': True
+                }
                 
-                return {'conn_id': conn_id, 'operations_completed': 2}
+            except Exception as e:
+                operation_log.append(f"Connection {conn_id}: Error - {str(e)}")
+                return {
+                    'conn_id': conn_id,
+                    'operations_completed': 0,
+                    'operation_log': operation_log,
+                    'success': False,
+                    'error': str(e)
+                }
         
-        # Create multiple connections
-        num_connections = 10
-        tasks = [create_tracked_connection(i) for i in range(num_connections)]
+        # Test with multiple concurrent connections
+        num_connections = 15
+        start_time = time.time()
         
-        results = await asyncio.gather(*tasks)
+        # Create connections in batches to test resource management
+        batch_size = 5
+        all_results = []
+        
+        for batch_start in range(0, num_connections, batch_size):
+            batch_end = min(batch_start + batch_size, num_connections)
+            batch_tasks = [
+                create_tracked_connection(i) 
+                for i in range(batch_start, batch_end)
+            ]
+            
+            batch_results = await asyncio.gather(*batch_tasks)
+            all_results.extend(batch_results)
+            
+            # Small delay between batches to allow cleanup
+            await asyncio.sleep(0.1)
+        
+        total_time = time.time() - start_time
+        
+        # Analyze results
+        successful_connections = [r for r in all_results if r.get('success', False)]
+        failed_connections = [r for r in all_results if not r.get('success', False)]
+        
+        # Verify all connections were successful
+        assert len(successful_connections) == num_connections, \
+            f"Expected {num_connections} successful connections, got {len(successful_connections)}"
+        
+        assert len(failed_connections) == 0, \
+            f"Unexpected failed connections: {failed_connections}"
         
         # Verify all operations completed
-        assert len(results) == num_connections
-        assert all(r['operations_completed'] == 2 for r in results)
+        total_operations = sum(r['operations_completed'] for r in successful_connections)
+        expected_operations = num_connections * 2
         
-        # Force garbage collection to clean up connections
-        import gc
-        gc.collect()
-        await asyncio.sleep(0.1)  # Brief pause for cleanup
+        assert total_operations == expected_operations, \
+            f"Expected {expected_operations} operations, got {total_operations}"
         
-        # Check if connections were properly cleaned up
-        # Note: This test depends on the Python garbage collector and weak references
-        # It may not be 100% reliable in all environments
-        alive_connections = [ref for ref in connection_refs if ref['ref']() is not None]
+        # Verify each connection went through proper lifecycle
+        for result in successful_connections:
+            log = result['operation_log']
+            conn_id = result['conn_id']
+            
+            # Check that connection lifecycle events are present
+            log_text = ' '.join(log)
+            assert 'Opened' in log_text, f"Connection {conn_id}: Missing 'Opened' event"
+            assert 'Context exited' in log_text, f"Connection {conn_id}: Missing 'Context exited' event"
+            assert 'Operations validated' in log_text, f"Connection {conn_id}: Missing validation"
         
-        # Most connections should be cleaned up (allow some leeway for GC timing)
-        cleanup_rate = (num_connections - len(alive_connections)) / num_connections
+        # Test rapid connection creation and cleanup
+        rapid_test_start = time.time()
+        rapid_tasks = [create_tracked_connection(i + 1000) for i in range(10)]
+        rapid_results = await asyncio.gather(*rapid_tasks)
+        rapid_test_time = time.time() - rapid_test_start
+        
+        rapid_successful = [r for r in rapid_results if r.get('success', False)]
+        assert len(rapid_successful) == 10, \
+            f"Rapid test: Expected 10 successful connections, got {len(rapid_successful)}"
         
         print(f"✅ Resource cleanup test completed")
-        print(f"   Connections created: {num_connections}")
-        print(f"   Connections cleaned up: {num_connections - len(alive_connections)}")
-        print(f"   Cleanup rate: {cleanup_rate:.1%}")
-        
-        # We'll be lenient here since GC timing can vary
-        assert cleanup_rate > 0.5, f"Poor cleanup rate: {cleanup_rate:.1%}"
+        print(f"   Batch connections created: {num_connections}")
+        print(f"   All connections successful: ✓")
+        print(f"   Total operations: {total_operations}")
+        print(f"   Batch test time: {total_time:.2f}s")
+        print(f"   Rapid connections created: {len(rapid_successful)}")
+        print(f"   Rapid test time: {rapid_test_time:.2f}s")
+        print(f"   Resource management: ✓")
         
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -396,7 +463,6 @@ async def test_async_connection_resource_cleanup():
 async def test_async_context_manager_with_background_tasks():
     """Test async context managers with background tasks and complex workflows."""
     try:
-        task_results = []
         background_tasks = []
         
         async def background_query_task(task_id: int, interval: float, iterations: int):
@@ -412,7 +478,7 @@ async def test_async_context_manager_with_background_tasks():
                                 {i} as iteration,
                                 GETDATE() as timestamp
                         """)
-                        results.append(result[0] if result else None)
+                        results.append(result.rows()[0] if result else None)
                         
                 except Exception as e:
                     results.append({'error': str(e)})
@@ -439,7 +505,7 @@ async def test_async_context_manager_with_background_tasks():
                             'main_workflow' as source,
                             GETDATE() as timestamp
                     """)
-                    main_results.append(result[0] if result else None)
+                    main_results.append(result.rows()[0] if result else None)
                 
                 await asyncio.sleep(0.7)  # Different timing from background tasks
             

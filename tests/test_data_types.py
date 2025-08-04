@@ -8,14 +8,12 @@ between Rust/Tiberius and Python types.
 import pytest
 import sys
 import os
-from datetime import datetime, date, time
-from decimal import Decimal
 
 # Add the parent directory to Python path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from mssql_python_rust import Connection
+    from mssql import Connection
 except ImportError:
     pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
 
@@ -23,11 +21,12 @@ except ImportError:
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
 
 @pytest.mark.integration
-def test_numeric_types():
+@pytest.mark.asyncio
+async def test_numeric_types():
     """Test all numeric SQL Server data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     CAST(127 AS TINYINT) as tinyint_val,
                     CAST(32767 AS SMALLINT) as smallint_val,
@@ -41,29 +40,32 @@ def test_numeric_types():
                     CAST(123.4567 AS SMALLMONEY) as smallmoney_val
             """)
             
+            assert result.has_rows()
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
-            assert row['tinyint_val'] == 127
-            assert row['smallint_val'] == 32767
-            assert row['int_val'] == 2147483647
-            assert row['bigint_val'] == 9223372036854775807
-            assert abs(row['float_val'] - 3.14159265359) < 0.0001
-            assert abs(row['real_val'] - 99.99) < 0.001
-            assert abs(row['decimal_val'] - 123.456) < 0.001
-            assert abs(row['numeric_val'] - 999.99) < 0.01
-            assert abs(row['money_val'] - 12345.67) < 0.01
-            assert abs(row['smallmoney_val'] - 123.4567) < 0.0001
+            assert row.get('tinyint_val') == 127
+            assert row.get('smallint_val') == 32767
+            assert row.get('int_val') == 2147483647
+            assert row.get('bigint_val') == 9223372036854775807
+            assert abs(row.get('float_val') - 3.14159265359) < 0.0001
+            assert abs(row.get('real_val') - 99.99) < 0.001
+            assert abs(row.get('decimal_val') - 123.456) < 0.001
+            assert abs(row.get('numeric_val') - 999.99) < 0.01
+            assert abs(row.get('money_val') - 12345.67) < 0.01
+            assert abs(row.get('smallmoney_val') - 123.4567) < 0.0001
             
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_string_types():
+@pytest.mark.asyncio
+async def test_string_types():
     """Test all string SQL Server data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     CAST('Hello' AS CHAR(10)) as char_val,
                     CAST('World' AS VARCHAR(50)) as varchar_val,
@@ -75,27 +77,31 @@ def test_string_types():
                     CAST('NText data' AS NTEXT) as ntext_val
             """)
             
+            assert result.has_rows()
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
-            assert row['char_val'].strip() == 'Hello'  # CHAR is padded
-            assert row['varchar_val'] == 'World'
-            assert row['varchar_max_val'] == 'Test'
-            assert row['nchar_val'].strip() == 'Unicode'  # NCHAR is padded
-            assert row['nvarchar_val'] == 'String'
-            assert row['nvarchar_max_val'] == 'Max Unicode'
-            assert row['text_val'] == 'Text data'
-            assert row['ntext_val'] == 'NText data'
+            assert row.get('char_val').strip() == 'Hello'  # CHAR is padded
+            assert row.get('varchar_val') == 'World'
+            assert row.get('varchar_max_val') == 'Test'
+            assert row.get('nchar_val').strip() == 'Unicode'  # NCHAR is padded
+            assert row.get('nvarchar_val') == 'String'
+            assert row.get('nvarchar_max_val') == 'Max Unicode'
+            assert row.get('text_val') == 'Text data'
+            assert row.get('ntext_val') == 'NText data'
             
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_datetime_types():
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_datetime_types():
     """Test all date/time SQL Server data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     CAST('2023-12-25' AS DATE) as date_val,
                     CAST('14:30:45' AS TIME) as time_val,
@@ -105,6 +111,7 @@ def test_datetime_types():
                     CAST('1900-01-01 14:30:45' AS SMALLDATETIME) as smalldatetime_val
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
@@ -120,11 +127,12 @@ def test_datetime_types():
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_binary_types():
+@pytest.mark.asyncio
+async def test_binary_types():
     """Test binary SQL Server data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     CAST(0x48656C6C6F AS BINARY(10)) as binary_val,
                     CAST(0x576F726C64 AS VARBINARY(50)) as varbinary_val,
@@ -132,6 +140,7 @@ def test_binary_types():
                     CAST('Binary data' AS IMAGE) as image_val
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
@@ -145,11 +154,12 @@ def test_binary_types():
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_special_types():
+@pytest.mark.asyncio
+async def test_special_types():
     """Test special SQL Server data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     CAST(1 AS BIT) as bit_true,
                     CAST(0 AS BIT) as bit_false,
@@ -159,6 +169,7 @@ def test_special_types():
                     CAST('{"key": "value"}' AS NVARCHAR(MAX)) as json_like_val
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
@@ -173,11 +184,12 @@ def test_special_types():
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_null_values():
+@pytest.mark.asyncio
+async def test_null_values():
     """Test NULL handling across different data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     CAST(NULL AS INT) as null_int,
                     CAST(NULL AS VARCHAR(50)) as null_varchar,
@@ -187,6 +199,7 @@ def test_null_values():
                     CAST(NULL AS UNIQUEIDENTIFIER) as null_guid
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
@@ -201,18 +214,21 @@ def test_null_values():
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_large_values():
+@pytest.mark.asyncio
+async def test_large_values():
     """Test handling of large values."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test large string
             large_string = 'A' * 8000  # 8KB string
-            rows = conn.execute(f"SELECT '{large_string}' as large_string")
+            result = await conn.execute(f"SELECT '{large_string}' as large_string")
+            rows = result.rows()
             assert len(rows) == 1
             assert rows[0]['large_string'] == large_string
             
             # Test very large number
-            rows = conn.execute("SELECT CAST(9223372036854775806 AS BIGINT) as large_bigint")
+            result = await conn.execute("SELECT CAST(9223372036854775806 AS BIGINT) as large_bigint")
+            rows = result.rows()
             assert len(rows) == 1
             assert rows[0]['large_bigint'] == 9223372036854775806
             
@@ -228,7 +244,7 @@ async def test_async_data_types():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test with simpler query to avoid potential datetime issues in async context
-            rows = await conn.execute("""
+            result = await conn.execute("""
                 SELECT 
                     42 as int_val,
                     'async_string' as str_val,
@@ -237,6 +253,7 @@ async def test_async_data_types():
                     NULL as null_val
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             

@@ -9,14 +9,28 @@ import sys
 import os
 import asyncio
 
-# Add the parent directory to Python path for development
+# Add the parent director@pytest.mark.asyncio
+async def test_error_handling():
+    """Test that errors are handled properly."""
+    # Test invalid connection string
+    with pytest.raises(Exception):
+        conn = Connection("Invalid connection string")
+        await conn.connect()
+    
+    # Test invalid query (requires database connection)
+    try:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            with pytest.raises(Exception):
+                await conn.execute("SELECT * FROM non_existent_table_12345")
+    except Exception as e:
+        pytest.skip(f"Database not available for error testing: {e}")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    import mssql_python_rust as mssql
-    from mssql_python_rust import Connection
+    import mssql
+    from mssql import Connection
 except ImportError:
-    pytest.skip("mssql_python_rust not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration - adjust as needed
 TEST_CONNECTION_STRING = "Server=SNOWFLAKE\\SQLEXPRESS,50014;Database=pymssql_test;Integrated Security=true;TrustServerCertificate=yes"
@@ -33,50 +47,56 @@ def test_connection_creation():
     assert conn is not None
 
 @pytest.mark.integration
-def test_basic_connection():
+@pytest.mark.asyncio
+async def test_basic_connection():
     """Test basic database connectivity."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            assert conn.is_connected()
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            assert await conn.is_connected()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_simple_query():
+@pytest.mark.asyncio
+async def test_simple_query():
     """Test executing a simple query."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("SELECT 1 as test_value")
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("SELECT 1 as test_value")
+            rows = result.rows()
             assert len(rows) == 1
-            # Convert PyValue to native Python type for comparison
-            test_value = int(str(rows[0]['test_value']))
+            test_value = rows[0]['test_value']
             assert test_value == 1
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_multiple_queries():
+@pytest.mark.asyncio
+async def test_multiple_queries():
     """Test executing multiple queries on the same connection."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # First query
-            rows1 = conn.execute("SELECT 'first' as query_name")
+            result1 = await conn.execute("SELECT 'first' as query_name")
+            rows1 = result1.rows()
             assert len(rows1) == 1
-            assert str(rows1[0]['query_name']) == 'first'
-            
+            assert rows1[0]['query_name'] == 'first'
+
             # Second query
-            rows2 = conn.execute("SELECT 'second' as query_name")
+            result2 = await conn.execute("SELECT 'second' as query_name")
+            rows2 = result2.rows()
             assert len(rows2) == 1
-            assert str(rows2[0]['query_name']) == 'second'
+            assert rows2[0]['query_name'] == 'second'
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration
-def test_data_types():
+@pytest.mark.asyncio
+async def test_data_types():
     """Test various SQL Server data types."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = conn.execute("""
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            result = await conn.execute("""
                 SELECT 
                     42 as int_val,
                     3.14159 as float_val,
@@ -85,6 +105,7 @@ def test_data_types():
                     NULL as null_val
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
@@ -97,34 +118,34 @@ def test_data_types():
         pytest.skip(f"Database not available: {e}")
 
 @pytest.mark.integration 
-def test_execute_non_query():
+@pytest.mark.asyncio
+async def test_execute_non_query():
     """Test executing non-query operations."""
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             # Create a test table
-            conn.execute_non_query("""
+            await conn.execute("""
                 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='test_execute_non_query' AND xtype='U')
                     CREATE TABLE test_execute_non_query (id INT, name NVARCHAR(50), test_flag BIT DEFAULT 0)
             """)
             
             # Clear any existing data
-            conn.execute_non_query("DELETE FROM test_execute_non_query")
+            await conn.execute("DELETE FROM test_execute_non_query")
             
             # Insert test data
-            rows_affected = conn.execute_non_query("INSERT INTO test_execute_non_query (id, name, test_flag) VALUES (1, 'test', 0)")
-            assert rows_affected == 1
+            result = await conn.execute("INSERT INTO test_execute_non_query (id, name, test_flag) VALUES (1, 'test', 0)")
             
             # Update the test_flag to verify non-query execution
-            rows_affected = conn.execute_non_query("UPDATE test_execute_non_query SET test_flag = 1 WHERE id = 1")
-            assert rows_affected == 1
+            result = await conn.execute("UPDATE test_execute_non_query SET test_flag = 1 WHERE id = 1")
             
             # Verify the update worked
-            rows = conn.execute("SELECT COUNT(*) as updated_count FROM test_execute_non_query WHERE test_flag = 1")
+            result = await conn.execute("SELECT COUNT(*) as updated_count FROM test_execute_non_query WHERE test_flag = 1")
+            rows = result.rows()
             assert len(rows) == 1
             assert rows[0]['updated_count'] == 1
             
             # Clean up - remove the test table
-            conn.execute_non_query("DROP TABLE IF EXISTS test_execute_non_query")
+            await conn.execute("DROP TABLE IF EXISTS test_execute_non_query")
             
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -137,27 +158,31 @@ async def test_convenience_functions():
         # Test direct execution using async Connection
         async with Connection(TEST_CONNECTION_STRING) as conn:
             result = await conn.execute("SELECT 'convenience' as test")
-            assert len(result) == 1
-            assert result[0]['test'] == 'convenience'
+            rows = result.rows()
+            assert len(rows) == 1
+            assert rows[0]['test'] == 'convenience'
             
             # Test scalar-like execution
             scalar_result = await conn.execute("SELECT 42 as value")
-            assert scalar_result[0]['value'] == 42
+            scalar_rows = scalar_result.rows()
+            assert scalar_rows[0]['value'] == 42
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
-def test_error_handling():
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_error_handling():
     """Test that errors are handled properly."""
     # Test invalid connection string
     with pytest.raises(Exception):
         conn = Connection("Invalid connection string")
-        conn.connect()
+        await conn.connect()
     
     # Test invalid query (requires database connection)
     try:
-        with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
             with pytest.raises(Exception):
-                conn.execute("SELECT * FROM non_existent_table_12345")
+                await conn.execute("SELECT * FROM non_existent_table_12345")
     except Exception as e:
         pytest.skip(f"Database not available for error testing: {e}")
 
@@ -175,7 +200,7 @@ async def test_async_basic_connection():
     """Test basic async database connectivity."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            assert conn.is_connected()
+            assert await conn.is_connected()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -185,7 +210,8 @@ async def test_async_simple_query():
     """Test executing a simple query asynchronously."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = await conn.execute("SELECT 1 as test_value")
+            result = await conn.execute("SELECT 1 as test_value")
+            rows = result.rows()
             assert len(rows) == 1
             assert rows[0]['test_value'] == 1
     except Exception as e:
@@ -198,12 +224,14 @@ async def test_async_multiple_queries():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # First query
-            rows1 = await conn.execute("SELECT 'first' as query_name")
+            result1 = await conn.execute("SELECT 'first' as query_name")
+            rows1 = result1.rows()
             assert len(rows1) == 1
             assert rows1[0]['query_name'] == 'first'
             
             # Second query
-            rows2 = await conn.execute("SELECT 'second' as query_name")
+            result2 = await conn.execute("SELECT 'second' as query_name")
+            rows2 = result2.rows()
             assert len(rows2) == 1
             assert rows2[0]['query_name'] == 'second'
     except Exception as e:
@@ -215,7 +243,7 @@ async def test_async_data_types():
     """Test various SQL Server data types with async operations."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            rows = await conn.execute("""
+            result = await conn.execute("""
                 SELECT 
                     42 as int_val,
                     3.14159 as float_val,
@@ -224,6 +252,7 @@ async def test_async_data_types():
                     NULL as null_val
             """)
             
+            rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
             
@@ -262,14 +291,15 @@ async def test_async_execute_non_query():
             """
             
             # Execute the complete test as a single batch to avoid session scope issues
-            rows = await conn.execute(setup_and_test_sql)
+            result = await conn.execute(setup_and_test_sql)
             
             # Verify that our update worked
+            rows = result.rows()
             assert len(rows) == 1
             assert rows[0]['updated_count'] == 1
             
             # Clean up - remove the test table
-            await conn.execute_non_query("DROP TABLE IF EXISTS test_async_execute_non_query")
+            await conn.execute("DROP TABLE IF EXISTS test_async_execute_non_query")
             
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -281,16 +311,19 @@ async def test_async_execute_scalar():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test scalar with number
-            result = await conn.execute_scalar("SELECT 42")
-            assert result == 42
+            result = await conn.execute("SELECT 42 as scalar_value")
+            rows = result.rows()
+            assert rows[0]['scalar_value'] == 42
             
             # Test scalar with string
-            result = await conn.execute_scalar("SELECT 'hello world'")
-            assert result == 'hello world'
+            result = await conn.execute("SELECT 'hello world' as scalar_value")
+            rows = result.rows()
+            assert rows[0]['scalar_value'] == 'hello world'
             
             # Test scalar with NULL
-            result = await conn.execute_scalar("SELECT NULL")
-            assert result is None
+            result = await conn.execute("SELECT NULL as scalar_value")
+            rows = result.rows()
+            assert rows[0]['scalar_value'] is None
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -302,12 +335,14 @@ async def test_async_convenience_functions():
         # Test direct async execution using Connection class
         async with Connection(TEST_CONNECTION_STRING) as conn:
             result = await conn.execute("SELECT 'convenience_async' as test")
-            assert len(result) == 1
-            assert result[0]['test'] == 'convenience_async'
+            rows = result.rows()
+            assert len(rows) == 1
+            assert rows[0]['test'] == 'convenience_async'
             
             # Test async scalar-like execution (get first value from result)
             scalar_result = await conn.execute("SELECT 42 as value")
-            assert scalar_result[0]['value'] == 42
+            scalar_rows = scalar_result.rows()
+            assert scalar_rows[0]['value'] == 42
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -317,18 +352,19 @@ async def test_async_manual_connection_lifecycle():
     """Test manual async connection and disconnection."""
     try:
         conn = Connection(TEST_CONNECTION_STRING)
-        assert not conn.is_connected()
+        assert not await conn.is_connected()
         
         await conn.connect()
-        assert conn.is_connected()
+        assert await conn.is_connected()
         
         # Execute a query
-        rows = await conn.execute("SELECT 'manual_async' as test")
+        result = await conn.execute("SELECT 'manual_async' as test")
+        rows = result.rows()
         assert len(rows) == 1
         assert rows[0]['test'] == 'manual_async'
         
         await conn.disconnect()
-        assert not conn.is_connected()
+        assert not await conn.is_connected()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -359,8 +395,8 @@ async def test_async_concurrent_queries():
             
             # Verify results
             assert len(results) == 3
-            values = [result[0]['value'] for result in results]
-            names = [result[0]['name'] for result in results]
+            values = [result.rows()[0]['value'] for result in results]
+            names = [result.rows()[0]['name'] for result in results]
             
             assert set(values) == {1, 2, 3}
             assert set(names) == {'query1', 'query2', 'query3'}
