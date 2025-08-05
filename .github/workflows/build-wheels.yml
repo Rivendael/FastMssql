@@ -41,20 +41,21 @@ jobs:
         CIBW_ARCHS_MACOS: "x86_64 arm64"
         CIBW_ARCHS_WINDOWS: "AMD64"
         
-        # Install Rust in the build environment
-        CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source ~/.cargo/env"
-        CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source ~/.cargo/env"
+        # Install system dependencies and Rust
+        CIBW_BEFORE_ALL_LINUX: "yum install -y openssl-devel pkg-config curl || (apt-get update && apt-get install -y libssl-dev pkg-config curl) && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
+        CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
         CIBW_BEFORE_ALL_WINDOWS: "rustup toolchain install stable"
         
         # Install maturin in each Python environment
         CIBW_BEFORE_BUILD: "pip install maturin"
         
-        # Use maturin to build
+        # Use maturin to build with static OpenSSL
         CIBW_BUILD_COMMAND: "maturin build --release --out {wheel_dir}"
         
-        # Set environment variables for cross-compilation
-        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
+        # Set environment variables - use vendored OpenSSL to avoid system dependency issues
+        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH OPENSSL_STATIC=1 OPENSSL_VENDORED=1"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH"
+        CIBW_ENVIRONMENT_WINDOWS: "OPENSSL_STATIC=1"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
