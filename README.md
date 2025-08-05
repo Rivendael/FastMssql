@@ -71,7 +71,7 @@ pip install fastmssql
 - Microsoft SQL Server (any recent version)
 
 ### From Source (Development)
-
+Ensure you have Docker, Rust, and Python installed.
 If you want to build from source or contribute to development:
 
 1. Clone the repository:
@@ -80,24 +80,14 @@ git clone <your-repo-url>
 cd mssql-python-rust
 ```
 
-2. Install Rust if you haven't already:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
+2. Run the setup script
 ```
-
-3. Install maturin:
-```bash
-pip install -r requirements.txt
-```
-
-4. Build and install the package:
-```bash
-# Or manually
-maturin develop --release
+./setup.sh
 ```
 
 ## Quick Start
+
+> **💡 Performance Tip**: Always reuse `Connection` objects! Each `Connection` manages a connection pool, so creating multiple `Connection` instances defeats the purpose of pooling and hurts performance. Create one `Connection` per database and reuse it throughout your application.
 
 ### Basic Async Usage (Recommended)
 
@@ -228,10 +218,32 @@ asyncio.run(main())
 ```
 
 **Performance Tips:**
+- **Reuse Connection objects**: Create one `Connection` per database and reuse it across your application
 - Use `PoolConfig.high_throughput()` for maximum RPS
 - Leverage `asyncio.gather()` for concurrent operations  
 - Monitor pool stats to optimize connection count
 - Consider connection lifetime for long-running applications
+
+**⚠️ Performance Anti-Pattern:**
+```python
+# DON'T DO THIS - Creates new pool for each operation
+async def bad_example():
+    async with Connection(conn_str) as conn:  # New pool created
+        return await conn.execute("SELECT 1")
+    
+    async with Connection(conn_str) as conn:  # Another new pool created
+        return await conn.execute("SELECT 2")
+```
+
+**✅ Correct Pattern:**
+```python
+# DO THIS - Reuse the same connection pool
+async def good_example():
+    async with Connection(conn_str) as conn:  # Single pool created
+        result1 = await conn.execute("SELECT 1")
+        result2 = await conn.execute("SELECT 2")  # Reuses same pool
+        return result1, result2
+```
 
 ### Connection Pool Benefits
 
