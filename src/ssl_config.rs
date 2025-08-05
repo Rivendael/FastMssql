@@ -80,6 +80,16 @@ impl PySslConfig {
                 )));
             }
             
+            // Check if the file is readable by trying to open it
+            match std::fs::File::open(&path) {
+                Ok(_) => {}, // File is readable, continue validation
+                Err(e) => {
+                    return Err(PyValueError::new_err(format!(
+                        "CA certificate file is not readable: {} ({})", path_str, e
+                    )));
+                }
+            }
+            
             // Check file extension
             if let Some(ext) = path.extension() {
                 let ext = ext.to_string_lossy().to_lowercase();
