@@ -49,11 +49,11 @@ jobs:
         # Install maturin in each Python environment
         CIBW_BEFORE_BUILD: "pip install maturin"
         
-        # Use maturin to build with static OpenSSL
+        # Use maturin to build
         CIBW_BUILD_COMMAND: "maturin build --release --out {wheel_dir}"
         
-        # Set environment variables - use vendored OpenSSL to avoid system dependency issues
-        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH OPENSSL_STATIC=1 OPENSSL_VENDORED=1 OPENSSL_NO_PKG_CONFIG=1"
+        # Set environment variables
+        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH"
       
     - name: Upload wheels
