@@ -37,7 +37,7 @@ pip install fastmssql
 
 ### Prerequisites
 
-- Python 3.8 to 3.12
+- Python 3.8 to 3.13
 - Microsoft SQL Server (any recent version)
 
 ### From Source (Development)

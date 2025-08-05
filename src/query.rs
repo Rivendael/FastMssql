@@ -22,17 +22,17 @@ impl PyQuery {
     }
     
     /// Add a parameter to the query
-    pub fn add_parameter(&mut self, value: &PyAny) -> PyResult<()> {
+    pub fn add_parameter(&mut self, value: &Bound<PyAny>) -> PyResult<()> {
         let py_value = python_to_pyvalue(value)?;
         self.parameters.push(py_value);
         Ok(())
     }
     
     /// Set all parameters at once
-    pub fn set_parameters(&mut self, params: &PyList) -> PyResult<()> {
+    pub fn set_parameters(&mut self, params: &Bound<PyList>) -> PyResult<()> {
         self.parameters.clear();
         for param in params.iter() {
-            self.add_parameter(param)?;
+            self.add_parameter(&param)?;
         }
         Ok(())
     }
@@ -48,7 +48,7 @@ impl PyQuery {
     }
     
     /// Execute the query on a connection
-    pub fn execute<'p>(&self, py: Python<'p>, connection: &PyConnection) -> PyResult<&'p PyAny> {
+    pub fn execute<'p>(&self, py: Python<'p>, connection: &PyConnection) -> PyResult<Bound<'p, PyAny>> {
         connection.execute_with_params(py, self.sql.clone(), self.parameters.clone())
     }
     
@@ -64,7 +64,7 @@ impl PyQuery {
 }
 
 /// Convert a Python object to PyValue
-fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
+fn python_to_pyvalue(obj: &Bound<PyAny>) -> PyResult<PyValue> {
     if obj.is_none() {
         Ok(PyValue::new_null())
     } else if let Ok(b) = obj.extract::<bool>() {
