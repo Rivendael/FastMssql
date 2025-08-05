@@ -10,109 +10,11 @@ permissions: {}
 
 jobs:
   build-wheels:
+    name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          # x86_64 builds
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            python-version: "3.8"
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            python-version: "3.9"
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            python-version: "3.10"
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            python-version: "3.11"
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            python-version: "3.12"
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            python-version: "3.13"
-          
-          # ARM64 Linux builds
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            python-version: "3.8"
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            python-version: "3.9"
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            python-version: "3.10"
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            python-version: "3.11"
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            python-version: "3.12"
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            python-version: "3.13"
-          
-          # Windows x86_64 builds
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.8"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.9"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.10"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.11"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.12"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.13"
-          
-          # macOS x86_64 builds (Intel Macs)
-          - os: macos-13  # Intel runner
-            target: x86_64-apple-darwin
-            python-version: "3.8"
-          - os: macos-13
-            target: x86_64-apple-darwin
-            python-version: "3.9"
-          - os: macos-13
-            target: x86_64-apple-darwin
-            python-version: "3.10"
-          - os: macos-13
-            target: x86_64-apple-darwin
-            python-version: "3.11"
-          - os: macos-13
-            target: x86_64-apple-darwin
-            python-version: "3.12"
-          - os: macos-13
-            target: x86_64-apple-darwin
-            python-version: "3.13"
-          
-          # macOS ARM64 builds (M1/M2 Macs)
-          - os: macos-latest  # ARM runner
-            target: aarch64-apple-darwin
-            python-version: "3.8"
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            python-version: "3.9"
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            python-version: "3.10"
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            python-version: "3.11"
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            python-version: "3.12"
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            python-version: "3.13"
+        os: [ubuntu-latest, windows-latest, macos-13, macos-latest]
         
     steps:
     - uses: actions/checkout@v4
@@ -120,31 +22,45 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.x'
         
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
-      
-    - name: Install cross-compilation tools
-      if: matrix.target == 'aarch64-unknown-linux-gnu'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-aarch64-linux-gnu
-        echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-      
-    - name: Install maturin
-      run: pip install maturin
       
     - name: Build wheels
-      run: maturin build --release --target ${{ matrix.target }} --out dist
+      uses: pypa/cibuildwheel@v2.16.5
+      env:
+        # Build for Python 3.8-3.13
+        CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
+        
+        # Skip 32-bit builds and musl builds for now
+        CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux_*"
+        
+        # Build ARM64 on Linux and macOS
+        CIBW_ARCHS_LINUX: "x86_64 aarch64"
+        CIBW_ARCHS_MACOS: "x86_64 arm64"
+        CIBW_ARCHS_WINDOWS: "AMD64"
+        
+        # Install Rust in the build environment
+        CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source ~/.cargo/env"
+        CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source ~/.cargo/env"
+        CIBW_BEFORE_ALL_WINDOWS: "rustup toolchain install stable"
+        
+        # Install maturin in each Python environment
+        CIBW_BEFORE_BUILD: "pip install maturin"
+        
+        # Use maturin to build
+        CIBW_BUILD_COMMAND: "maturin build --release --out {wheel_dir}"
+        
+        # Set environment variables for cross-compilation
+        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
+        CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels-${{ matrix.os }}-${{ matrix.target }}-py${{ matrix.python-version }}
-        path: dist
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
 
   publish:
     needs: [build-wheels]
