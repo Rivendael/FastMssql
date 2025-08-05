@@ -46,7 +46,7 @@ async def test_create_drop_table():
             """
             result = await conn.execute(check_sql)
             assert result.has_rows()
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert rows[0]['table_count'] == 1
             
             # Drop table
@@ -55,7 +55,7 @@ async def test_create_drop_table():
             # Verify table is gone
             result = await conn.execute(check_sql)
             assert result.has_rows()
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert rows[0]['table_count'] == 0
             
     except Exception as e:
@@ -89,7 +89,7 @@ async def test_alter_table():
                 ORDER BY COLUMN_NAME
             """)
             assert result.has_rows()
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             columns = {row.get('COLUMN_NAME'): row for row in rows}
             assert 'description' in columns
             assert columns['name']['CHARACTER_MAXIMUM_LENGTH'] == 100
@@ -219,7 +219,7 @@ async def test_create_drop_view():
             
             # Test view
             result = await conn.execute("SELECT * FROM test_view_employees ORDER BY name")
-            assert len(result.rows()) == 2
+            assert result.has_rows() and len(result.rows()) == 2
             assert result.rows()[0]['name'] == 'Bob Johnson'
             assert result.rows()[1]['name'] == 'John Doe'
 
@@ -414,8 +414,8 @@ async def test_async_ddl_operations():
             
             # Query data
             results = await conn.execute("SELECT * FROM test_async_ddl")
-            assert len(results.rows()) == 1
-            assert results.rows()[0]['name'] == 'Async Test'
+            assert results.has_rows() and len(results.rows()) == 1
+            assert results.has_rows() and results.rows()[0]['name'] == 'Async Test'
 
             # Clean up
             await conn.execute("DROP TABLE test_async_ddl")
@@ -462,8 +462,8 @@ async def test_schema_operations():
 
             # Query data
             results = await conn.execute("SELECT * FROM test_schema.test_table")
-            assert len(results.rows()) == 1
-            assert results.rows()[0]['name'] == 'Schema Test'
+            assert results.has_rows() and len(results.rows()) == 1
+            assert results.has_rows() and results.rows()[0]['name'] == 'Schema Test'
 
             # Clean up
             try:

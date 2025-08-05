@@ -141,7 +141,7 @@ async def test_simple_stored_procedure_call():
             # Call the procedure
             result = await conn.execute("EXEC dbo.test_simple_proc")
             if result and result.rows():
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['message'] == 'Hello from procedure'
                 assert rows[0]['created_at'] is not None
@@ -149,7 +149,7 @@ async def test_simple_stored_procedure_call():
                 # If procedure doesn't return results as expected, test basic functionality
                 basic_result = await conn.execute("SELECT 'Hello from SQL' as message")
                 if basic_result and basic_result.rows():
-                    rows = basic_result.rows()
+                    rows = basic_result.rows() if basic_result.has_rows() else []
                     assert len(rows) == 1
                     assert rows[0]['message'] == 'Hello from SQL'
             
@@ -163,7 +163,7 @@ async def test_simple_stored_procedure_call():
             # Fall back to basic SQL test
             result = await conn.execute("SELECT 'fallback test' as message, GETDATE() as timestamp")
             if result and result.rows():
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['message'] == 'fallback test'
             else:
@@ -196,7 +196,7 @@ async def test_stored_procedure_with_parameters():
             
             # Call with parameters
             result = await conn.execute("EXEC dbo.test_param_proc @input_val = 5, @multiplier = 3")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['input'] == 5
             assert rows[0]['result'] == 15
@@ -208,7 +208,7 @@ async def test_stored_procedure_with_parameters():
             # Fall back to built-in function with parameters
             result = await conn.execute("SELECT DB_NAME() as current_database, @@SERVERNAME as server_name")
             if result is not None:
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['current_database'] == 'pymssql_test'
             else:
@@ -235,7 +235,7 @@ async def test_user_defined_functions():
             
             # Test the function
             result = await conn.execute("SELECT dbo.test_calc_bonus(50000, 0.15) as bonus")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['bonus'] == 7500.00
             
@@ -245,7 +245,7 @@ async def test_user_defined_functions():
         except Exception as e:
             # Fall back to testing built-in functions
             result = await conn.execute("SELECT LEN('test string') as str_length, UPPER('hello') as upper_str, ABS(-42) as abs_val")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['str_length'] == 11
             assert rows[0]['upper_str'] == 'HELLO'
@@ -295,7 +295,7 @@ async def test_common_table_expressions():
                 )
                 SELECT * FROM EmployeeHierarchy ORDER BY level, name
             """)
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             
             assert len(rows) == 6
             assert rows[0]['level'] == 0  # CEO
@@ -323,7 +323,7 @@ async def test_common_table_expressions():
                 WHERE e.manager_id IS NOT NULL
                 ORDER BY e.salary DESC
             """)
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             
             assert len(rows) == 5  # Excluding CEO
             salary_categories = [row['salary_category'] for row in rows]
@@ -395,7 +395,7 @@ async def test_window_functions():
                 FROM test_window_sales
                 ORDER BY sale_amount DESC
             """)
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             
             assert len(rows) == 8
             
@@ -464,7 +464,7 @@ async def test_pivot_and_unpivot():
                 ) as pivot_table
                 ORDER BY year
             """)
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             
             assert len(rows) == 2
             assert rows[0]['year'] == 2022
@@ -511,7 +511,7 @@ async def test_temp_tables_and_variables():
         """)
         
         if result and result.rows():
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['item_count'] == 2
             assert rows[0]['total_value'] == 300
@@ -521,7 +521,7 @@ async def test_temp_tables_and_variables():
             # Fall back to simpler test
             simple_result = await conn.execute("SELECT 2 as item_count, 300 as total_value")
             if simple_result and simple_result.rows():
-                rows = simple_result.rows()
+                rows = simple_result.rows() if simple_result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['item_count'] == 2
                 assert rows[0]['total_value'] == 300
@@ -553,7 +553,7 @@ async def test_async_stored_procedures():
             # Call procedure asynchronously
             result = await conn.execute("EXEC dbo.test_async_proc @value = 10")
             if result and result.rows():
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['input_value'] == 10
                 assert rows[0]['doubled'] == 20
@@ -562,7 +562,7 @@ async def test_async_stored_procedures():
                 # Test async functionality with basic query
                 basic_result = await conn.execute("SELECT 10 as input_value, 20 as doubled")
                 if basic_result and basic_result.rows():
-                    rows = basic_result.rows()
+                    rows = basic_result.rows() if basic_result.has_rows() else []
                     assert len(rows) == 1
                     assert rows[0]['input_value'] == 10
                     assert rows[0]['doubled'] == 20
@@ -577,7 +577,7 @@ async def test_async_stored_procedures():
             # Fall back to simple async test
             result = await conn.execute("SELECT 'async test' as message, 42 as value")
             if result and result.rows():
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['message'] == 'async test'
                 assert rows[0]['value'] == 42

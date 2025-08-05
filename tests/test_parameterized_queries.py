@@ -33,6 +33,7 @@ async def test_simple_parameterized_query():
                 "SELECT @P1 + @P2 as sum_result", 
                 [10, 5]
             )
+            assert result.has_rows(), "Query should return rows"
             rows = result.rows()
             assert len(rows) == 1
             sum_result = rows[0]['sum_result']
@@ -63,6 +64,7 @@ async def test_parameter_types():
                 None
             ])
             
+            assert result.has_rows(), "Query should return rows"
             rows = result.rows()
             assert len(rows) == 1
             row = rows[0]
@@ -91,6 +93,7 @@ async def test_string_sql_injection_protection():
                 [malicious_input]
             )
             
+            assert result.has_rows(), "Query should return rows"
             rows = result.rows()
             assert len(rows) == 1
             assert rows[0]['safe_string'] == malicious_input

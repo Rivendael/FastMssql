@@ -185,7 +185,9 @@ async def test_nested_async_context_managers():
         return {
             'worker_id': worker_id,
             'log': worker_log,
-            'results': [result1.rows(), result2.rows(), result3.rows()],
+            'results': [result1.rows() if result1.has_rows() else [], 
+                       result2.rows() if result2.has_rows() else [], 
+                       result3.rows() if result3.has_rows() else []],
             'success': True
         }
     
@@ -481,7 +483,7 @@ async def test_async_context_manager_with_background_tasks():
                                 {i} as iteration,
                                 GETDATE() as timestamp
                         """)
-                        results.append(result.rows()[0] if result else None)
+                        results.append(result.rows()[0] if result and result.has_rows() else None)
                         
                 except Exception as e:
                     results.append({'error': str(e)})
@@ -508,7 +510,7 @@ async def test_async_context_manager_with_background_tasks():
                             'main_workflow' as source,
                             GETDATE() as timestamp
                     """)
-                    main_results.append(result.rows()[0] if result else None)
+                    main_results.append(result.rows()[0] if result and result.has_rows() else None)
                 
                 await asyncio.sleep(0.7)  # Different timing from background tasks
             

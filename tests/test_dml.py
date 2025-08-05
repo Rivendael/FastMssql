@@ -92,7 +92,8 @@ async def test_insert_operations(setup_test_table):
 
         # Verify total count - this is the real test
         results = await conn.execute("SELECT COUNT(*) as total FROM test_dml_employees")
-        assert results.rows()[0]['total'] == 5
+        assert results.has_rows()
+        assert results.has_rows() and results.rows()[0]['total'] == 5
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -112,15 +113,15 @@ async def test_select_operations(setup_test_table):
             
             # Simple SELECT
             results = await conn.execute("SELECT * FROM test_dml_employees")
-            assert len(results.rows()) == 5
+            assert results.has_rows() and len(results.rows()) == 5
 
             # SELECT with WHERE
             results = await conn.execute("SELECT * FROM test_dml_employees WHERE department = 'IT'")
-            assert len(results.rows()) == 3
+            assert results.has_rows() and len(results.rows()) == 3
 
             # SELECT with ORDER BY
             results = await conn.execute("SELECT first_name, last_name FROM test_dml_employees ORDER BY salary DESC")
-            assert results.rows()[0]['first_name'] == 'Alice'  # Highest salary
+            assert results.has_rows() and results.rows()[0]['first_name'] == 'Alice'# Highest salary
             assert results.rows()[-1]['first_name'] == 'Charlie'  # Lowest salary
             
             # SELECT with aggregate functions
@@ -148,8 +149,8 @@ async def test_select_operations(setup_test_table):
                 INNER JOIN test_dml_employees e2 ON e1.department = e2.department
                 WHERE e1.id != e2.id
             """)
-            assert len(results.rows()) == 1  # Only IT department has multiple employees
-            assert results.rows()[0]['department'] == 'IT'
+            assert results.has_rows() and len(results.rows()) == 1# Only IT department has multiple employees
+            assert results.has_rows() and results.rows()[0]['department'] == 'IT'
 
             # SELECT with HAVING
             results = await conn.execute("""
@@ -158,8 +159,8 @@ async def test_select_operations(setup_test_table):
                 GROUP BY department
                 HAVING COUNT(*) > 1
             """)
-            assert len(results.rows()) == 1
-            assert results.rows()[0]['department'] == 'IT'
+            assert results.has_rows() and len(results.rows()) == 1
+            assert results.has_rows() and results.rows()[0]['department'] == 'IT'
 
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -207,9 +208,9 @@ async def test_update_operations(setup_test_table):
             
             # Verify updates
             results = await conn.execute("SELECT first_name, salary, email FROM test_dml_employees WHERE first_name = 'John'")
-            assert len(results.rows()) == 1
-            assert results.rows()[0]['salary'] == 57200.00  # 52000 * 1.1
-            assert results.rows()[0]['email'] == 'john.doe@company.com'
+            assert results.has_rows() and len(results.rows()) == 1
+            assert results.has_rows() and results.rows()[0]['salary'] == 57200.00# 52000 * 1.1
+            assert results.has_rows() and results.rows()[0]['email'] == 'john.doe@company.com'
 
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -263,7 +264,7 @@ async def test_delete_operations(setup_test_table):
 
             # Verify remaining data
             results = await conn.execute("SELECT COUNT(*) as remaining FROM test_dml_employees")
-            assert results.rows()[0]['remaining'] == 0  # No employees should remain
+            assert results.has_rows() and results.rows()[0]['remaining'] == 0# No employees should remain
 
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -301,7 +302,7 @@ async def test_upsert_operations(setup_test_table):
 
             # Verify results
             results = await conn.execute("SELECT * FROM test_dml_employees ORDER BY first_name")
-            assert len(results.rows()) == 3
+            assert results.has_rows() and len(results.rows()) == 3
 
             # John should be updated
             john = next(r for r in results.rows() if r['first_name'] == 'John')
@@ -346,8 +347,8 @@ async def test_bulk_operations(setup_test_table):
             
             # Verify bulk operations
             results = await conn.execute("SELECT COUNT(*) as total, AVG(salary) as avg_salary FROM test_dml_employees")
-            assert results.rows()[0]['total'] == 100
-            assert results.rows()[0]['avg_salary'] > 40000  # Should be higher due to the +1000 update
+            assert results.has_rows() and results.rows()[0]['total'] == 100
+            assert results.has_rows() and results.rows()[0]['avg_salary'] > 40000# Should be higher due to the +1000 update
             
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -384,8 +385,8 @@ async def test_async_dml_operations():
             
             # Async SELECT
             results = await conn.execute("SELECT * FROM test_async_dml ORDER BY value")
-            assert len(results.rows()) == 2
-            assert results.rows()[0]['name'] == 'Async Test 1'
+            assert results.has_rows() and len(results.rows()) == 2
+            assert results.has_rows() and results.rows()[0]['name'] == 'Async Test 1'
             
             # Async UPDATE
             result = await conn.execute("""
@@ -427,7 +428,7 @@ async def test_transaction_rollback(setup_test_table):
             
             # Verify data exists
             results = await conn.execute("SELECT COUNT(*) as count FROM test_dml_employees")
-            assert results.rows()[0]['count'] == 1
+            assert results.has_rows() and results.rows()[0]['count'] == 1
 
             # Attempt operation that should fail
             try:
@@ -441,7 +442,7 @@ async def test_transaction_rollback(setup_test_table):
             
             # Data should still be there (this test would be more meaningful with explicit transactions)
             results = await conn.execute("SELECT COUNT(*) as count FROM test_dml_employees")
-            assert results.rows()[0]['count'] >= 1
+            assert results.has_rows() and results.rows()[0]['count'] >= 1
 
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
