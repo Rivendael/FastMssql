@@ -264,8 +264,16 @@ class TestSslConfigErrorRecovery:
                 os.chmod(cert_path, 0o000)
                 
                 try:
-                    with pytest.raises(Exception):
-                        SslConfig(ca_certificate_path=cert_path)
+                    # Check if permissions are actually enforced
+                    try:
+                        with open(cert_path, 'r') as test_file:
+                            test_file.read()
+                        # If we can still read it (e.g., running as root), skip the permission test
+                        pytest.skip("File permissions not enforced in this environment (likely running as root)")
+                    except PermissionError:
+                        # Good, permissions are enforced, now test the SSL config
+                        with pytest.raises(Exception):
+                            SslConfig(ca_certificate_path=cert_path)
                 finally:
                     # Restore access
                     os.chmod(cert_path, original_mode)
