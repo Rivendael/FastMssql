@@ -13,8 +13,106 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        include:
+          # x86_64 builds
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.8"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.9"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.10"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.11"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.12"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            python-version: "3.13"
+          
+          # ARM64 Linux builds
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.8"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.9"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.10"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.11"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.12"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            python-version: "3.13"
+          
+          # Windows x86_64 builds
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.8"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.9"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.10"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.11"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.12"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.13"
+          
+          # macOS x86_64 builds (Intel Macs)
+          - os: macos-13  # Intel runner
+            target: x86_64-apple-darwin
+            python-version: "3.8"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            python-version: "3.9"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            python-version: "3.10"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            python-version: "3.11"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            python-version: "3.12"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            python-version: "3.13"
+          
+          # macOS ARM64 builds (M1/M2 Macs)
+          - os: macos-latest  # ARM runner
+            target: aarch64-apple-darwin
+            python-version: "3.8"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.9"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.10"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.11"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.12"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            python-version: "3.13"
         
     steps:
     - uses: actions/checkout@v4
@@ -26,17 +124,26 @@ jobs:
         
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+      
+    - name: Install cross-compilation tools
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
       
     - name: Install maturin
       run: pip install maturin
       
     - name: Build wheels
-      run: maturin build --release --out dist
+      run: maturin build --release --target ${{ matrix.target }} --out dist
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+        name: wheels-${{ matrix.os }}-${{ matrix.target }}-py${{ matrix.python-version }}
         path: dist
 
   publish:
