@@ -247,6 +247,12 @@ class TestSslConfigErrorRecovery:
     
     def test_ssl_config_with_intermittent_file_access(self):
         """Test SSL config creation when certificate file access is intermittent."""
+        import os
+        
+        # Skip if running as root (common in CI environments) - only on POSIX systems
+        if hasattr(os, 'getuid') and os.getuid() == 0:
+            pytest.skip("Running as root - file permissions are not enforced")
+            
         content = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
@@ -264,6 +270,12 @@ class TestSslConfigErrorRecovery:
                 os.chmod(cert_path, 0o000)
                 
                 try:
+                    # Verify permissions are actually restricted
+                    stat_info = os.stat(cert_path)
+                    if stat_info.st_mode & 0o777 != 0o000:
+                        pytest.skip("Unable to restrict file permissions in this environment")
+                    
+                    # Test that the SSL config raises an exception
                     with pytest.raises(Exception):
                         SslConfig(ca_certificate_path=cert_path)
                 finally:

@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     from fastmssql import SslConfig, Connection, PoolConfig
-    import fastmssql.fastmssql_core as core
 except ImportError as e:
     pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
 
@@ -269,8 +268,8 @@ class TestSslConfigErrorHandling:
         try:
             # This should fail because both trust_server_certificate and ca_certificate_path are set
             with pytest.raises(Exception):
-                core.SslConfig(
-                    encryption_level=core.EncryptionLevel.REQUIRED,
+                SslConfig(
+                    encryption_level="Required",
                     trust_server_certificate=True,
                     ca_certificate_path=temp_cert_path,
                     enable_sni=True,

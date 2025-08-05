@@ -15,10 +15,11 @@ jobs:
         env:
           SA_PASSWORD: "YourStrong!Passw0rd"
           ACCEPT_EULA: "Y"
+          MSSQL_PID: "Express"
         ports:
           - 1433:1433
         options: >-
-          --health-cmd=" /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q 'SELECT 1'" 
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q 'SELECT 1' -C"
           --health-interval=10s 
           --health-timeout=5s 
           --health-retries=10
@@ -34,22 +35,55 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install SQL Server tools
+        run: |
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+          curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+
       - name: Install Python dependencies
         run: |
-
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build Python package with maturin
-        run: maturin develop --release
+      - name: Build and install Python package with maturin
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          maturin develop --release
 
       - name: Wait for MSSQL to be ready
         run: |
-          for i in {1..30}; do
-            /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" && break
-            sleep 2
+          echo "Waiting for SQL Server to be ready..."
+          export PATH="$PATH:/opt/mssql-tools18/bin"
+          for i in {1..60}; do
+            echo "Attempt $i/60..."
+            # First check if port 1433 is open
+            if nc -z localhost 1433; then
+              echo "Port 1433 is open, testing SQL connection..."
+              if sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C 2>/dev/null; then
+                echo "SQL Server is ready!"
+                break
+              else
+                echo "Port is open but SQL Server not ready yet..."
+              fi
+            else
+              echo "Port 1433 not yet open..."
+            fi
+            sleep 5
+            if [ $i -eq 60 ]; then
+              echo "SQL Server failed to start after 5 minutes"
+              docker logs $(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest)
+              exit 1
+            fi
           done
 
       - name: Run tests
-        run: pytest tests
+        run: |
+          source .venv/bin/activate
+          pytest tests
         env:
           FASTMSSQL_TEST_CONNECTION_STRING: "Server=localhost,1433;Database=master;User Id=SA;Password=YourStrong!Passw0rd;TrustServerCertificate=yes"
