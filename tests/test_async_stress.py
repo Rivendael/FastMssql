@@ -170,7 +170,7 @@ async def test_connection_exhaustion_recovery():
                 async with Connection(TEST_CONNECTION_STRING) as conn:
                     # Verify connection is working
                     result = await conn.execute(f"SELECT {conn_id} as conn_id, @@SPID as spid")
-                    spid = result.rows()[0]['spid'] if result else None
+                    spid = result.rows()[0]['spid'] if result and result.has_rows() else None
                     
                     # Hold the connection
                     await asyncio.sleep(hold_time)
@@ -433,7 +433,7 @@ async def test_large_result_set_handling():
                     WHERE id > {offset}
                     ORDER BY id
                 """)
-                rows = result.rows() if result else []
+                rows = result.rows() if result.has_rows() else [] if result else []
                 query_time = time.time() - start_time
                 
                 return {

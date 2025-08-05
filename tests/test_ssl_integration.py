@@ -21,15 +21,13 @@ class TestSslConnectionIntegration:
     def test_connection_with_required_encryption(self):
         """Test connection creation with required encryption."""
         ssl_config = SslConfig(encryption_level=EncryptionLevel.Required)
-        pool_config = PoolConfig(max_size=5)
         
         connection = Connection(
             server="localhost",
             database="testdb",
             username="testuser",
             password="testpass",
-            ssl_config=ssl_config,
-            pool_config=pool_config
+            ssl_config=ssl_config
         )
         
         assert connection is not None

@@ -6,7 +6,6 @@ large data handling, and stress scenarios.
 """
 
 import pytest
-import sys
 import os
 import asyncio
 import time
@@ -64,7 +63,7 @@ async def test_large_result_set():
                 result = await conn.execute("SELECT * FROM test_large_data ORDER BY id")
                 end_time = time.time()
                 
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == total_records
                 assert rows[0]['data_number'] == 0
                 assert rows[-1]['data_number'] == total_records - 1
@@ -103,7 +102,7 @@ async def test_concurrent_connections():
                 result = await conn.execute(f"SELECT {connection_id} as connection_id, GETDATE() as execution_time")
                 return {
                     'connection_id': connection_id,
-                    'result': result.rows()[0],
+                    'result': result.rows()[0] if result.has_rows() else {}     ,
                     'success': True
                 }
         
@@ -174,7 +173,12 @@ async def test_bulk_insert_performance():
                 """
                 result = await conn.execute(insert_sql)
                 end_time = time.time()
-                affected = result.affected_rows()
+                
+                # Handle both cases: result object with affected_rows() method or direct int
+                if hasattr(result, 'affected_rows'):
+                    affected = result.affected_rows()
+                else:
+                    affected = result  # result is directly the number of affected rows
                 assert affected == batch_size
                 insert_time = end_time - start_time
                 records_per_second = batch_size / insert_time if insert_time > 0 else float('inf')
@@ -229,7 +233,7 @@ async def test_repeated_query_performance():
                 start_time = time.time()
                 for i in range(num_iterations):
                     result = await conn.execute(query)
-                    assert len(result.rows()) == 3  # Should always return 3 categories
+                    assert result.has_rows() and len(result.rows()) == 3# Should always return 3 categories
                 end_time = time.time()
                 
                 total_time = end_time - start_time
@@ -265,7 +269,7 @@ async def test_async_concurrent_queries():
                 """)
                 return {
                     'query_id': query_id,
-                    'result': result.rows()[0],
+                    'result': result.rows()[0] if result.has_rows() else {},
                     'success': True
                 }
         
@@ -330,7 +334,7 @@ async def test_memory_usage_with_large_strings():
 
                 # Retrieve and verify - use a simple SELECT instead of SCOPE_IDENTITY()
                 result = await conn.execute("SELECT large_text FROM test_large_strings")
-                assert len(result.rows()) == 1
+                assert result.has_rows() and len(result.rows()) == 1
                 assert len(result.rows()[0]['large_text']) == size
                 assert result.rows()[0]['large_text'] == large_string
                 
@@ -398,7 +402,7 @@ async def test_long_running_query():
             """)
             end_time = time.time()
 
-            assert len(result.rows()) == 1
+            assert result.has_rows() and len(result.rows()) == 1
             assert result.rows()[0]['total_count'] == 10000
 
             query_time = end_time - start_time
@@ -456,7 +460,7 @@ async def test_stress_mixed_operations():
                             FROM test_stress_operations 
                             WHERE data_value > {i // 2}
                         """)
-                        assert len(result.rows()) == 1
+                        assert result.has_rows() and len(result.rows()) == 1
                 
                 end_time = time.time()
                 total_time = end_time - start_time

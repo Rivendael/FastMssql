@@ -156,7 +156,7 @@ class TestParametersEdgeCases:
         assert params.named["name"].value == "original"
         
         # Overwrite with set method
-        params.set("name", "updated")
+        params = params.set("name", "updated")
         assert params.named["name"].value == "updated"
         assert len(params.named) == 1  # Should still be just one
 
@@ -219,7 +219,7 @@ class TestParametersIntegrationEdgeCases:
                     params
                 )
                 
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 # The malicious input should be returned as-is (safely parameterized)
                 assert rows[0]['user_input'] == malicious_input
@@ -251,7 +251,7 @@ class TestParametersIntegrationEdgeCases:
                         params
                     )
                     
-                    rows = result.rows()
+                    rows = result.rows() if result.has_rows() else []
                     assert len(rows) == 1
                     assert rows[0]['special_input'] == special_str
                 
@@ -273,7 +273,7 @@ class TestParametersIntegrationEdgeCases:
                     params
                 )
                 
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['string_length'] == 4000
                 assert rows[0]['string_start'] == "xxxxxxxxxx"
@@ -304,7 +304,7 @@ class TestParametersIntegrationEdgeCases:
                         params
                     )
                     
-                    rows = result.rows()
+                    rows = result.rows() if result.has_rows() else []
                     assert len(rows) == 1
                     row = rows[0]
                     
@@ -331,7 +331,7 @@ class TestParametersIntegrationEdgeCases:
                 try:
                     result = await conn.execute("SELECT @P1 as col1", params)  # 1 placeholder
                     # If it doesn't error, verify it used the first parameter
-                    rows = result.rows()
+                    rows = result.rows() if result.has_rows() else []
                     assert rows[0]['col1'] == 1
                 except Exception:
                     # Error is also acceptable for parameter count mismatch
