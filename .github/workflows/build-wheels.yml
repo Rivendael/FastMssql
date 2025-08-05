@@ -53,9 +53,8 @@ jobs:
         CIBW_BUILD_COMMAND: "maturin build --release --out {wheel_dir}"
         
         # Set environment variables - use vendored OpenSSL to avoid system dependency issues
-        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH OPENSSL_STATIC=1 OPENSSL_VENDORED=1"
+        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH OPENSSL_STATIC=1 OPENSSL_VENDORED=1 OPENSSL_NO_PKG_CONFIG=1"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH"
-        CIBW_ENVIRONMENT_WINDOWS: "OPENSSL_STATIC=1"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
