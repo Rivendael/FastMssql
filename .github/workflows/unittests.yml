@@ -35,6 +35,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install SQL Server tools
+        run: |
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+          curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -48,19 +55,22 @@ jobs:
       - name: Wait for MSSQL to be ready
         run: |
           echo "Waiting for SQL Server to be ready..."
-          # Try with both old and new sqlcmd paths
+          export PATH="$PATH:/opt/mssql-tools18/bin"
           for i in {1..60}; do
             echo "Attempt $i/60..."
-            if /opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C; then
-              echo "SQL Server is ready!"
-              break
-            elif /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1"; then
-              echo "SQL Server is ready!"
-              break
+            # First check if port 1433 is open
+            if nc -z localhost 1433; then
+              echo "Port 1433 is open, testing SQL connection..."
+              if sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C; then
+                echo "SQL Server is ready!"
+                break
+              else
+                echo "Port is open but SQL Server not ready yet..."
+              fi
             else
-              echo "SQL Server not ready yet, waiting 5 seconds..."
-              sleep 5
+              echo "Port 1433 not yet open..."
             fi
+            sleep 5
             if [ $i -eq 60 ]; then
               echo "SQL Server failed to start after 5 minutes"
               docker logs $(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest)
