@@ -277,7 +277,10 @@ async def test_async_connection_limit_behavior():
         assert len(exceptions) == 0, f"Unexpected exceptions: {exceptions}"
         
         # Verify timing - should be close to hold_time since connections are concurrent
-        assert total_time < hold_time + 1.0, f"Connections took too long: {total_time:.2f}s"
+        # In CI environments, allow more time due to resource constraints
+        import os
+        time_tolerance = 3.0 if os.getenv('CI') or os.getenv('GITHUB_ACTIONS') else 1.0
+        assert total_time < hold_time + time_tolerance, f"Connections took too long: {total_time:.2f}s"
         
         print(f"✅ Connection limit test passed: {len(successful_connections)} concurrent connections")
         

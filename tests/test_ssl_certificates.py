@@ -210,6 +210,12 @@ class TestCertificateFilePermissions:
     @pytest.mark.skipif(os.name == 'nt', reason="POSIX permissions not available on Windows")
     def test_certificate_file_no_read_permission(self):
         """Test certificate file with no read permission."""
+        import os
+        
+        # Skip if running as root (common in CI environments)
+        if os.getuid() == 0:
+            pytest.skip("Running as root - file permissions are not enforced")
+            
         content = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
@@ -220,16 +226,14 @@ class TestCertificateFilePermissions:
             # Remove read permission
             os.chmod(cert_path, 0o000)
             
-            # Check if we can actually read the file (might not work in CI as root)
-            try:
-                with open(cert_path, 'r') as test_file:
-                    test_file.read()
-                # If we can still read it (e.g., running as root), skip the permission test
-                pytest.skip("File permissions not enforced in this environment (likely running as root)")
-            except PermissionError:
-                # Good, permissions are enforced, now test the SSL config
-                with pytest.raises(Exception):
-                    SslConfig(ca_certificate_path=cert_path)
+            # Verify permissions are actually restricted
+            stat_info = os.stat(cert_path)
+            if stat_info.st_mode & 0o777 != 0o000:
+                pytest.skip("Unable to restrict file permissions in this environment")
+            
+            # Test that the SSL config raises an exception
+            with pytest.raises(Exception):
+                SslConfig(ca_certificate_path=cert_path)
         finally:
             # Restore permissions to delete file
             os.chmod(cert_path, 0o644)
