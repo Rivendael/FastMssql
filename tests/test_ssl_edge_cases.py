@@ -249,8 +249,8 @@ class TestSslConfigErrorRecovery:
         """Test SSL config creation when certificate file access is intermittent."""
         import os
         
-        # Skip if running as root (common in CI environments)
-        if os.getuid() == 0:
+        # Skip if running as root (common in CI environments) - only on POSIX systems
+        if hasattr(os, 'getuid') and os.getuid() == 0:
             pytest.skip("Running as root - file permissions are not enforced")
             
         content = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
