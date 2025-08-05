@@ -10,13 +10,39 @@ permissions: {}
 
 jobs:
   build-wheels:
-    name: Build wheels on ${{ matrix.os }}
+    name: Build wheels on ${{ matrix.os }} (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-latest]
+        include:
+          # Linux x86_64
+          - os: ubuntu-latest
+            arch: x86_64
+            cibw_archs: "x86_64"
+          # Linux ARM64 (using emulation)
+          - os: ubuntu-latest
+            arch: aarch64
+            cibw_archs: "aarch64"
+          # Windows x86_64
+          - os: windows-latest
+            arch: AMD64
+            cibw_archs: "AMD64"
+          # macOS Intel
+          - os: macos-13
+            arch: x86_64
+            cibw_archs: "x86_64"
+          # macOS ARM64
+          - os: macos-latest
+            arch: arm64
+            cibw_archs: "arm64"
         
     steps:
+    - name: Set up QEMU for ARM64 emulation
+      if: matrix.arch == 'aarch64'
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+        
     - uses: actions/checkout@v4
     
     - name: Set up Python
@@ -37,30 +63,27 @@ jobs:
         CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux_*"
         
         # Build ARM64 on Linux and macOS
-        CIBW_ARCHS_LINUX: "x86_64 aarch64"
-        CIBW_ARCHS_MACOS: "x86_64 arm64"
-        CIBW_ARCHS_WINDOWS: "AMD64"
+        CIBW_ARCHS: ${{ matrix.cibw_archs }}
         
         # Install system dependencies and Rust
-        CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
-        CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
+        CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env && rustup target add ${{ matrix.arch == 'aarch64' && 'aarch64-unknown-linux-gnu' || 'x86_64-unknown-linux-gnu' }}"
+        CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env && rustup target add ${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}"
         CIBW_BEFORE_ALL_WINDOWS: "rustup toolchain install stable"
         
         # Install maturin in each Python environment
         CIBW_BEFORE_BUILD: "pip install maturin"
         
-        # Use maturin to build with static OpenSSL
+        # Use maturin to build
         CIBW_BUILD_COMMAND: "maturin build --release --out {wheel_dir}"
         
-        # Set environment variables - use vendored OpenSSL to avoid system dependency issues
-        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH OPENSSL_STATIC=1 OPENSSL_VENDORED=1"
+        # Set environment variables
+        CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH"
-        CIBW_ENVIRONMENT_WINDOWS: "OPENSSL_STATIC=1"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels-${{ matrix.os }}
+        name: wheels-${{ matrix.os }}-${{ matrix.arch }}
         path: ./wheelhouse/*.whl
 
   publish:
