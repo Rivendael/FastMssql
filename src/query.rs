@@ -28,9 +28,11 @@ impl PyQuery {
         Ok(())
     }
     
-    /// Set all parameters at once
+    /// Set all parameters at once - optimized for performance
     pub fn set_parameters(&mut self, params: &Bound<PyList>) -> PyResult<()> {
+        let len = params.len();
         self.parameters.clear();
+        self.parameters.reserve(len);
         for param in params.iter() {
             self.add_parameter(&param)?;
         }
@@ -63,7 +65,8 @@ impl PyQuery {
     }
 }
 
-/// Convert a Python object to PyValue
+/// Convert a Python object to PyValue - optimized for performance
+#[inline]
 fn python_to_pyvalue(obj: &Bound<PyAny>) -> PyResult<PyValue> {
     if obj.is_none() {
         Ok(PyValue::new_null())
