@@ -9,7 +9,6 @@ import sys
 import os
 
 # Add the parent directory to Python path for development
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     from fastmssql import Connection

@@ -132,57 +132,72 @@ impl PyRow {
 impl PyRow {
     pub fn from_tiberius_row(row: Row) -> PyResult<Self> {
         let column_count = row.columns().len();
+        // Pre-allocate with exact capacity to avoid reallocations
         let mut data = HashMap::with_capacity(column_count);
         let mut columns = Vec::with_capacity(column_count);
         
-        for (i, column) in row.columns().iter().enumerate() {
+        // Cache column info to avoid repeated lookups
+        let column_info: Vec<_> = row.columns().iter().enumerate().collect();
+        
+        for (i, column) in column_info {
             let column_name = column.name().to_string();
             columns.push(column_name.clone());
             
-            // Fast path for most common types - inline matching for performance
-            let value = match column.column_type() {
-                // Most common integer types - fast path
-                tiberius::ColumnType::Int4 => {
-                    match row.try_get::<i32, usize>(i) {
-                        Ok(Some(val)) => PyValue::new_int(val as i64),
-                        _ => PyValue::new_null(),
-                    }
-                }
-                tiberius::ColumnType::Int8 => {
-                    match row.try_get::<i64, usize>(i) {
-                        Ok(Some(val)) => PyValue::new_int(val),
-                        _ => PyValue::new_null(),
-                    }
-                }
-                // Most common string type - fast path
-                tiberius::ColumnType::NVarchar => {
-                    match row.try_get::<&str, usize>(i) {
-                        Ok(Some(val)) => PyValue::new_string(val.into()),
-                        _ => PyValue::new_null(),
-                    }
-                }
-                // Boolean - fast path
-                tiberius::ColumnType::Bit => {
-                    match row.try_get::<bool, usize>(i) {
-                        Ok(Some(val)) => PyValue::new_bool(val),
-                        _ => PyValue::new_null(),
-                    }
-                }
-                // Float - fast path
-                tiberius::ColumnType::Float8 => {
-                    match row.try_get::<f64, usize>(i) {
-                        Ok(Some(val)) => PyValue::new_float(val),
-                        _ => PyValue::new_null(),
-                    }
-                }
-                // Other types - slower path
-                _ => extract_value_slow_path(&row, i, column.column_type())?,
-            };
-            
+            // Ultra-optimized value extraction - minimize allocations
+            let value = Self::extract_value_ultra_fast(&row, i, column.column_type())?;
             data.insert(column_name, value);
         }
         
         Ok(PyRow { data, columns })
+    }
+
+    /// Ultra-fast value extraction with minimal overhead
+    #[inline(always)]
+    fn extract_value_ultra_fast(row: &Row, index: usize, col_type: tiberius::ColumnType) -> PyResult<PyValue> {
+        use tiberius::ColumnType;
+        
+        // Use match with most common types first for branch prediction optimization
+        match col_type {
+            // Most common types first
+            ColumnType::Int4 => {
+                match row.try_get::<i32, usize>(index) {
+                    Ok(Some(val)) => Ok(PyValue::new_int(val as i64)),
+                    _ => Ok(PyValue::new_null())
+                }
+            }
+            ColumnType::NVarchar => {
+                match row.try_get::<&str, usize>(index) {
+                    Ok(Some(val)) => Ok(PyValue::new_string(val.to_owned())),
+                    _ => Ok(PyValue::new_null())
+                }
+            }
+            ColumnType::Bit => {
+                match row.try_get::<bool, usize>(index) {
+                    Ok(Some(val)) => Ok(PyValue::new_bool(val)),
+                    _ => Ok(PyValue::new_null())
+                }
+            }
+            ColumnType::Int8 => {
+                match row.try_get::<i64, usize>(index) {
+                    Ok(Some(val)) => Ok(PyValue::new_int(val)),
+                    _ => Ok(PyValue::new_null())
+                }
+            }
+            ColumnType::Float8 => {
+                match row.try_get::<f64, usize>(index) {
+                    Ok(Some(val)) => Ok(PyValue::new_float(val)),
+                    _ => Ok(PyValue::new_null())
+                }
+            }
+            ColumnType::Float4 => {
+                match row.try_get::<f32, usize>(index) {
+                    Ok(Some(val)) => Ok(PyValue::new_float(val as f64)),
+                    _ => Ok(PyValue::new_null())
+                }
+            }
+            // All other types (less common)
+            _ => extract_value_slow_path(row, index, col_type),
+        }
     }
 }
 

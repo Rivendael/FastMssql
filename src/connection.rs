@@ -376,12 +376,22 @@ impl PyConnection {
     /// For SELECT queries: Returns rows as PyRow objects
     /// For INSERT/UPDATE/DELETE/DDL: Returns affected row count
     /// The result type can be checked using has_rows() and has_affected_count() methods
-    pub fn execute<'p>(&self, py: Python<'p>, query: String) -> PyResult<Bound<'p, PyAny>> {
+    #[pyo3(signature = (query, parameters=None))]
+    pub fn execute<'p>(&self, py: Python<'p>, query: String, parameters: Option<&Bound<PyList>>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
-        future_into_py(py, async move {
-            Self::execute_internal(pool, query).await
-        })
+        if let Some(params) = parameters {
+            // Convert Python objects to PyValue objects with automatic expansion
+            let parameters = python_params_to_pyvalues(params)?;
+            
+            future_into_py(py, async move {
+                Self::execute_internal_with_params(pool, query, parameters).await
+            })
+        } else {
+            future_into_py(py, async move {
+                Self::execute_internal(pool, query).await
+            })
+        }
     }
     
     /// Execute a query and return only the rows (backward compatibility)

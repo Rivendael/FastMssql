@@ -5,14 +5,14 @@ Test SSL configuration implementation
 import pytest
 import tempfile
 import os
-from fastmssql import SslConfig
+from fastmssql import SslConfig, EncryptionLevel
 
 
 def test_ssl_config_creation():
     """Test basic SSL config creation."""
     # Default configuration
     ssl_config = SslConfig()
-    assert ssl_config.encryption_level == "Required"
+    assert str(ssl_config.encryption_level) == "Required"
     assert ssl_config.trust_server_certificate == False
     assert ssl_config.ca_certificate_path is None
     assert ssl_config.enable_sni == True
@@ -22,7 +22,7 @@ def test_ssl_config_creation():
 def test_ssl_config_development():
     """Test development SSL configuration."""
     ssl_config = SslConfig.development()
-    assert ssl_config.encryption_level == "Required"
+    assert str(ssl_config.encryption_level) == "Required"
     assert ssl_config.trust_server_certificate == True
     assert ssl_config.enable_sni == False
 
@@ -30,26 +30,26 @@ def test_ssl_config_development():
 def test_ssl_config_login_only():
     """Test login-only SSL configuration."""
     ssl_config = SslConfig.login_only()
-    assert ssl_config.encryption_level == "LoginOnly"
+    assert str(ssl_config.encryption_level) == "LoginOnly"
 
 
 def test_ssl_config_disabled():
     """Test disabled SSL configuration."""
     ssl_config = SslConfig.disabled()
-    assert ssl_config.encryption_level == "Off"
+    assert str(ssl_config.encryption_level) == "Off"
 
 
 def test_ssl_config_custom():
     """Test custom SSL configuration."""
     ssl_config = SslConfig(
-        encryption_level="Required",
+        encryption_level=EncryptionLevel.Required,
         trust_server_certificate=False,
         ca_certificate_path=None,
         enable_sni=True,
         server_name="custom.server.com"
     )
     
-    assert ssl_config.encryption_level == "Required"
+    assert str(ssl_config.encryption_level) == "Required"
     assert ssl_config.trust_server_certificate == False
     assert ssl_config.ca_certificate_path is None
     assert ssl_config.enable_sni == True
@@ -58,7 +58,7 @@ def test_ssl_config_custom():
 
 def test_ssl_config_invalid_encryption_level():
     """Test SSL config with invalid encryption level."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid encryption_level"):
         SslConfig(encryption_level="Invalid")
 
 
