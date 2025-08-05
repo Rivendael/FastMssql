@@ -5,8 +5,6 @@ Tests for SSL/TLS configuration integration with connections and real-world scen
 import pytest
 import tempfile
 import os
-import asyncio
-from unittest.mock import patch, MagicMock
 
 # Import the library components
 import sys
@@ -14,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     from fastmssql import SslConfig, Connection, PoolConfig
-    import fastmssql_core as core
+    import fastmssql.fastmssql_core as core
 except ImportError as e:
     pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
 
@@ -45,8 +43,9 @@ class TestSslConnectionIntegration:
         connection = Connection(
             server="localhost",
             database="testdb",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -58,8 +57,9 @@ class TestSslConnectionIntegration:
         connection = Connection(
             server="localhost",
             database="testdb",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -71,8 +71,9 @@ class TestSslConnectionIntegration:
         connection = Connection(
             server="localhost",
             database="testdb",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -94,8 +95,9 @@ class TestSslConnectionIntegration:
             connection = Connection(
                 server="localhost",
                 database="testdb",
-                ssl_config=ssl_config,
-                trusted_connection=True
+                username="testuser",
+                password="testpass",
+                ssl_config=ssl_config
             )
             
             assert connection is not None
@@ -112,8 +114,9 @@ class TestSslConnectionIntegration:
         connection = Connection(
             server="192.168.1.100",  # IP address
             database="testdb",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -179,8 +182,9 @@ class TestSslConfigCombinations:
             connection = Connection(
                 server="localhost",
                 database="test",
-                ssl_config=ssl_config,
-                trusted_connection=True
+                username="testuser",
+                password="testpass",
+                ssl_config=ssl_config
             )
             
             assert connection is not None
@@ -202,14 +206,15 @@ class TestSslConfigCombinations:
         assert connection is not None
     
     def test_ssl_config_with_windows_auth(self):
-        """Test SSL configuration with Windows authentication."""
+        """Test SSL configuration with SQL Server authentication (formerly Windows auth)."""
         ssl_config = SslConfig(encryption_level="Required")
         
         connection = Connection(
             server="localhost",
             database="test",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -230,8 +235,9 @@ class TestSslConfigCombinations:
             connection = Connection(
                 server="localhost",
                 database=f"test{i}",
-                ssl_config=ssl_config,
-                trusted_connection=True
+                username="testuser",
+                password="testpass",
+                ssl_config=ssl_config
             )
             connections.append(connection)
         
@@ -360,8 +366,9 @@ class TestSslConfigPerformance:
             connection = Connection(
                 server="localhost",
                 database=f"test{i}",
-                ssl_config=ssl_config,
-                trusted_connection=True
+                username="testuser",
+                password="testpass",
+                ssl_config=ssl_config
             )
             connections.append(connection)
         
@@ -452,8 +459,9 @@ class TestSslConfigRealWorldScenarios:
         connection = Connection(
             server="sql-server.company.local",
             database="CompanyDB",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -481,8 +489,9 @@ class TestSslConfigRealWorldScenarios:
         connection = Connection(
             server="dev-sql",
             database="DevDB",
-            ssl_config=ssl_config,
-            trusted_connection=True
+            username="testuser",
+            password="testpass",
+            ssl_config=ssl_config
         )
         
         assert connection is not None
@@ -509,8 +518,9 @@ class TestSslConfigRealWorldScenarios:
             connection = Connection(
                 server="corporate-sql.company.com",
                 database="CorporateDB",
-                ssl_config=ssl_config,
-                trusted_connection=True
+                username="testuser",
+                password="testpass",
+                ssl_config=ssl_config
             )
             
             assert connection is not None
