@@ -42,7 +42,7 @@ jobs:
         CIBW_ARCHS_WINDOWS: "AMD64"
         
         # Install system dependencies and Rust
-        CIBW_BEFORE_ALL_LINUX: "yum install -y openssl-devel pkg-config curl || (apt-get update && apt-get install -y libssl-dev pkg-config curl) && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
+        CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
         CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y"
         CIBW_BEFORE_ALL_WINDOWS: "rustup toolchain install stable"
         
