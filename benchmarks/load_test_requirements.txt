@@ -1,0 +1,15 @@
+# Load Testing Requirements for FastMSSQL
+# Install with: pip install -r load_test_requirements.txt
+
+# Core dependencies for load testing
+psutil>=5.9.0              # System resource monitoring
+asyncio                    # Already included in Python 3.7+
+
+# Optional: For comparison benchmarking
+# Uncomment to install other SQL Server libraries for comparison
+# pyodbc>=4.0.35
+# pymssql>=2.2.8
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
