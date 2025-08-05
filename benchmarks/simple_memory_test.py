@@ -7,10 +7,7 @@ import asyncio
 import gc
 import os
 import psutil
-import time
 import tracemalloc
-from typing import Dict
-
 
 class MemoryProfiler:
     """Simple memory profiling utility"""

@@ -54,18 +54,20 @@ impl EncryptionLevel {
     }
 }
 
-#[pymethods]
+/// Helper function to convert string to EncryptionLevel
+fn parse_encryption_level(level: &str) -> PyResult<EncryptionLevel> {
+    match level {
+        "Required" => Ok(EncryptionLevel::Required),
+        "LoginOnly" => Ok(EncryptionLevel::LoginOnly),
+        "Off" => Ok(EncryptionLevel::Off),
+        _ => Err(PyValueError::new_err(format!("Invalid encryption_level '{}'. Valid values are: 'Required', 'LoginOnly', 'Off'", level)))
+    }
+}
+
 impl PySslConfig {
-    #[new]
-    #[pyo3(signature = (
-        encryption_level = None,
-        trust_server_certificate = false,
-        ca_certificate_path = None,
-        enable_sni = true,
-        server_name = None
-    ))]
-    pub fn new(
-        encryption_level: Option<EncryptionLevel>,
+    /// Internal constructor for Rust code
+    pub fn new_internal(
+        encryption_level: EncryptionLevel,
         trust_server_certificate: bool,
         ca_certificate_path: Option<String>,
         enable_sni: bool,
@@ -113,7 +115,89 @@ impl PySslConfig {
         }
 
         Ok(PySslConfig {
-            encryption_level: encryption_level.unwrap_or(EncryptionLevel::Required),
+            encryption_level,
+            trust_server_certificate,
+            ca_certificate_path: ca_certificate_path.map(PathBuf::from),
+            enable_sni,
+            server_name,
+        })
+    }
+}
+
+#[pymethods]
+impl PySslConfig {
+    #[new]
+    #[pyo3(signature = (
+        encryption_level = None,
+        trust_server_certificate = false,
+        ca_certificate_path = None,
+        enable_sni = true,
+        server_name = None
+    ))]
+    pub fn new(
+        encryption_level: Option<&Bound<PyAny>>,
+        trust_server_certificate: bool,
+        ca_certificate_path: Option<String>,
+        enable_sni: bool,
+        server_name: Option<String>,
+    ) -> PyResult<Self> {
+        // Handle encryption_level which can be either string or EncryptionLevel enum
+        let encryption_level = if let Some(level) = encryption_level {
+            if let Ok(level_str) = level.extract::<String>() {
+                // String input - convert to enum
+                parse_encryption_level(&level_str)?
+            } else if let Ok(level_enum) = level.extract::<EncryptionLevel>() {
+                // Already an enum
+                level_enum
+            } else {
+                return Err(PyValueError::new_err("encryption_level must be a string or EncryptionLevel enum"));
+            }
+        } else {
+            EncryptionLevel::Required // Default value
+        };
+        // Validate CA certificate path if provided
+        if let Some(ref path_str) = ca_certificate_path {
+            let path = PathBuf::from(path_str);
+            if !path.exists() {
+                return Err(PyValueError::new_err(format!(
+                    "CA certificate file does not exist: {}", path_str
+                )));
+            }
+            
+            // Check if the file is readable by trying to open it
+            match std::fs::File::open(&path) {
+                Ok(_) => {}, // File is readable, continue validation
+                Err(e) => {
+                    return Err(PyValueError::new_err(format!(
+                        "CA certificate file is not readable: {} ({})", path_str, e
+                    )));
+                }
+            }
+            
+            // Check file extension
+            if let Some(ext) = path.extension() {
+                let ext = ext.to_string_lossy().to_lowercase();
+                if !matches!(ext.as_str(), "pem" | "crt" | "der") {
+                    return Err(PyValueError::new_err(
+                        "CA certificate must be .pem, .crt, or .der file"
+                    ));
+                }
+            } else {
+                return Err(PyValueError::new_err(
+                    "CA certificate file must have .pem, .crt, or .der extension"
+                ));
+            }
+        }
+
+        // Validate trust_server_certificate and ca_certificate_path are mutually exclusive
+        if trust_server_certificate && ca_certificate_path.is_some() {
+            return Err(PyValueError::new_err(
+                "trust_server_certificate and ca_certificate_path are mutually exclusive"
+            ));
+        }
+
+        Ok(PySslConfig {
+            encryption_level,
             trust_server_certificate,
             ca_certificate_path: ca_certificate_path.map(PathBuf::from),
             enable_sni,
@@ -136,8 +220,8 @@ impl PySslConfig {
     /// Create SSL config for production with custom CA certificate
     #[staticmethod]
     pub fn with_ca_certificate(ca_cert_path: String) -> PyResult<Self> {
-        PySslConfig::new(
-            Some(EncryptionLevel::Required),
+        PySslConfig::new_internal(
+            EncryptionLevel::Required,
             false,
             Some(ca_cert_path),
             true,
@@ -171,8 +255,8 @@ impl PySslConfig {
 
     // Getters
     #[getter]
-    pub fn encryption_level(&self) -> EncryptionLevel {
-        self.encryption_level.clone()
+    pub fn encryption_level(&self) -> String {
+        self.encryption_level.__str__()
     }
 
     #[getter]
@@ -246,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_ssl_config_creation() {
-        let ssl_config = PySslConfig::new(None, false, None, true, None).unwrap();
+        let ssl_config = PySslConfig::new_internal(EncryptionLevel::Required, false, None, true, None).unwrap();
         assert_eq!(ssl_config.encryption_level, EncryptionLevel::Required);
         assert!(!ssl_config.trust_server_certificate);
         assert!(ssl_config.ca_certificate_path.is_none());
@@ -264,8 +348,8 @@ mod tests {
 
     #[test]
     fn test_mutual_exclusion_validation() {
-        let result = PySslConfig::new(
-            None,
+        let result = PySslConfig::new_internal(
+            EncryptionLevel::Required,
             true, // trust_server_certificate
             Some("test.pem".to_string()), // ca_certificate_path
             true,
@@ -277,8 +361,8 @@ mod tests {
     #[test]
     fn test_ca_certificate_validation() {
         // Test with non-existent file
-        let result = PySslConfig::new(
-            None,
+        let result = PySslConfig::new_internal(
+            EncryptionLevel::Required,
             false,
             Some("non_existent.pem".to_string()),
             true,
@@ -294,8 +378,8 @@ mod tests {
         writeln!(file, "test certificate content").unwrap();
         writeln!(file, "-----END CERTIFICATE-----").unwrap();
         
-        let result = PySslConfig::new(
-            None,
+        let result = PySslConfig::new_internal(
+            EncryptionLevel::Required,
             false,
             Some(file_path.to_string_lossy().to_string()),
             true,
@@ -306,8 +390,8 @@ mod tests {
 
     #[test]
     fn test_encryption_level_conversion() {
-        let ssl_config = PySslConfig::new(
-            Some(EncryptionLevel::Required),
+        let ssl_config = PySslConfig::new_internal(
+            EncryptionLevel::Required,
             false,
             None,
             true,
