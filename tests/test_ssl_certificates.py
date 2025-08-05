@@ -8,7 +8,6 @@ import os
 
 # Import the library components
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     from fastmssql import SslConfig

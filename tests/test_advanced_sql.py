@@ -9,9 +9,10 @@ import pytest
 import pytest_asyncio
 import sys
 import os
+from dotenv import load_dotenv
 
-# Add the parent directory to Python path for development
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
+# Load environment variables from .env file
+load_dotenv()
 
 try:
     from fastmssql import Connection

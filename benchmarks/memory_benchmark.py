@@ -8,11 +8,9 @@ import asyncio
 import gc
 import os
 import psutil
-import time
 import traceback
 import tracemalloc
-from typing import Dict, List, Tuple
-import statistics
+from typing import Dict
 
 # Try to import available libraries
 libraries = {}
