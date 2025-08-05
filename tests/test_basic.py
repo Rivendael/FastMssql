@@ -24,7 +24,6 @@ async def test_error_handling():
                 await conn.execute("SELECT * FROM non_existent_table_12345")
     except Exception as e:
         pytest.skip(f"Database not available for error testing: {e}")
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
     import fastmssql

@@ -1,8 +1,8 @@
 """
-fastmssql: A high-performance Python library for Microsoft SQL Server
+fastmssql: A high-performance Python library for Microsoft SQL Server - Pure Rust Implementation
 
-This library provides a Python interface to Microsoft SQL Server using the Tiberius
-Rust driver for excellent performance and memory safety.
+This library provides direct access to high-performance Rust implementations
+with minimal Python overhead for maximum performance.
 
 Example (async):
     >>> from fastmssql import Connection
@@ -12,7 +12,10 @@ Example (async):
     ...         print(row['name'], row['age'])
 """
 
-# Import everything from the main API module
+# Import from the maturin-generated module
 from .fastmssql import *
 
-__version__ = version()
+# Preserve module documentation
+__doc__ = fastmssql.__doc__
+if hasattr(fastmssql, "__all__"):
+    __all__ = fastmssql.__all__

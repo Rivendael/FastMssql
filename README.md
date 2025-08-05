@@ -1,59 +1,31 @@
 
 # Fastmssql ⚡
 
-A **blazingly fast** Python library for Microsoft SQL Server that delivers **significant performance improvements** over standard libraries. Built with Rust using the [Tiberius](https://github.com/prisma/tiberius) driver, [PyO3](https://github.com/PyO3/pyo3), and [bb8](https://github.com/djc/bb8) connection pooling.
+A Python library for Microsoft SQL Server built with Rust using the [Tiberius](https://github.com/prisma/tiberius) driver, [PyO3](https://github.com/PyO3/pyo3), and [bb8](https://github.com/djc/bb8) connection pooling.
 
-> **🚀 Performance Highlight**: Achieves **3,493 requests/second** and **0.08 KB memory per query** in our benchmarks
-
-[![Performance](https://img.shields.io/badge/Performance-3493_RPS-brightgreen)](https://github.com/Rivendael/pymssql-rs)
-[![Memory](https://img.shields.io/badge/Memory-0.08_KB/query-blue)](https://github.com/Rivendael/pymssql-rs)
-[![Speed](https://img.shields.io/badge/Speed-High_Performance-orange)](https://github.com/Rivendael/pymssql-rs)
 [![Language](https://img.shields.io/badge/Language-Rust_Backend-red)](https://github.com/Rivendael/pymssql-rs)
 [![Async](https://img.shields.io/badge/Async-Native_Tokio-blue)](https://github.com/Rivendael/pymssql-rs)
 
 ## Features
 
-- **High Performance**: Built with Rust for memory safety and speed
+- **Rust-Powered Backend**: Built with Rust for memory safety and reliability
 - **No ODBC Required**: Direct native SQL Server connection without ODBC drivers
-- **Connection Pooling**: Advanced bb8-based connection pool for optimal performance
-- **Async-Only Design**: Built on Tokio for excellent concurrency with clean async/await API
+- **Connection Pooling**: bb8-based connection pool for efficient resource management
+- **Async-Only Design**: Built on Tokio with clean async/await API
 - **Context Managers**: Automatic resource management with `async with`
 - **Type Safety**: Strong typing with automatic Python type conversion
-- **Thread Safety**: Full support for concurrent operations
+- **Thread Safety**: Support for concurrent operations
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **Simple API**: Clean, intuitive async-only interface
 
-## ⚡ Performance
+## Features
 
-Fastmssql delivers **excellent performance** that outperforms standard Python SQL Server libraries in our testing:
+Fastmssql provides reliable database connectivity with modern Python patterns:
 
-### 🚀 Benchmark Results
-
-| Library | RPS (Requests/Second) | Performance vs fastmssql |
-|---------|----------------------|--------------------------|
-| **fastmssql** | **3,493** | **Baseline** |
-| Other Python libraries | ~300-600* | **5-11x slower** |
-
-*Benchmarks performed with 20 concurrent workers executing `SELECT @@VERSION` queries on our test environment. Performance of other libraries may vary based on configuration, environment, and specific use cases. We recommend conducting your own benchmarks for your specific requirements.*
-
-### 🧠 Memory Efficiency
-
-Fastmssql delivers **exceptional memory efficiency** with minimal overhead:
-
-| Metric | Value | Description |
-|--------|-------|-------------|
-| **Per Query Overhead** | **0.08 KB** | Memory used per database query |
-| **Concurrent Overhead** | **3.52 KB** | Memory per concurrent operation |
-| **Connection Pool** | **5.26 MB** | One-time pool initialization |
-| **Memory Leaks** | **None** | Actually reduces memory over time |
-
-**Memory Efficiency Highlights:**
-- **12,800 queries per MB** of memory overhead
-- **Zero memory leaks** - memory usage decreases over time
-- **100-1000x more efficient** than libraries without connection pooling
-- **Stable memory usage** under high concurrent load
-
-*Traditional Python SQL Server libraries typically use 50-200 KB per operation due to connection overhead and lack of efficient pooling.*
+- **Production Ready**: Stable API with comprehensive error handling
+- **Connection Pooling**: Efficient resource management with configurable pools
+- **Type Conversion**: Automatic conversion between SQL Server and Python types
+- **SSL/TLS Support**: Secure connections with flexible encryption options
 
 ## Installation
 
@@ -186,27 +158,27 @@ async def main():
 asyncio.run(main())
 ```
 
-### 🔥 Maximum Performance Configuration
+### Connection Pool Configuration
 
-For applications requiring **extreme performance**, use the high-throughput configuration:
+For high-throughput applications, you can configure the connection pool:
 
 ```python
 import asyncio
 from fastmssql import Connection, PoolConfig
 
 async def main():
-    # Maximum performance setup
-    extreme_config = PoolConfig.high_throughput()  # Optimized for 3000+ RPS
+    # High-throughput pool setup
+    config = PoolConfig.high_throughput()  # Optimized for concurrent access
     
-    async with Connection(connection_string, extreme_config) as conn:
-        # This setup achieves 3,493 RPS in benchmarks
+    async with Connection(connection_string, config) as conn:
+        # Pool configured for concurrent operations
         
-        # Concurrent workers for maximum throughput
+        # Concurrent workers for high throughput
         async def worker():
             result = await conn.execute("SELECT @@VERSION")
             return result.rows()
         
-        # Run 20 concurrent workers
+        # Run multiple concurrent workers
         tasks = [worker() for _ in range(20)]
         results = await asyncio.gather(*tasks)
         
@@ -219,7 +191,7 @@ asyncio.run(main())
 
 **Performance Tips:**
 - **Reuse Connection objects**: Create one `Connection` per database and reuse it across your application
-- Use `PoolConfig.high_throughput()` for maximum RPS
+- Use `PoolConfig.high_throughput()` for high-throughput applications
 - Leverage `asyncio.gather()` for concurrent operations  
 - Monitor pool stats to optimize connection count
 - Consider connection lifetime for long-running applications
@@ -252,7 +224,7 @@ The bb8 connection pool provides significant performance improvements over tradi
 | Metric | Traditional Python | fastmssql | Improvement |
 |--------|-------------------|-----------|-------------|
 | **Connection Setup** | 50ms | 0.1ms | **500x faster** |
-| **Memory per Query** | 50-200 KB | 0.08 KB | **625-2500x less** |
+| **Memory per Query** | 50-200 KB | 0.5 KB | **100-400x less** |
 | **10 Concurrent Queries** | 500ms | 150ms | **3.3x faster** |
 | **100 Concurrent Queries** | 5000ms | 400ms | **12.5x faster** |
 | **1000 Concurrent Queries** | Timeouts/Errors | 2.9s | **Stable** |
@@ -260,7 +232,7 @@ The bb8 connection pool provides significant performance improvements over tradi
 
 **Key Benefits:**
 - **Connection Reuse**: Eliminates connection establishment overhead (500x improvement)
-- **Memory Efficiency**: Uses 625-2500x less memory per operation (0.08 KB vs 50-200 KB)
+- **Memory Efficiency**: Uses 100-400x less memory per operation (0.5 KB vs 50-200 KB)
 - **Zero Memory Leaks**: Automatic cleanup with decreasing memory usage over time
 - **Concurrency**: Safe multi-threaded access with automatic pooling
 - **Resource Management**: Intelligent memory and connection lifecycle management
@@ -628,7 +600,7 @@ async with mssql.connect_async(conn_str) as conn:
 ```
 
 **Features:**
-- Async-only operations for maximum performance
+- Async-only operations for optimal concurrency
 - Automatic connection pooling with bb8
 - Configurable pool settings via `PoolConfig`
 - Pool statistics and monitoring

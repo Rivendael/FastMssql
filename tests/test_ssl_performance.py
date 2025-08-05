@@ -17,10 +17,9 @@ except ImportError:
 
 # Import the library components
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from fastmssql import SslConfig, Connection, PoolConfig
+    from fastmssql import SslConfig, EncryptionLevel, Connection, PoolConfig
 except ImportError as e:
     pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
 
@@ -36,7 +35,7 @@ class TestSslConfigPerformance:
         
         for i in range(num_iterations):
             ssl_config = SslConfig(
-                encryption_level="Required",
+                encryption_level=EncryptionLevel.Required,
                 trust_server_certificate=False,
                 enable_sni=True,
                 server_name=f"server{i}.com"
@@ -85,7 +84,7 @@ class TestSslConfigPerformance:
     def test_ssl_config_property_access_performance(self):
         """Benchmark SSL config property access time."""
         ssl_config = SslConfig(
-            encryption_level="Required",
+            encryption_level=EncryptionLevel.Required,
             trust_server_certificate=False,
             enable_sni=True,
             server_name="test.server.com"
@@ -196,7 +195,7 @@ class TestSslConfigConcurrentPerformance:
             configs = []
             for i in range(configs_per_thread):
                 ssl_config = SslConfig(
-                    encryption_level="Required",
+                    encryption_level=EncryptionLevel.Required,
                     server_name=f"server{thread_id}_{i}.com"
                 )
                 configs.append(ssl_config)
@@ -228,7 +227,7 @@ class TestSslConfigConcurrentPerformance:
     def test_concurrent_property_access_performance(self):
         """Benchmark concurrent property access."""
         ssl_config = SslConfig(
-            encryption_level="Required",
+            encryption_level=EncryptionLevel.Required,
             trust_server_certificate=False,
             enable_sni=True,
             server_name="test.server.com"
@@ -284,7 +283,7 @@ class TestSslConfigConcurrentPerformance:
                     ssl_config = SslConfig.disabled()
                 else:
                     ssl_config = SslConfig(
-                        encryption_level="Required",
+                        encryption_level=EncryptionLevel.Required,
                         server_name=f"server{thread_id}_{i}.com"
                     )
                 
@@ -337,7 +336,7 @@ class TestSslConfigConcurrentPerformance:
         # Create various SSL configs
         for i in range(100):
             ssl_configs.append(SslConfig(
-                encryption_level="Required",
+                encryption_level=EncryptionLevel.Required,
                 server_name=f"server{i}.com"
             ))
             ssl_configs.append(SslConfig.development())
@@ -384,7 +383,7 @@ class TestSslConfigConcurrentPerformance:
                 configs = []
                 for i in range(configs_per_thread):
                     ssl_config = SslConfig(
-                        encryption_level="Required",
+                        encryption_level=EncryptionLevel.Required,
                         server_name=f"t{thread_id}_s{i}.com"
                     )
                     configs.append(ssl_config)

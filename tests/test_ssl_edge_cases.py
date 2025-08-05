@@ -9,10 +9,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import the library components
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 try:
-    from fastmssql import SslConfig, Connection
+    from fastmssql import SslConfig, EncryptionLevel, Connection
 except ImportError as e:
     pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
 
@@ -28,7 +27,7 @@ class TestSslConfigThreadSafety:
         def create_ssl_config(thread_id):
             try:
                 ssl_config = SslConfig(
-                    encryption_level="Required",
+                    encryption_level=EncryptionLevel.Required,
                     server_name=f"server{thread_id}.com"
                 )
                 results.append((thread_id, ssl_config))
@@ -54,7 +53,7 @@ class TestSslConfigThreadSafety:
     def test_concurrent_ssl_config_property_access(self):
         """Test accessing SSL config properties concurrently."""
         ssl_config = SslConfig(
-            encryption_level="Required",
+            encryption_level=EncryptionLevel.Required,
             trust_server_certificate=False,
             enable_sni=True,
             server_name="test.server.com"
@@ -107,7 +106,7 @@ class TestSslConfigMemoryManagement:
         # Create and discard many SSL configs
         for i in range(1000):
             ssl_config = SslConfig(
-                encryption_level="Required",
+                encryption_level=EncryptionLevel.Required,
                 server_name=f"server{i}.com"
             )
             # Config goes out of scope here
@@ -242,9 +241,9 @@ class TestSslConfigErrorRecovery:
                 pass  # Expected
         
         # Now create a valid config
-        ssl_config = SslConfig(encryption_level="Required")
-        assert ssl_config.encryption_level == "Required"
-    
+        ssl_config = SslConfig(encryption_level=EncryptionLevel.Required)
+        assert str(ssl_config.encryption_level) == "Required"
+
     def test_ssl_config_with_intermittent_file_access(self):
         """Test SSL config creation when certificate file access is intermittent."""
         import os
@@ -397,14 +396,14 @@ class TestSslConfigCompatibility:
         # version-specific Python features
         
         ssl_config = SslConfig(
-            encryption_level="Required",
+            encryption_level=EncryptionLevel.Required,
             trust_server_certificate=False,
             enable_sni=True,
             server_name="test.com"
         )
         
         # Test that all basic operations work
-        assert ssl_config.encryption_level == "Required"
+        assert str(ssl_config.encryption_level) == "Required"
         assert ssl_config.trust_server_certificate is False
         assert ssl_config.enable_sni is True
         assert ssl_config.server_name == "test.com"
@@ -475,8 +474,8 @@ class TestSslConfigBoundaryConditions:
             server_name=None,
             ca_certificate_path=None
         )
-        
-        assert ssl_config.encryption_level == "Required"  # Default
+
+        assert str(ssl_config.encryption_level) == "Required"  # Default
         assert ssl_config.server_name is None
         assert ssl_config.ca_certificate_path is None
     
