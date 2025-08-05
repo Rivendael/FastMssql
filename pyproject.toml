@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.1.8"
+version = "0.2.0"
 
 description = "A high-performance Python library for Microsoft SQL Server using Rust and Tiberius"
 readme = "README.md"
@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Rust",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -35,10 +36,6 @@ Homepage = "https://github.com/Rivendael/pymssql-rs"
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
-    "pytest-cov>=4.0",
-    "pytest-timeout>=2.1",
-    "black>=23.0",
-    "ruff>=0.1",
     "psutil>=5.9.0",  # For memory and process monitoring in stress tests
 ]
 

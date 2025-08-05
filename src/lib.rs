@@ -20,11 +20,11 @@ pub use ssl_config::{PySslConfig, EncryptionLevel};
 
 /// A high-performance Python library for Microsoft SQL Server using Rust and Tiberius
 #[pymodule]
-fn fastmssql_core(_py: Python, m: &PyModule) -> PyResult<()> {
-    // Initialize pyo3-asyncio for tokio with IO enabled
+fn fastmssql_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Initialize pyo3-async-runtimes for tokio with IO enabled
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     builder.enable_all();
-    pyo3_asyncio::tokio::init(builder);
+    pyo3_async_runtimes::tokio::init(builder);
     
     m.add_class::<PyConnection>()?;
     m.add_class::<PyQuery>()?;

@@ -1,6 +1,6 @@
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use crate::types::{PyRow, PyExecutionResult, PyValue};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3_async_runtimes::tokio::future_into_py;
 use crate::pool_config::PyPoolConfig;
 use crate::ssl_config::PySslConfig;
 use bb8_tiberius::ConnectionManager;
@@ -220,7 +220,7 @@ impl PyConnection {
 }
 
 /// Convert a Python object to PyValue, with support for iterable expansion
-fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
+fn python_to_pyvalue(obj: &Bound<PyAny>) -> PyResult<PyValue> {
     if obj.is_none() {
         Ok(PyValue::new_null())
     } else if let Ok(b) = obj.extract::<bool>() {
@@ -242,16 +242,16 @@ fn python_to_pyvalue(obj: &PyAny) -> PyResult<PyValue> {
 /// 
 /// This function handles both regular values and iterables. Iterables (except strings and bytes)
 /// are automatically expanded into multiple parameters for use in IN clauses.
-fn python_params_to_pyvalues(params: &PyList) -> PyResult<Vec<PyValue>> {
+fn python_params_to_pyvalues(params: &Bound<PyList>) -> PyResult<Vec<PyValue>> {
     let mut result = Vec::new();
     
     for param in params.iter() {
-        if is_expandable_iterable(param)? {
+        if is_expandable_iterable(&param)? {
             // Expand iterable into individual parameters
-            expand_iterable_to_params(param, &mut result)?;
+            expand_iterable_to_params(&param, &mut result)?;
         } else {
             // Regular parameter
-            result.push(python_to_pyvalue(param)?);
+            result.push(python_to_pyvalue(&param)?);
         }
     }
     
@@ -262,7 +262,7 @@ fn python_params_to_pyvalues(params: &PyList) -> PyResult<Vec<PyValue>> {
 /// 
 /// Returns true for lists, tuples, sets, etc., but false for strings and bytes
 /// which should be treated as single values.
-fn is_expandable_iterable(obj: &PyAny) -> PyResult<bool> {
+fn is_expandable_iterable(obj: &Bound<PyAny>) -> PyResult<bool> {
     // Don't expand strings or bytes
     if obj.extract::<String>().is_ok() || obj.extract::<Vec<u8>>().is_ok() {
         return Ok(false);
@@ -273,12 +273,19 @@ fn is_expandable_iterable(obj: &PyAny) -> PyResult<bool> {
 }
 
 /// Expand a Python iterable into individual PyValue parameters
-fn expand_iterable_to_params(iterable: &PyAny, result: &mut Vec<PyValue>) -> PyResult<()> {
-    let iter = iterable.iter()?;
+fn expand_iterable_to_params(iterable: &Bound<PyAny>, result: &mut Vec<PyValue>) -> PyResult<()> {
+    // Get the iter() method of the iterable
+    let iter_method = iterable.getattr("__iter__")?;
+    let iterator = iter_method.call0()?;
     
-    for item in iter {
-        let item = item?;
-        result.push(python_to_pyvalue(&item)?);
+    // Iterate through the items
+    loop {
+        match iterator.call_method0("__next__") {
+            Ok(item) => {
+                result.push(python_to_pyvalue(&item)?);
+            },
+            Err(_) => break, // StopIteration exception
+        }
     }
     
     Ok(())
@@ -342,7 +349,7 @@ impl PyConnection {
     }
     
     /// Connect to the database
-    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         let config = self.config.clone();
         let pool_config = self.pool_config.clone();
@@ -355,7 +362,7 @@ impl PyConnection {
     }
     
     /// Disconnect from the database
-    pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
@@ -369,7 +376,7 @@ impl PyConnection {
     /// For SELECT queries: Returns rows as PyRow objects
     /// For INSERT/UPDATE/DELETE/DDL: Returns affected row count
     /// The result type can be checked using has_rows() and has_affected_count() methods
-    pub fn execute<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
+    pub fn execute<'p>(&self, py: Python<'p>, query: String) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
@@ -381,7 +388,7 @@ impl PyConnection {
     /// 
     /// This method is kept for backward compatibility. It executes the query
     /// and returns only the rows if it's a SELECT query, or an empty list otherwise.
-    pub fn execute_query<'p>(&self, py: Python<'p>, query: String) -> PyResult<&'p PyAny> {
+    pub fn execute_query<'p>(&self, py: Python<'p>, query: String) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
@@ -398,7 +405,7 @@ impl PyConnection {
     /// For SELECT queries: Returns rows as PyRow objects
     /// For INSERT/UPDATE/DELETE/DDL: Returns affected row count
     /// The result type can be checked using has_rows() and has_affected_count() methods
-    pub fn execute_with_params<'p>(&self, py: Python<'p>, query: String, parameters: Vec<PyValue>) -> PyResult<&'p PyAny> {
+    pub fn execute_with_params<'p>(&self, py: Python<'p>, query: String, parameters: Vec<PyValue>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
@@ -411,7 +418,7 @@ impl PyConnection {
     /// This method accepts raw Python objects and converts them internally.
     /// Iterables (lists, tuples, sets, etc.) are automatically expanded for IN clauses,
     /// except strings and bytes which are treated as single values.
-    pub fn execute_with_python_params<'p>(&self, py: Python<'p>, query: String, params: &PyList) -> PyResult<&'p PyAny> {
+    pub fn execute_with_python_params<'p>(&self, py: Python<'p>, query: String, params: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         // Convert Python objects to PyValue objects with automatic expansion
@@ -426,7 +433,7 @@ impl PyConnection {
     /// 
     /// This method executes the query with parameters and returns only the rows 
     /// if it's a SELECT query, or an empty list otherwise.
-    pub fn execute_query_with_params<'p>(&self, py: Python<'p>, query: String, parameters: Vec<PyValue>) -> PyResult<&'p PyAny> {
+    pub fn execute_query_with_params<'p>(&self, py: Python<'p>, query: String, parameters: Vec<PyValue>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
@@ -439,7 +446,7 @@ impl PyConnection {
     }
     
     /// Check if connected to the database
-    pub fn is_connected<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    pub fn is_connected<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
@@ -448,7 +455,7 @@ impl PyConnection {
     }
     
     /// Get connection pool statistics
-    pub fn pool_stats<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    pub fn pool_stats<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         let pool_config = self.pool_config.clone();
         
@@ -463,24 +470,24 @@ impl PyConnection {
                     dict.set_item("max_size", pool_config.max_size)?;
                     dict.set_item("min_idle", pool_config.min_idle)?;
                     dict.set_item("active_connections", state.connections - state.idle_connections)?;
-                    Ok(dict.to_object(py))
+                    Ok(dict.into_any().unbind())
                 })
             } else {
                 Python::with_gil(|py| {
                     let dict = pyo3::types::PyDict::new(py);
                     dict.set_item("connected", false)?;
-                    Ok(dict.to_object(py))
+                    Ok(dict.into_any().unbind())
                 })
             }
         })
     }
     
     /// Enter context manager (async version)
-    pub fn __aenter__<'p>(slf: &'p PyCell<Self>, py: Python<'p>) -> PyResult<&'p PyAny> {
+    pub fn __aenter__<'p>(slf: &'p Bound<Self>, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = slf.borrow().pool.clone();
         let config = slf.borrow().config.clone();
         let pool_config = slf.borrow().pool_config.clone();
-        let self_obj: PyObject = slf.into();
+        let self_obj: PyObject = slf.clone().into();
         
         future_into_py(py, async move {
             let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
@@ -493,10 +500,10 @@ impl PyConnection {
     pub fn __aexit__<'p>(
         &self, 
         py: Python<'p>,
-        _exc_type: Option<&PyAny>, 
-        _exc_value: Option<&PyAny>, 
-        _traceback: Option<&PyAny>
-    ) -> PyResult<&'p PyAny> {
+        _exc_type: Option<Bound<PyAny>>, 
+        _exc_value: Option<Bound<PyAny>>, 
+        _traceback: Option<Bound<PyAny>>
+    ) -> PyResult<Bound<'p, PyAny>> {
         self.disconnect(py)
     }
 }

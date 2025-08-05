@@ -120,7 +120,7 @@ impl PyRow {
     }
     
     /// Support indexing by column name or index
-    pub fn __getitem__(&self, py: Python, key: &PyAny) -> PyResult<PyObject> {
+    pub fn __getitem__(&self, py: Python, key: Bound<PyAny>) -> PyResult<PyObject> {
         if let Ok(column_name) = key.extract::<String>() {
             let value = self.data.get(&column_name)
                 .ok_or_else(|| PyValueError::new_err(format!("Column '{}' not found", column_name)))?;
@@ -481,12 +481,15 @@ impl PyValue {
     pub fn to_python(&self, py: Python) -> PyResult<PyObject> {
         match &self.inner {
             PyValueInner::Null => Ok(py.None()),
-            PyValueInner::Bool(b) => Ok(b.to_object(py)),
-            PyValueInner::Int(i) => Ok(i.to_object(py)),
-            PyValueInner::Float(f) => Ok(f.to_object(py)),
-            PyValueInner::String(s) => Ok(s.to_object(py)),
-            PyValueInner::Bytes(b) => Ok(b.to_object(py)),
-            PyValueInner::DateTime(s) => Ok(s.to_object(py)),
+            PyValueInner::Bool(b) => {
+                let py_bool = (*b).into_pyobject(py)?;
+                Ok(py_bool.to_owned().into_any().unbind())
+            },
+            PyValueInner::Int(i) => Ok((*i).into_pyobject(py)?.into_any().unbind()),
+            PyValueInner::Float(f) => Ok((*f).into_pyobject(py)?.into_any().unbind()),
+            PyValueInner::String(s) => Ok(s.as_str().into_pyobject(py)?.into_any().unbind()),
+            PyValueInner::Bytes(b) => Ok(b.as_slice().into_pyobject(py)?.into_any().unbind()),
+            PyValueInner::DateTime(s) => Ok(s.as_str().into_pyobject(py)?.into_any().unbind()),
         }
     }
     
