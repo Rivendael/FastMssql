@@ -47,10 +47,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build Python package with maturin
+      - name: Build and install Python package with maturin
         run: |
-          maturin build --release
-          pip install target/wheels/*.whl
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          maturin develop --release
 
       - name: Wait for MSSQL to be ready
         run: |
@@ -61,7 +64,7 @@ jobs:
             # First check if port 1433 is open
             if nc -z localhost 1433; then
               echo "Port 1433 is open, testing SQL connection..."
-              if sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C; then
+              if sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C 2>/dev/null; then
                 echo "SQL Server is ready!"
                 break
               else
@@ -79,6 +82,8 @@ jobs:
           done
 
       - name: Run tests
-        run: pytest tests
+        run: |
+          source .venv/bin/activate
+          pytest tests
         env:
           FASTMSSQL_TEST_CONNECTION_STRING: "Server=localhost,1433;Database=master;User Id=SA;Password=YourStrong!Passw0rd;TrustServerCertificate=yes"
