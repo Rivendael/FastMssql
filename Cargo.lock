@@ -305,7 +305,7 @@ dependencies = [
 
 [[package]]
 name = "fastmssql_core"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "ahash",
  "anyhow",
