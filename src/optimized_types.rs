@@ -2,7 +2,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyDict, PyType};
 use pyo3::prelude::*;
 use tiberius::Row;
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
 use std::sync::Arc;
 use chrono::{Datelike, Timelike};
 

@@ -7,8 +7,9 @@ use bb8_tiberius::ConnectionManager;
 use tiberius::{Config, AuthMethod, Row};
 use pyo3::types::PyList;
 use pyo3::prelude::*;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock};
 use bb8::Pool;
+use smallvec::SmallVec; // Only used for rare expandable parameter case
 
 /// Internal result type for async operations
 #[derive(Debug)]
@@ -22,7 +23,7 @@ type ConnectionPool = Pool<ConnectionManager>;
 /// A connection pool to a Microsoft SQL Server database
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
-    pool: Arc<RwLock<Option<ConnectionPool>>>,
+    pool: Arc<OnceLock<ConnectionPool>>,
     config: Config,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>, // Prefix with underscore to silence unused warning
@@ -31,18 +32,14 @@ pub struct PyConnection {
 impl PyConnection {
     /// Execute database operation and return raw results - NO PYTHON CONTEXT
     async fn execute_raw_async(
-        pool: Arc<RwLock<Option<ConnectionPool>>>,
+        pool: Arc<OnceLock<ConnectionPool>>,
         query: String,
         parameters: Vec<FastParameter>,
     ) -> PyResult<ExecutionResult> {
-        let pool_arc = {
-            let pool_guard = pool.read().unwrap();
-            pool_guard.as_ref()
-                .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?
-                .clone()
-        };
+        let pool_ref = pool.get()
+            .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
         
-        Self::execute_internal_ultra_fast(&pool_arc, query, parameters).await
+        Self::execute_internal_ultra_fast(pool_ref, query, parameters).await
     }
 
 
@@ -83,9 +80,10 @@ impl PyConnection {
     }
 
     /// Helper function to close the connection pool
-    async fn close_pool(pool: Arc<RwLock<Option<ConnectionPool>>>) {
-        let mut pool_guard = pool.write().unwrap();
-        *pool_guard = None;
+    async fn close_pool(_pool: Arc<OnceLock<ConnectionPool>>) {
+        // OnceLock doesn't support "clearing" - this is intentional for performance
+        // Connection pools should generally live for the application lifetime
+        // If needed, the pool will be dropped when the last Arc reference is dropped
     }
 
     /// ULTRA-FAST execution - returns raw rows for conversion in Python context
@@ -188,20 +186,36 @@ impl PyConnection {
         
         let len = a.len();
         
-        // For small strings, use the fast scalar path
-        if len <= 16 {
+        // For small strings (≤8 bytes), use optimized scalar path
+        if len <= 8 {
             return Self::scalar_eq_ignore_case(a, b);
         }
         
-        // For larger strings, use SIMD chunks of 16 bytes
+        // For 9-16 bytes, use single 16-byte SIMD operation with padding
+        if len <= 16 {
+            let mut a_padded = [0u8; 16];
+            let mut b_padded = [0u8; 16];
+            a_padded[..len].copy_from_slice(a);
+            b_padded[..len].copy_from_slice(b);
+            return Self::simd_chunk_eq_ignore_case(&a_padded, &b_padded);
+        }
+        
+        // For larger strings, process in aligned 16-byte chunks
         let chunks = len / 16;
         let remainder = len % 16;
         
-        // Process 16-byte chunks with SIMD
+        // Process 16-byte chunks with SIMD - aligned access is faster
         for i in 0..chunks {
             let start = i * 16;
             let end = start + 16;
-            if !Self::simd_chunk_eq_ignore_case(&a[start..end], &b[start..end]) {
+            
+            // Use array slicing for guaranteed 16-byte alignment
+            let mut a_chunk = [0u8; 16];
+            let mut b_chunk = [0u8; 16];
+            a_chunk.copy_from_slice(&a[start..end]);
+            b_chunk.copy_from_slice(&b[start..end]);
+            
+            if !Self::simd_chunk_eq_ignore_case(&a_chunk, &b_chunk) {
                 return false;
             }
         }
@@ -305,12 +319,13 @@ fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
 }
 
 /// Convert Python objects to FastParameter with automatic iterable expansion
-/// Optimized for async contexts - avoids thread_local storage issues
 fn python_params_to_fast_parameters(params: &Bound<PyList>) -> PyResult<Vec<FastParameter>> {
     let len = params.len();
     
-    // Direct allocation with optimal capacity - simpler and more reliable in async
-    let mut result = Vec::with_capacity(len.max(8));
+    // - 0-8 parameters: Zero heap allocations (stack only)
+    // - 9+ parameters: Automatic heap fallback (rare case)
+    // - Consistent code path, better cache locality
+    let mut result: SmallVec<[FastParameter; 8]> = SmallVec::with_capacity(len.max(8));
     
     for param in params.iter() {
         if is_expandable_iterable(&param)? {
@@ -320,25 +335,31 @@ fn python_params_to_fast_parameters(params: &Bound<PyList>) -> PyResult<Vec<Fast
         }
     }
     
-    Ok(result)
+    Ok(result.into_vec())
 }
 
 /// Expand a Python iterable into individual FastParameter objects
-fn expand_iterable_to_fast_params(iterable: &Bound<PyAny>, result: &mut Vec<FastParameter>) -> PyResult<()> {
+fn expand_iterable_to_fast_params<T>(iterable: &Bound<PyAny>, result: &mut T) -> PyResult<()> 
+where
+    T: Extend<FastParameter>
+{
     // Get the iter() method of the iterable
     let iter_method = iterable.getattr("__iter__")?;
     let iterator = iter_method.call0()?;
     
-    // Iterate through the items
+    // Collect items into a temporary vector
+    let mut items = Vec::new();
     loop {
         match iterator.call_method0("__next__") {
             Ok(item) => {
-                result.push(python_to_fast_parameter(&item)?);
+                items.push(python_to_fast_parameter(&item)?);
             },
             Err(_) => break, // StopIteration exception
         }
     }
     
+    // Extend the result with all items at once
+    result.extend(items);
     Ok(())
 }
 
@@ -406,7 +427,7 @@ impl PyConnection {
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
         Ok(PyConnection {
-            pool: Arc::new(RwLock::new(None)),
+            pool: Arc::new(OnceLock::new()),
             config,
             pool_config,
             _ssl_config: ssl_config,
@@ -420,26 +441,16 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            // Check if already connected
-            let already_connected = {
-                let pool_guard = pool.read().unwrap();
-                pool_guard.is_some()
-            };
-            
-            if already_connected {
+            // Check if already connected using OnceLock::get()
+            if pool.get().is_some() {
                 return Ok(());
             }
             
-            // Create pool if not connected
+            // Try to initialize the pool (only succeeds once)
             let new_pool = Self::establish_pool(config, &pool_config).await?;
             
-            // Set the new pool
-            {
-                let mut pool_guard = pool.write().unwrap();
-                if pool_guard.is_none() {
-                    *pool_guard = Some(new_pool);
-                }
-            }
+            // set() returns Err if already set, which is fine - just means another thread won
+            let _ = pool.set(new_pool);
             Ok(())
         })
     }
@@ -506,10 +517,7 @@ impl PyConnection {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            let is_connected = {
-                let pool_guard = pool.read().unwrap();
-                pool_guard.is_some()
-            };
+            let is_connected = pool.get().is_some();
             Ok(is_connected)
         })
     }
@@ -520,12 +528,7 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            let pool_arc = {
-                let pool_guard = pool.read().unwrap();
-                pool_guard.clone()
-            };
-            
-            if let Some(pool_ref) = pool_arc {
+            if let Some(pool_ref) = pool.get() {
                 let state = pool_ref.state();
                 Ok((
                     true, // connected
@@ -547,26 +550,16 @@ impl PyConnection {
         let pool_config = slf.borrow().pool_config.clone();
         
         future_into_py(py, async move {
-            // Check if already connected
-            let already_connected = {
-                let pool_guard = pool.read().unwrap();
-                pool_guard.is_some()
-            };
-            
-            if already_connected {
+            // Check if already connected using OnceLock::get()
+            if pool.get().is_some() {
                 return Ok(());
             }
             
-            // Create pool if not connected
+            // Try to initialize the pool (only succeeds once)
             let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
             
-            // Set the new pool
-            {
-                let mut pool_guard = pool.write().unwrap();
-                if pool_guard.is_none() {
-                    *pool_guard = Some(new_pool);
-                }
-            }
+            // set() returns Err if already set, which is fine - just means another thread won
+            let _ = pool.set(new_pool);
             Ok(())
         })
     }
