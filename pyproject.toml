@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.2.6"
+version = "0.2.7"
 
 description = "A high-performance Python library for Microsoft SQL Server using Rust and Tiberius"
 readme = "README.md"
@@ -40,7 +40,8 @@ dev = [
 ]
 
 [tool.maturin]
-module-name = "fastmssql"
+module-name = "fastmssql.fastmssql"
+python-source = "python"
 
 [tool.pytest.ini_options]
 minversion = "6.0"

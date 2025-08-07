@@ -64,7 +64,7 @@ async def test_simple_query():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             result = await conn.execute("SELECT 1 as test_value")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             test_value = rows[0]['test_value']
             assert test_value == 1
@@ -106,7 +106,7 @@ async def test_data_types():
                     NULL as null_val
             """)
             
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
             
@@ -126,7 +126,7 @@ async def test_convenience_functions():
         # Test direct execution using async Connection
         async with Connection(TEST_CONNECTION_STRING) as conn:
             result = await conn.execute("SELECT 'convenience' as test")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['test'] == 'convenience'
             
@@ -179,7 +179,7 @@ async def test_async_simple_query():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             result = await conn.execute("SELECT 1 as test_value")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['test_value'] == 1
     except Exception as e:
@@ -220,7 +220,7 @@ async def test_async_data_types():
                     NULL as null_val
             """)
             
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
             
@@ -262,7 +262,7 @@ async def test_async_execute_non_query():
             result = await conn.execute(setup_and_test_sql)
             
             # Verify that our update worked
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['updated_count'] == 1
             
@@ -280,17 +280,17 @@ async def test_async_execute_scalar():
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test scalar with number
             result = await conn.execute("SELECT 42 as scalar_value")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] == 42
             
             # Test scalar with string
             result = await conn.execute("SELECT 'hello world' as scalar_value")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] == 'hello world'
             
             # Test scalar with NULL
             result = await conn.execute("SELECT NULL as scalar_value")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] is None
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -303,7 +303,7 @@ async def test_async_convenience_functions():
         # Test direct async execution using Connection class
         async with Connection(TEST_CONNECTION_STRING) as conn:
             result = await conn.execute("SELECT 'convenience_async' as test")
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['test'] == 'convenience_async'
             
@@ -327,7 +327,7 @@ async def test_async_manual_connection_lifecycle():
         
         # Execute a query
         result = await conn.execute("SELECT 'manual_async' as test")
-        rows = result.rows()
+        rows = result.rows() if result.has_rows() else []
         assert len(rows) == 1
         assert rows[0]['test'] == 'manual_async'
         
@@ -358,7 +358,7 @@ async def test_simple_parameterized_query():
                 [42, "test", True]
             )
             
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
             
@@ -383,7 +383,7 @@ async def test_parameters_object_basic():
                 params
             )
             
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
             
@@ -410,7 +410,7 @@ async def test_parameters_method_chaining():
                 params
             )
             
-            rows = result.rows()
+            rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
             
@@ -435,9 +435,9 @@ async def test_async_concurrent_queries():
             
             # Verify results
             assert len(results) == 3
-            values = [result.rows()[0]['value'] for result in results]
-            names = [result.rows()[0]['name'] for result in results]
-            
+            values = [(result.rows()[0] if result.has_rows() else {}).get('value') for result in results]
+            names = [(result.rows()[0] if result.has_rows() else {}).get('name') for result in results]
+
             assert set(values) == {1, 2, 3}
             assert set(names) == {'query1', 'query2', 'query3'}
     except Exception as e:

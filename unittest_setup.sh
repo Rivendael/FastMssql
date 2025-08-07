@@ -26,5 +26,5 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-docker run -d -e ACCEPT_EULA=Y -e SA_PASSWORD='YourStrong!Passw0rd' -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
-echo "FASTMSSQL_TEST_CONNECTION_STRING=\"Server=localhost,1433;Database=master;User Id=SA;Password=YourStrong!Passw0rd;TrustServerCertificate=yes\"" >> sample.env
+docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=StrongPassword123!" -p 1433:1433 --name sqlserver -d mcr.microsoft.com/mssql/server:2022-latest
+echo "FASTMSSQL_TEST_CONNECTION_STRING=\"Server=localhost,1433;Database=master;User Id=SA;Password=StrongPassword123!;TrustServerCertificate=yes\"" >> sample.env
