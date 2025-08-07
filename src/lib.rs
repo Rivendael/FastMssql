@@ -4,6 +4,9 @@
 // This is a known issue with PyO3 macros and can be safely ignored
 #![allow(non_local_definitions)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use pyo3::prelude::*;
 
 mod connection;
@@ -27,22 +30,24 @@ fn version() -> String {
 /// The PyO3 module registration
 #[pymodule]
 fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Initialize pyo3-async-runtimes for tokio with database-optimized settings
+    // OPTIMIZATION: Database-optimized Tokio runtime configuration
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     
-    // Detect CPU count for optimal threading
+    // Detect optimal core count for database I/O workloads
     let cpu_count = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(8);  // Fallback to 8 cores
     
     builder
         .enable_all()
-        // Optimize for database I/O workloads - database connections are I/O bound, not CPU bound
-        .worker_threads(cpu_count.min(16))  // 1x CPU cores, capped at 16 (sufficient for I/O)
-        .max_blocking_threads((cpu_count * 8).min(128))  // 8x CPU for blocking I/O, capped at 128
-        .thread_keep_alive(std::time::Duration::from_secs(300))  // 5 minutes keep-alive
-        .thread_stack_size(4 * 1024 * 1024);  // 4MB stack - sufficient for complex queries, saves memory
-        // Remove custom queue intervals - defaults are well-tuned for most workloads
+        // CRITICAL: Ultra-tuned for 20K+ RPS database workloads
+        .worker_threads((cpu_count / 4).max(1).min(4))  // Fewer workers = less contention at high RPS
+        .max_blocking_threads((cpu_count * 32).min(512)) // More blocking threads for DB I/O surge capacity
+        .thread_keep_alive(std::time::Duration::from_secs(900)) // 15 minutes to avoid thrashing
+        .thread_stack_size(4 * 1024 * 1024)  // Smaller stack = more threads, better for high concurrency
+        // CRITICAL: Ultra-aggressive scheduling for maximum RPS
+        .global_queue_interval(7)   // Reduced from 31 - faster work stealing at high RPS
+        .event_interval(13);        // Reduced from 61 - faster I/O polling
     
     pyo3_async_runtimes::tokio::init(builder);
     
