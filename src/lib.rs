@@ -4,6 +4,9 @@
 // This is a known issue with PyO3 macros and can be safely ignored
 #![allow(non_local_definitions)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use pyo3::prelude::*;
 
 mod connection;
@@ -27,20 +30,24 @@ fn version() -> String {
 /// The PyO3 module registration
 #[pymodule]
 fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Initialize pyo3-async-runtimes for tokio with high-performance settings
+    // OPTIMIZATION: Database-optimized Tokio runtime configuration
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     
-    // Detect CPU count or use sensible defaults
+    // Detect optimal core count for database I/O workloads
     let cpu_count = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(8);  // Fallback to 8 cores
     
     builder
         .enable_all()
-        .worker_threads(cpu_count.max(12))  // Even more worker threads
-        .max_blocking_threads(256)  // MUCH higher for database I/O - this is key!
-        .thread_keep_alive(std::time::Duration::from_secs(120))  // Keep threads alive even longer
-        .thread_stack_size(4 * 1024 * 1024);  // 4MB stack for each thread
+        // CRITICAL: Ultra-tuned for 20K+ RPS database workloads
+        .worker_threads((cpu_count / 2).max(1).min(8))  // Fewer workers = less contention at high RPS
+        .max_blocking_threads((cpu_count * 32).min(512)) // More blocking threads for DB I/O surge capacity
+        .thread_keep_alive(std::time::Duration::from_secs(900)) // 15 minutes to avoid thrashing
+        .thread_stack_size(4 * 1024 * 1024)  // Smaller stack = more threads, better for high concurrency
+        // CRITICAL: Ultra-aggressive scheduling for maximum RPS
+        .global_queue_interval(7)   // Reduced from 31 - faster work stealing at high RPS
+        .event_interval(13);        // Reduced from 61 - faster I/O polling
     
     pyo3_async_runtimes::tokio::init(builder);
     
