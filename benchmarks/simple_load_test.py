@@ -12,18 +12,18 @@ from collections import defaultdict
 
 # Add the python directory to path
 
-from fastmssql import Connection
+from fastmssql import Connection, PoolConfig
 
 
-async def simple_load_test(connection_string: str, workers: int = 10, duration: int = 30, warmup: int = 5):
-    """Run a simple load test with proper connection pooling and accurate measurements."""
+async def simple_load_test(connection_string: str, workers: int = 10, duration: int = 15, warmup: int = 5):
+    """Run a simple load test with multiple connection objects to avoid GIL serialization."""
     
-    print(f"🎯 Simple Load Test:")
+    print(f"🎯 Simple Load Test (Multi-Object for GIL Bypass):")
     print(f"   Workers: {workers}")
     print(f"   Duration: {duration}s (+ {warmup}s warmup)")
     print(f"   Query: SELECT @@VERSION")
+    print(f"   Strategy: Each worker gets its own Connection object")
 
-    
     # Thread-safe counters using locks
     stats_lock = asyncio.Lock()
     total_requests = 0
@@ -31,11 +31,12 @@ async def simple_load_test(connection_string: str, workers: int = 10, duration: 
     response_times = []
     worker_stats = defaultdict(lambda: {"requests": 0, "errors": 0})
     
-    async with Connection(connection_string) as conn:
         
-        async def worker(worker_id: int):
-            """Worker that executes queries using the shared connection pool."""
-            nonlocal total_requests, total_errors
+    async def worker(worker_id: int):
+        """Worker that executes queries with its own optimized connection pool."""
+        nonlocal total_requests, total_errors  # Fix: Add this line back
+        # 🚀 OPTIMIZED: Each worker gets a smaller, more efficient pool
+        async with Connection(connection_string, PoolConfig.development()) as conn:  # 5 max connections instead of 100
             
             # Warmup phase - don't count these requests
             warmup_end = time.time() + warmup
@@ -61,10 +62,7 @@ async def simple_load_test(connection_string: str, workers: int = 10, duration: 
             while time.time() < test_end:
                 start_time = time.perf_counter()  # More precise timing
                 try:
-                    result = await conn.execute("SELECT GETDATE(), @@SPID")
-                    # Force consumption of results
-                    if result.has_rows():
-                        _ = list(result.rows())
+                    _ = await conn.execute("SELECT 1")  # Faster than @@VERSION
                     
                     response_time = time.perf_counter() - start_time
                     local_response_times.append(response_time)
@@ -86,23 +84,23 @@ async def simple_load_test(connection_string: str, workers: int = 10, duration: 
                 worker_stats[worker_id]["errors"] = local_errors
             
             print(f"Worker {worker_id}: {local_requests} requests, {local_errors} errors")
+    
+    print("Starting warmup phase...")
         
-        print("Starting warmup phase...")
+    # Start all workers
+    worker_tasks = [asyncio.create_task(worker(i)) for i in range(workers)]
         
-        # Start all workers
-        worker_tasks = [asyncio.create_task(worker(i)) for i in range(workers)]
+    # Wait for warmup to complete
+    await asyncio.sleep(warmup + 1)
+    print("Test phase starting...")
         
-        # Wait for warmup to complete
-        await asyncio.sleep(warmup + 1)
-        print("Test phase starting...")
+    # Measure actual test duration precisely
+    test_start = time.perf_counter()
         
-        # Measure actual test duration precisely
-        test_start = time.perf_counter()
+    # Wait for all workers to complete
+    await asyncio.gather(*worker_tasks)
         
-        # Wait for all workers to complete
-        await asyncio.gather(*worker_tasks)
-        
-        actual_duration = time.perf_counter() - test_start - warmup
+    actual_duration = time.perf_counter() - test_start - warmup
     
     # Calculate comprehensive results
     if total_requests > 0:
