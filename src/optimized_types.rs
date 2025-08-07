@@ -2,48 +2,42 @@ use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyDict, PyType};
 use pyo3::prelude::*;
 use tiberius::Row;
+use std::collections::HashMap;
+use std::sync::Arc;
+use chrono::{Datelike, Timelike};
 
-/// Ultra-fast direct conversion from Tiberius Row to Python objects
-/// Eliminates the intermediate PyValue layer for maximum performance
-#[pyclass(name = "FastRow")]
-pub struct PyFastRow {
-    // Pre-converted values stored directly - no mutex needed since we convert eagerly
-    cached_values: std::collections::HashMap<String, PyObject>,
-    column_names: Vec<String>,
+/// Holds shared column information for a result set to reduce memory usage.
+/// This is shared across all `PyFastRow` instances in a result set.
+#[derive(Debug)]
+pub struct ColumnInfo {
+    /// Ordered list of column names
+    pub names: Vec<String>,
+    /// Map from column name to its index for fast lookups
+    pub map: HashMap<String, usize>,
 }
 
-impl Clone for PyFastRow {
-    fn clone(&self) -> Self {
-        Python::with_gil(|py| {
-            let mut cloned_values = std::collections::HashMap::with_capacity(self.cached_values.len());
-            for (key, value) in &self.cached_values {
-                cloned_values.insert(key.clone(), value.clone_ref(py));
-            }
-            PyFastRow {
-                cached_values: cloned_values,
-                column_names: self.column_names.clone(),
-            }
-        })
-    }
+/// Memory-optimized to share column metadata across all rows in a result set.
+#[pyclass(name = "FastRow")]
+pub struct PyFastRow {
+    // Row values stored in column order for cache-friendly access
+    values: Vec<PyObject>,
+    // Shared pointer to column metadata for the entire result set
+    column_info: Arc<ColumnInfo>,
 }
 
 impl PyFastRow {
-    pub fn from_tiberius_row(row: Row, py: Python) -> PyResult<Self> {
-        let column_names: Vec<String> = row.columns()
-            .iter()
-            .map(|col| col.name().to_string())
-            .collect();
-        
-        // Eagerly convert all values - single allocation, no locks
-        let mut cached_values = std::collections::HashMap::with_capacity(column_names.len());
-        for (index, column_name) in column_names.iter().enumerate() {
-            let value = Self::extract_value_direct(&row, index, py)?;
-            cached_values.insert(column_name.clone(), value);
+    /// Create a new PyFastRow from a Tiberius row and shared column info
+    pub fn from_tiberius_row(row: Row, py: Python, column_info: Arc<ColumnInfo>) -> PyResult<Self> {
+        // Eagerly convert all values in column order
+        let mut values = Vec::with_capacity(column_info.names.len());
+        for i in 0..column_info.names.len() {
+            let value = Self::extract_value_direct(&row, i, py)?;
+            values.push(value);
         }
         
         Ok(PyFastRow {
-            cached_values,
-            column_names,
+            values,
+            column_info,
         })
     }
 
@@ -72,31 +66,13 @@ impl PyFastRow {
                 }
             }
             ColumnType::Bit | ColumnType::Bitn => {
-                // Debug: Check what we're getting
+                // Simple boolean handling - convert through integer to avoid PyBool issues
                 match row.try_get::<bool, usize>(index) {
                     Ok(Some(val)) => {
-                        let py_bool = val.into_pyobject(py)?;
-                        Ok(py_bool.to_owned().into_any().unbind())
+                        let int_val = if val { 1i32 } else { 0i32 };
+                        Ok(int_val.into_pyobject(py)?.into_any().unbind())
                     },
-                    Ok(None) => {
-                        // This is a SQL NULL value
-                        Ok(py.None())
-                    },
-                    Err(_e) => {
-                        // Try as other types that might be returned for BIT
-                        if let Ok(Some(val)) = row.try_get::<i32, usize>(index) {
-                            let bool_val = val != 0;
-                            let py_bool = bool_val.into_pyobject(py)?;
-                            Ok(py_bool.to_owned().into_any().unbind())
-                        } else if let Ok(Some(val)) = row.try_get::<u8, usize>(index) {
-                            let bool_val = val != 0;
-                            let py_bool = bool_val.into_pyobject(py)?;
-                            Ok(py_bool.to_owned().into_any().unbind())
-                        } else {
-                            // Fallback to None
-                            Ok(py.None())
-                        }
-                    }
+                    _ => Ok(py.None())
                 }
             }
             ColumnType::Int8 => {
@@ -178,8 +154,19 @@ impl PyFastRow {
             ColumnType::Datetime | ColumnType::Datetimen | ColumnType::Datetime2 => {
                 match row.try_get::<chrono::NaiveDateTime, usize>(index) {
                     Ok(Some(val)) => {
-                        let formatted = val.format("%Y-%m-%d %H:%M:%S%.f").to_string();
-                        Ok(formatted.into_pyobject(py)?.into_any().unbind())
+                        // Create Python datetime directly without string intermediate
+                        let dt = pyo3::types::PyDateTime::new(
+                            py,
+                            val.year(),
+                            val.month() as u8,
+                            val.day() as u8,
+                            val.hour() as u8,
+                            val.minute() as u8,
+                            val.second() as u8,
+                            val.nanosecond() / 1000,  // Convert nanoseconds to microseconds
+                            None,
+                        )?;
+                        Ok(dt.into_any().unbind())
                     },
                     _ => Ok(py.None())
                 }
@@ -187,8 +174,14 @@ impl PyFastRow {
             ColumnType::Daten => {
                 match row.try_get::<chrono::NaiveDate, usize>(index) {
                     Ok(Some(val)) => {
-                        let formatted = val.format("%Y-%m-%d").to_string();
-                        Ok(formatted.into_pyobject(py)?.into_any().unbind())
+                        // Create Python date directly without string intermediate
+                        let date = pyo3::types::PyDate::new(
+                            py,
+                            val.year(),
+                            val.month() as u8,
+                            val.day() as u8,
+                        )?;
+                        Ok(date.into_any().unbind())
                     },
                     _ => Ok(py.None())
                 }
@@ -196,8 +189,16 @@ impl PyFastRow {
             ColumnType::Timen => {
                 match row.try_get::<chrono::NaiveTime, usize>(index) {
                     Ok(Some(val)) => {
-                        let formatted = val.format("%H:%M:%S%.f").to_string();
-                        Ok(formatted.into_pyobject(py)?.into_any().unbind())
+                        // Create Python time directly without string intermediate
+                        let time = pyo3::types::PyTime::new(
+                            py,
+                            val.hour() as u8,
+                            val.minute() as u8,
+                            val.second() as u8,
+                            val.nanosecond() / 1000,  // Convert nanoseconds to microseconds
+                            None,
+                        )?;
+                        Ok(time.into_any().unbind())
                     },
                     _ => Ok(py.None())
                 }
@@ -205,20 +206,38 @@ impl PyFastRow {
             ColumnType::DatetimeOffsetn => {
                 match row.try_get::<chrono::DateTime<chrono::Utc>, usize>(index) {
                     Ok(Some(val)) => {
-                        Ok(val.to_rfc3339().into_pyobject(py)?.into_any().unbind())
+                        // Create Python datetime directly without string intermediate
+                        let dt = pyo3::types::PyDateTime::new(
+                            py,
+                            val.year(),
+                            val.month() as u8,
+                            val.day() as u8,
+                            val.hour() as u8,
+                            val.minute() as u8,
+                            val.second() as u8,
+                            val.nanosecond() / 1000,  // Convert nanoseconds to microseconds
+                            None, // For now, skip timezone to avoid conversion overhead
+                        )?;
+                        Ok(dt.into_any().unbind())
                     },
                     _ => Ok(py.None())
                 }
             }
             ColumnType::Guid => {
                 match row.try_get::<uuid::Uuid, usize>(index) {
-                    Ok(Some(val)) => Ok(val.to_string().into_pyobject(py)?.into_any().unbind()),
+                    Ok(Some(val)) => {
+                        // Use most efficient UUID string conversion
+                        let uuid_str = format!("{}", val);
+                        Ok(uuid_str.into_pyobject(py)?.into_any().unbind())
+                    },
                     _ => Ok(py.None())
                 }
             }
             ColumnType::Xml => {
                 if let Ok(Some(xml_data)) = row.try_get::<&tiberius::xml::XmlData, usize>(index) {
-                    Ok(xml_data.to_string().into_pyobject(py)?.into_any().unbind())
+                    // Convert to string efficiently - XmlData likely implements Display
+                    let xml_str = xml_data.to_string();
+                    Ok(xml_str.into_pyobject(py)?.into_any().unbind())
                 } else {
                     Ok(py.None())
                 }
@@ -236,36 +255,35 @@ impl PyFastRow {
 
 #[pymethods]
 impl PyFastRow {
-    /// Lazy column access - only convert when requested
+    /// Ultra-fast column access using shared column map and direct Vec indexing
     pub fn __getitem__(&self, py: Python, key: Bound<PyAny>) -> PyResult<PyObject> {
-        let column_name = if let Ok(name) = key.extract::<String>() {
-            name
-        } else if let Ok(index) = key.extract::<usize>() {
-            if index < self.column_names.len() {
-                self.column_names[index].clone()
+        if let Ok(name) = key.extract::<String>() {
+            // Access by name: O(1) hash lookup + O(1) Vec access
+            if let Some(&index) = self.column_info.map.get(&name) {
+                Ok(self.values[index].clone_ref(py))
             } else {
-                return Err(PyValueError::new_err("Column index out of range"));
+                Err(PyValueError::new_err(format!("Column '{}' not found", name)))
+            }
+        } else if let Ok(index) = key.extract::<usize>() {
+            // Access by index: Direct O(1) Vec access - extremely fast!
+            if let Some(value) = self.values.get(index) {
+                Ok(value.clone_ref(py))
+            } else {
+                Err(PyValueError::new_err("Column index out of range"))
             }
         } else {
-            return Err(PyValueError::new_err("Key must be string or integer"));
-        };
-
-        // Get from cache (all values are pre-cached)
-        if let Some(cached) = self.cached_values.get(&column_name) {
-            Ok(cached.clone_ref(py))
-        } else {
-            Err(PyValueError::new_err(format!("Column '{}' not found", column_name)))
+            Err(PyValueError::new_err("Key must be string or integer"))
         }
     }
 
-    /// Get all column names
-    pub fn columns(&self) -> Vec<String> {
-        self.column_names.clone()
+    /// Get all column names from shared column info - returns slice to avoid cloning
+    pub fn columns(&self) -> &[String] {
+        &self.column_info.names
     }
 
     /// Get number of columns
     pub fn __len__(&self) -> usize {
-        self.column_names.len()
+        self.column_info.names.len()
     }
 
     /// Get a specific column value by name
@@ -278,31 +296,21 @@ impl PyFastRow {
         self.__getitem__(py, index.into_pyobject(py)?.into_any())
     }
 
-    /// Get all values as a list (in column order)
-    pub fn values(&self, py: Python) -> PyResult<Vec<PyObject>> {
-        let mut result = Vec::with_capacity(self.column_names.len());
-        
-        for column_name in &self.column_names {
-            if let Some(cached) = self.cached_values.get(column_name) {
-                result.push(cached.clone_ref(py));
-            } else {
-                result.push(py.None());
-            }
+    /// Get all values as a list - optimized to minimize cloning
+    pub fn values(&self, py: Python) -> PyResult<Py<pyo3::types::PyList>> {
+        let py_list = pyo3::types::PyList::empty(py);
+        for value in &self.values {
+            py_list.append(value)?;
         }
-        
-        Ok(result)
+        Ok(py_list.into())
     }
 
-    /// Convert to dictionary - batch conversion for efficiency
+    /// Convert to dictionary - optimized with zip iterator
     pub fn to_dict(&self, py: Python) -> PyResult<PyObject> {
         let dict = PyDict::new(py);
         
-        for column_name in &self.column_names {
-            if let Some(cached) = self.cached_values.get(column_name) {
-                dict.set_item(column_name, cached.clone_ref(py))?;
-            } else {
-                dict.set_item(column_name, py.None())?;
-            }
+        for (name, value) in self.column_info.names.iter().zip(self.values.iter()) {
+            dict.set_item(name, value)?;
         }
         
         Ok(dict.into())
@@ -310,32 +318,39 @@ impl PyFastRow {
 
     /// String representation
     pub fn __str__(&self) -> String {
-        format!("FastRow with {} columns", self.column_names.len())
+        format!("FastRow with {} columns", self.column_info.names.len())
     }
 
     /// Detailed representation
     pub fn __repr__(&self) -> String {
-        format!("FastRow(columns={:?})", self.column_names)
+        format!("FastRow(columns={:?})", self.column_info.names)
     }
 }
 
-/// Optimized execution result that can return either FastRow objects or affected count
+/// Optimized execution result that can return either FastRow objects or affected count.
+/// Now manages shared column information for memory efficiency.
 #[pyclass(name = "FastExecutionResult")]
 pub struct PyFastExecutionResult {
     rows: Option<Vec<PyFastRow>>,
     affected_rows: Option<u64>,
+    // Shared column info for all rows in this result set
+    column_info: Option<Arc<ColumnInfo>>,
 }
 
 #[pymethods]
 impl PyFastExecutionResult {
-    /// Get the returned rows (if any) - return as Python list that can be indexed
+    /// Get the returned rows (if any) - zero-copy reference access
     pub fn rows(&self, py: Python) -> PyResult<PyObject> {
         match &self.rows {
             Some(rows) => {
+                // Create list without cloning rows - just create Python references
                 let py_list = pyo3::types::PyList::empty(py);
-                for row in rows.iter() {
-                    // Create a new PyCell for each row to satisfy PyO3's ownership requirements
-                    let py_row = Py::new(py, row.clone())?;
+                for row in rows {
+                    // Create Python object directly without cloning the row data
+                    let py_row = Py::new(py, PyFastRow {
+                        values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
+                        column_info: Arc::clone(&row.column_info),
+                    })?;
                     py_list.append(py_row)?;
                 }
                 Ok(py_list.into())
@@ -370,22 +385,45 @@ impl PyFastExecutionResult {
         Self {
             rows: None,
             affected_rows: Some(count),
+            column_info: None,
         }
     }
 }
 
 impl PyFastExecutionResult {
-    /// Create a result with rows - zero-copy conversion from Tiberius rows
+    /// Create a result with rows - efficient shared column info approach
     pub fn with_rows(tiberius_rows: Vec<tiberius::Row>, py: Python) -> PyResult<Self> {
+        if tiberius_rows.is_empty() {
+            return Ok(Self {
+                rows: Some(Vec::new()),
+                affected_rows: None,
+                column_info: None,
+            });
+        }
+
+        // Create shared column info from the first row - optimized to avoid cloning
+        let first_row = &tiberius_rows[0];
+        let names: Vec<String> = first_row.columns()
+            .iter()
+            .map(|col| col.name().to_string())
+            .collect();
+        let map: HashMap<String, usize> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| (name.clone(), i))  // Use clone() for consistency
+            .collect();
+        let column_info = Arc::new(ColumnInfo { names, map });
+
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
-        
         for row in tiberius_rows.into_iter() {
-            fast_rows.push(PyFastRow::from_tiberius_row(row, py)?);
+            // Arc::clone is cheap (just atomic increment), not cloning the data
+            fast_rows.push(PyFastRow::from_tiberius_row(row, py, Arc::clone(&column_info))?);
         }
         
         Ok(Self {
             rows: Some(fast_rows),
             affected_rows: None,
+            column_info: Some(column_info),
         })
     }
     
@@ -394,18 +432,39 @@ impl PyFastExecutionResult {
         Self {
             rows: None,
             affected_rows: None,
+            column_info: None,
         }
     }
     
-    /// Set rows from Tiberius rows - used when we need to convert after async operation
+    /// Set rows from Tiberius rows - efficient shared column info approach
     pub fn set_rows_from_tiberius(&mut self, tiberius_rows: Vec<tiberius::Row>, py: Python) -> PyResult<()> {
+        if tiberius_rows.is_empty() {
+            self.rows = Some(Vec::new());
+            self.column_info = None;
+            return Ok(());
+        }
+
+        // Create shared column info from the first row - optimized to avoid cloning
+        let first_row = &tiberius_rows[0];
+        let names: Vec<String> = first_row.columns()
+            .iter()
+            .map(|col| col.name().to_string())
+            .collect();
+        let map: HashMap<String, usize> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| (name.clone(), i))  // Use clone() for consistency
+            .collect();
+        let column_info = Arc::new(ColumnInfo { names, map });
+
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
-        
         for row in tiberius_rows.into_iter() {
-            fast_rows.push(PyFastRow::from_tiberius_row(row, py)?);
+            // Arc::clone is cheap (just atomic increment), not cloning the data
+            fast_rows.push(PyFastRow::from_tiberius_row(row, py, Arc::clone(&column_info))?);
         }
         
         self.rows = Some(fast_rows);
+        self.column_info = Some(column_info);
         Ok(())
     }
     
@@ -414,6 +473,7 @@ impl PyFastExecutionResult {
         Self {
             rows: None,
             affected_rows: Some(count),
+            column_info: None,
         }
     }
 }

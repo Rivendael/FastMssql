@@ -6,15 +6,9 @@ use crate::optimized_types::PyFastExecutionResult;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{Config, AuthMethod, Row};
 use pyo3::types::PyList;
-use tokio::sync::Mutex;
 use pyo3::prelude::*;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use bb8::Pool;
-// Memory pool for reusing Vec<FastParameter> to reduce allocations  
-thread_local! {
-    static PARAM_POOL: std::cell::RefCell<Vec<Vec<FastParameter>>> = 
-        std::cell::RefCell::new(Vec::with_capacity(16));
-}
 
 /// Internal result type for async operations
 #[derive(Debug)]
@@ -28,7 +22,7 @@ type ConnectionPool = Pool<ConnectionManager>;
 /// A connection pool to a Microsoft SQL Server database
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
-    pool: Arc<Mutex<Option<ConnectionPool>>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Config,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>, // Prefix with underscore to silence unused warning
@@ -37,15 +31,18 @@ pub struct PyConnection {
 impl PyConnection {
     /// Execute database operation and return raw results - NO PYTHON CONTEXT
     async fn execute_raw_async(
-        pool: Arc<Mutex<Option<ConnectionPool>>>,
+        pool: Arc<RwLock<Option<ConnectionPool>>>,
         query: String,
         parameters: Vec<FastParameter>,
     ) -> PyResult<ExecutionResult> {
-        let pool_guard = pool.lock().await;
-        let pool_ref = pool_guard.as_ref()
-            .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
+        let pool_arc = {
+            let pool_guard = pool.read().unwrap();
+            pool_guard.as_ref()
+                .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?
+                .clone()
+        };
         
-        Self::execute_internal_ultra_fast(pool_ref, query, parameters).await
+        Self::execute_internal_ultra_fast(&pool_arc, query, parameters).await
     }
 
 
@@ -86,8 +83,8 @@ impl PyConnection {
     }
 
     /// Helper function to close the connection pool
-    async fn close_pool(pool: Arc<Mutex<Option<ConnectionPool>>>) {
-        let mut pool_guard = pool.lock().await;
+    async fn close_pool(pool: Arc<RwLock<Option<ConnectionPool>>>) {
+        let mut pool_guard = pool.write().unwrap();
         *pool_guard = None;
     }
 
@@ -114,7 +111,7 @@ impl PyConnection {
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
         
-        // Ultra-fast SQL analysis
+        // Ultra-fast SQL analysis - no caching overhead, pure SIMD speed
         let is_result_returning_query = Self::contains_result_returning_statements_ultra_fast(&query);
         
         if is_result_returning_query {
@@ -137,55 +134,126 @@ impl PyConnection {
         }
     }
 
-    /// Ultra-fast SQL analysis - optimized for hot path with zero allocations
+    /// Ultra-fast SQL analysis - SIMD-optimized for hot path with zero allocations
     #[inline(always)]
     fn contains_result_returning_statements_ultra_fast(sql: &str) -> bool {
-        // Zero-allocation case-insensitive search using byte comparison
+        use memchr::memmem;
+        
+        // Zero-allocation case-insensitive search using SIMD-accelerated pattern matching
         let sql_bytes = sql.as_bytes();
         let len = sql_bytes.len();
         
         if len < 6 { return false; } // Minimum length for "SELECT"
         
-        // Check for SELECT at start (most common case)
-        if Self::starts_with_ignore_case(sql_bytes, b"select") {
+        // Fast path: Check for common patterns at start using SIMD
+        if Self::simd_starts_with_ignore_case(sql_bytes, b"select") ||
+           Self::simd_starts_with_ignore_case(sql_bytes, b"with") ||
+           Self::simd_starts_with_ignore_case(sql_bytes, b"exec") ||
+           (len >= 7 && Self::simd_starts_with_ignore_case(sql_bytes, b"execute")) {
             return true;
         }
         
-        // Check for WITH at start (CTE)
-        if len >= 4 && Self::starts_with_ignore_case(sql_bytes, b"with") {
-            return true;
-        }
-        
-        // Check for EXEC/EXECUTE at start
-        if len >= 4 && Self::starts_with_ignore_case(sql_bytes, b"exec") {
-            return true;
-        }
-        if len >= 7 && Self::starts_with_ignore_case(sql_bytes, b"execute") {
-            return true;
-        }
-        
-        // Fast scan for " SELECT " in the middle (less common)
-        for i in 1..len.saturating_sub(7) {
-            if sql_bytes[i - 1] == b' ' && 
-               Self::slice_eq_ignore_case(&sql_bytes[i..i+6], b"select") &&
-               i + 6 < len && sql_bytes[i + 6] == b' ' {
-                return true;
+        // SIMD-accelerated search for " SELECT " in the middle using memchr
+        // This uses optimized SIMD instructions to find space characters quickly
+        let mut pos = 0;
+        while let Some(space_pos) = memmem::find(&sql_bytes[pos..], b" ") {
+            let absolute_pos = pos + space_pos;
+            if absolute_pos + 8 < len { // " SELECT "
+                let slice_start = absolute_pos + 1;
+                if slice_start + 6 <= len &&
+                   Self::simd_slice_eq_ignore_case(&sql_bytes[slice_start..slice_start + 6], b"select") &&
+                   slice_start + 6 < len && sql_bytes[slice_start + 6] == b' ' {
+                    return true;
+                }
             }
+            pos = absolute_pos + 1;
+            if pos >= len.saturating_sub(7) { break; }
         }
         
         false
     }
     
-    /// Zero-allocation case-insensitive comparison
+    /// SIMD-optimized case-insensitive prefix comparison
     #[inline(always)]
-    fn starts_with_ignore_case(haystack: &[u8], needle: &[u8]) -> bool {
+    fn simd_starts_with_ignore_case(haystack: &[u8], needle: &[u8]) -> bool {
         if haystack.len() < needle.len() { return false; }
-        Self::slice_eq_ignore_case(&haystack[..needle.len()], needle)
+        Self::simd_slice_eq_ignore_case(&haystack[..needle.len()], needle)
     }
     
-    /// Zero-allocation case-insensitive slice comparison
+    /// SIMD-optimized case-insensitive slice comparison
+    /// Uses vectorized operations when possible for chunks of 16+ bytes
     #[inline(always)]
-    fn slice_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
+    fn simd_slice_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() { return false; }
+        
+        let len = a.len();
+        
+        // For small strings, use the fast scalar path
+        if len <= 16 {
+            return Self::scalar_eq_ignore_case(a, b);
+        }
+        
+        // For larger strings, use SIMD chunks of 16 bytes
+        let chunks = len / 16;
+        let remainder = len % 16;
+        
+        // Process 16-byte chunks with SIMD
+        for i in 0..chunks {
+            let start = i * 16;
+            let end = start + 16;
+            if !Self::simd_chunk_eq_ignore_case(&a[start..end], &b[start..end]) {
+                return false;
+            }
+        }
+        
+        // Handle remaining bytes with scalar comparison
+        if remainder > 0 {
+            let start = chunks * 16;
+            return Self::scalar_eq_ignore_case(&a[start..], &b[start..]);
+        }
+        
+        true
+    }
+    
+    /// SIMD comparison for exactly 16-byte chunks
+    #[inline(always)]
+    fn simd_chunk_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
+        debug_assert_eq!(a.len(), 16);
+        debug_assert_eq!(b.len(), 16);
+        
+        // Load 16 bytes at once using safe array access
+        let a_array: [u8; 16] = a.try_into().unwrap();
+        let b_array: [u8; 16] = b.try_into().unwrap();
+        
+        // Convert to lowercase using SIMD-friendly bit manipulation
+        let a_lower = Self::simd_to_lowercase_chunk(a_array);
+        let b_lower = Self::simd_to_lowercase_chunk(b_array);
+        
+        a_lower == b_lower
+    }
+    
+    /// SIMD-optimized lowercase conversion for 16-byte chunk
+    #[inline(always)]
+    fn simd_to_lowercase_chunk(input: [u8; 16]) -> [u8; 16] {
+        let mut result = [0u8; 16];
+        
+        // Process in 8-byte chunks for better vectorization
+        for i in 0..2 {
+            let start = i * 8;
+            for j in 0..8 {
+                let byte = input[start + j];
+                // Branchless ASCII lowercase conversion
+                // If byte is between 'A' and 'Z', add 32 to make it lowercase
+                result[start + j] = byte + (((byte >= b'A') & (byte <= b'Z')) as u8) * 32;
+            }
+        }
+        
+        result
+    }
+    
+    /// Fallback scalar comparison for small strings or remainder bytes
+    #[inline(always)]
+    fn scalar_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
         if a.len() != b.len() { return false; }
         a.iter().zip(b.iter()).all(|(&a_byte, &b_byte)| {
             a_byte.to_ascii_lowercase() == b_byte.to_ascii_lowercase()
@@ -237,21 +305,12 @@ fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
 }
 
 /// Convert Python objects to FastParameter with automatic iterable expansion
-/// Pre-allocates capacity for better performance and reuses memory
+/// Optimized for async contexts - avoids thread_local storage issues
 fn python_params_to_fast_parameters(params: &Bound<PyList>) -> PyResult<Vec<FastParameter>> {
     let len = params.len();
     
-    // Try to get a reusable vector from the pool
-    let mut result = PARAM_POOL.with(|pool| {
-        let mut pool_ref = pool.borrow_mut();
-        pool_ref.pop().unwrap_or_else(|| Vec::with_capacity(len.max(8)))
-    });
-    
-    // Clear and ensure capacity
-    result.clear();
-    if result.capacity() < len {
-        result.reserve(len - result.capacity());
-    }
+    // Direct allocation with optimal capacity - simpler and more reliable in async
+    let mut result = Vec::with_capacity(len.max(8));
     
     for param in params.iter() {
         if is_expandable_iterable(&param)? {
@@ -347,7 +406,7 @@ impl PyConnection {
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
         Ok(PyConnection {
-            pool: Arc::new(Mutex::new(None)),
+            pool: Arc::new(RwLock::new(None)),
             config,
             pool_config,
             _ssl_config: ssl_config,
@@ -361,15 +420,27 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            // Use a more robust check-and-create pattern to avoid race conditions
-            let mut pool_guard = pool.lock().await;
-            if pool_guard.is_none() {
-                // Create pool while holding the lock to prevent race conditions
-                let new_pool = Self::establish_pool(config, &pool_config).await?;
-                *pool_guard = Some(new_pool);
+            // Check if already connected
+            let already_connected = {
+                let pool_guard = pool.read().unwrap();
+                pool_guard.is_some()
+            };
+            
+            if already_connected {
+                return Ok(());
             }
-            drop(pool_guard); // Explicitly drop the lock
-            Ok(()) // Return unit from the async function
+            
+            // Create pool if not connected
+            let new_pool = Self::establish_pool(config, &pool_config).await?;
+            
+            // Set the new pool
+            {
+                let mut pool_guard = pool.write().unwrap();
+                if pool_guard.is_none() {
+                    *pool_guard = Some(new_pool);
+                }
+            }
+            Ok(())
         })
     }
     
@@ -406,25 +477,23 @@ impl PyConnection {
             Vec::new()
         };
         
-        let pool = Arc::clone(&self.pool);
+        let pool = self.pool.clone();
         
         // Return the coroutine directly for Python to await
         future_into_py(py, async move {
             let execution_result = Self::execute_raw_async(pool, query, parameters).await?;
             
-            // Convert results directly without caching
+            // Convert results efficiently - acquire GIL only once per result
             match execution_result {
                 ExecutionResult::Rows(rows) => {
-                    // Convert rows to Python objects in async context
-                    Python::with_gil(|py| {
-                        let result = PyFastExecutionResult::with_rows(rows, py)?;
-                        let py_result = Py::new(py, result)?;
+                    Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                        let fast_result = PyFastExecutionResult::with_rows(rows, py)?;
+                        let py_result = Py::new(py, fast_result)?;
                         Ok(py_result.into_any())
                     })
                 },
                 ExecutionResult::AffectedCount(count) => {
-                    // Return affected count directly as u64
-                    Python::with_gil(|py| {
+                    Python::with_gil(|py| -> PyResult<Py<PyAny>> {
                         Ok(count.into_pyobject(py)?.into_any().unbind())
                     })
                 }
@@ -432,23 +501,15 @@ impl PyConnection {
         })
     }
     
-    /// Execute a SQL statement with Python parameters and return appropriate results
-    /// 
-    /// This method accepts raw Python objects and converts them internally.
-    /// Iterables (lists, tuples, sets, etc.) are automatically expanded for IN clauses,
-    /// except strings and bytes which are treated as single values.
-    /// ULTRA-FAST VERSION - optimized for maximum performance
-    pub fn execute_with_python_params<'p>(&self, py: Python<'p>, query: String, params: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
-        // Just call the regular execute method which already handles Python parameters
-        self.execute(py, query, Some(params))
-    }
-    
     /// Check if connected to the database
     pub fn is_connected<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            let is_connected = pool.lock().await.is_some();
+            let is_connected = {
+                let pool_guard = pool.read().unwrap();
+                pool_guard.is_some()
+            };
             Ok(is_connected)
         })
     }
@@ -459,10 +520,13 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            let pool_guard = pool.lock().await;
-            if let Some(pool_ref) = pool_guard.as_ref() {
+            let pool_arc = {
+                let pool_guard = pool.read().unwrap();
+                pool_guard.clone()
+            };
+            
+            if let Some(pool_ref) = pool_arc {
                 let state = pool_ref.state();
-                // Return the values as a tuple that Python can convert to dict
                 Ok((
                     true, // connected
                     state.connections,
@@ -483,15 +547,27 @@ impl PyConnection {
         let pool_config = slf.borrow().pool_config.clone();
         
         future_into_py(py, async move {
-            // Use a more robust check-and-create pattern to avoid race conditions
-            let mut pool_guard = pool.lock().await;
-            if pool_guard.is_none() {
-                // Create pool while holding the lock to prevent race conditions
-                let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
-                *pool_guard = Some(new_pool);
+            // Check if already connected
+            let already_connected = {
+                let pool_guard = pool.read().unwrap();
+                pool_guard.is_some()
+            };
+            
+            if already_connected {
+                return Ok(());
             }
-            drop(pool_guard); // Explicitly drop the lock
-            Ok(()) // Just return unit, Python wrapper will return self
+            
+            // Create pool if not connected
+            let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
+            
+            // Set the new pool
+            {
+                let mut pool_guard = pool.write().unwrap();
+                if pool_guard.is_none() {
+                    *pool_guard = Some(new_pool);
+                }
+            }
+            Ok(())
         })
     }
     

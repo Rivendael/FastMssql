@@ -243,6 +243,7 @@ dependencies = [
  "bb8-tiberius",
  "chrono",
  "futures",
+ "memchr",
  "num_cpus",
  "pyo3",
  "pyo3-async-runtimes",
