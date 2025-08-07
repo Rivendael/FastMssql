@@ -48,9 +48,6 @@ impl PyFastRow {
         
         let col_type = row.columns()[index].column_type();
         
-        // Debug logging - temporarily print column type for debugging
-        // eprintln!("Column {} type: {:?}", index, col_type);
-        
         // Direct conversion - no intermediate PyValue
         match col_type {
             ColumnType::Int4 => {
@@ -343,10 +340,8 @@ impl PyFastExecutionResult {
     pub fn rows(&self, py: Python) -> PyResult<PyObject> {
         match &self.rows {
             Some(rows) => {
-                // Create list without cloning rows - just create Python references
                 let py_list = pyo3::types::PyList::empty(py);
                 for row in rows {
-                    // Create Python object directly without cloning the row data
                     let py_row = Py::new(py, PyFastRow {
                         values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
                         column_info: Arc::clone(&row.column_info),
@@ -401,7 +396,6 @@ impl PyFastExecutionResult {
             });
         }
 
-        // Create shared column info from the first row - optimized to avoid cloning
         let first_row = &tiberius_rows[0];
         let names: Vec<String> = first_row.columns()
             .iter()
