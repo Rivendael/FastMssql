@@ -41,7 +41,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     builder
         .enable_all()
         // CRITICAL: Ultra-tuned for 20K+ RPS database workloads
-        .worker_threads((cpu_count / 4).max(1).min(4))  // Fewer workers = less contention at high RPS
+        .worker_threads((cpu_count / 2).max(1).min(8))  // Fewer workers = less contention at high RPS
         .max_blocking_threads((cpu_count * 32).min(512)) // More blocking threads for DB I/O surge capacity
         .thread_keep_alive(std::time::Duration::from_secs(900)) // 15 minutes to avoid thrashing
         .thread_stack_size(4 * 1024 * 1024)  // Smaller stack = more threads, better for high concurrency

@@ -397,15 +397,16 @@ impl PyFastExecutionResult {
         }
 
         let first_row = &tiberius_rows[0];
-        let names: Vec<String> = first_row.columns()
-            .iter()
-            .map(|col| col.name().to_string())
-            .collect();
-        let map: HashMap<String, usize> = names
-            .iter()
-            .enumerate()
-            .map(|(i, name)| (name.clone(), i))  // Use clone() for consistency
-            .collect();
+        // OPTIMIZATION: Build names and map in single pass to avoid redundant string cloning
+        let mut names = Vec::with_capacity(first_row.columns().len());
+        let mut map = HashMap::with_capacity(first_row.columns().len());
+        
+        for (i, col) in first_row.columns().iter().enumerate() {
+            let name = col.name().to_string();
+            map.insert(name.clone(), i);
+            names.push(name);
+        }
+        
         let column_info = Arc::new(ColumnInfo { names, map });
 
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
@@ -440,15 +441,16 @@ impl PyFastExecutionResult {
 
         // Create shared column info from the first row - optimized to avoid cloning
         let first_row = &tiberius_rows[0];
-        let names: Vec<String> = first_row.columns()
-            .iter()
-            .map(|col| col.name().to_string())
-            .collect();
-        let map: HashMap<String, usize> = names
-            .iter()
-            .enumerate()
-            .map(|(i, name)| (name.clone(), i))  // Use clone() for consistency
-            .collect();
+        // OPTIMIZATION: Build names and map in single pass to avoid redundant string cloning
+        let mut names = Vec::with_capacity(first_row.columns().len());
+        let mut map = HashMap::with_capacity(first_row.columns().len());
+        
+        for (i, col) in first_row.columns().iter().enumerate() {
+            let name = col.name().to_string();
+            map.insert(name.clone(), i);
+            names.push(name);
+        }
+        
         let column_info = Arc::new(ColumnInfo { names, map });
 
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
