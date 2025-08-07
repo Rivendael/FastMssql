@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "fastmssql_core"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "anyhow",
  "bb8",
