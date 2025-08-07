@@ -153,7 +153,6 @@ class TestSslConfigPerformance:
     def test_connection_creation_with_ssl_performance(self):
         """Benchmark connection creation with SSL config."""
         ssl_config = SslConfig.development()
-        pool_config = PoolConfig(max_size=5)
         
         num_iterations = 100
         
@@ -164,7 +163,6 @@ class TestSslConfigPerformance:
                 server="localhost",
                 database=f"testdb{i}",
                 ssl_config=ssl_config,
-                pool_config=pool_config,
                 username="testuser",
                 password="testpass"
             )

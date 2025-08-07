@@ -11,9 +11,8 @@ import statistics
 from collections import defaultdict
 
 # Add the python directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'python'))
 
-from fastmssql import Connection, PoolConfig
+from fastmssql import Connection
 
 
 async def simple_load_test(connection_string: str, workers: int = 10, duration: int = 30, warmup: int = 5):
@@ -24,14 +23,6 @@ async def simple_load_test(connection_string: str, workers: int = 10, duration: 
     print(f"   Duration: {duration}s (+ {warmup}s warmup)")
     print(f"   Query: SELECT @@VERSION")
 
-    # Single connection object with optimized pool config for the worker count
-    max_pool_size = max(workers + 5, 20)  # Dynamic pool sizing
-    pool_config = PoolConfig(
-        max_size=max_pool_size,
-        min_idle=min(workers, 10),
-        connection_timeout_secs=5,
-        idle_timeout_secs=300
-    )
     
     # Thread-safe counters using locks
     stats_lock = asyncio.Lock()
@@ -40,7 +31,7 @@ async def simple_load_test(connection_string: str, workers: int = 10, duration: 
     response_times = []
     worker_stats = defaultdict(lambda: {"requests": 0, "errors": 0})
     
-    async with Connection(connection_string, pool_config) as conn:
+    async with Connection(connection_string) as conn:
         
         async def worker(worker_id: int):
             """Worker that executes queries using the shared connection pool."""
@@ -57,7 +48,7 @@ async def simple_load_test(connection_string: str, workers: int = 10, duration: 
                     warmup_requests += 1
                 except Exception:
                     pass  # Ignore warmup errors
-                await asyncio.sleep(0.001)  # Small delay
+                # No artificial delay during warmup
             
             print(f"Worker {worker_id}: Warmup complete ({warmup_requests} requests)")
             
@@ -180,9 +171,10 @@ async def main():
     
     # Test different worker counts with multiple iterations for stability
     scenarios = [
-        {"workers": 5, "duration": 30, "iterations": 3},
-        {"workers": 10, "duration": 30, "iterations": 3}, 
-        {"workers": 20, "duration": 30, "iterations": 3},
+        {"workers": 10, "duration": 60, "iterations": 2},
+        {"workers": 25, "duration": 60, "iterations": 2}, 
+        {"workers": 35, "duration": 60, "iterations": 2},
+        {"workers": 45, "duration": 60, "iterations": 2},
     ]
     
     all_results = []

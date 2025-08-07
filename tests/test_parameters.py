@@ -298,7 +298,7 @@ class TestParameters:
         # Check values (raw values, Rust expands them)
         assert params.positional[0].value == [1, 2, 3]
         assert params.positional[1].value == "regular_string"
-        assert params.positional[2].value == [4, 5, 6]  # tuple converted to list
+        assert params.positional[2].value == (4, 5, 6)  # tuple preserved as tuple
         assert params.positional[3].value == 42
     
     def test_parameters_add_iterable(self):
@@ -362,7 +362,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 row = rows[0]
@@ -385,7 +385,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 row = rows[0]
@@ -412,7 +412,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 row = rows[0]
@@ -436,7 +436,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 row = rows[0]
@@ -466,7 +466,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 row = rows[0]
@@ -491,7 +491,7 @@ class TestParametersIntegration:
                 result = await conn.execute("SELECT 'No params' as message")
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['message'] == "No params"
                 
@@ -507,7 +507,7 @@ class TestParametersIntegration:
                 result = await conn.execute("SELECT 'Empty params' as message", params)
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 assert rows[0]['message'] == "Empty params"
                 
@@ -538,16 +538,16 @@ class TestParametersIntegration:
                 assert result1.has_rows()
                 assert result2.has_rows()
                 
-                row1 = result1.rows()[0]
-                row2 = result2.rows()[0]
-                
-                assert row1['num'] == 42
-                assert row1['text'] == "Reused"
-                assert row1['query_id'] == "Query 1"
-                
-                assert row2['id'] == 42
-                assert row2['name'] == "Reused"
-                assert row2['query_id'] == "Query 2"
+            row1 = result1.rows()[0] if result1.has_rows() else {}
+            row2 = result2.rows()[0] if result2.has_rows() else {}
+            
+            assert row1['num'] == 42
+            assert row1['text'] == "Reused"
+            assert row1['query_id'] == "Query 1"
+            
+            assert row2['id'] == 42
+            assert row2['name'] == "Reused"
+            assert row2['query_id'] == "Query 2"
                 
         except Exception as e:
             pytest.skip(f"Database not available: {e}")
@@ -568,7 +568,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 # The value should be the list itself (the Rust layer handles expansion)
@@ -599,7 +599,7 @@ class TestParametersIntegration:
                 )
                 
                 assert result.has_rows()
-                rows = result.rows()
+                rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 1
                 
                 row = rows[0]
