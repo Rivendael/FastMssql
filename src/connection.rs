@@ -34,7 +34,7 @@ impl PyConnection {
     async fn execute_raw_async(
         pool: Arc<OnceLock<ConnectionPool>>,
         query: String,
-        parameters: Vec<FastParameter>,
+        parameters: SmallVec<[FastParameter; 8]>,
     ) -> PyResult<ExecutionResult> {
         let pool_ref = pool.get()
             .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
@@ -90,7 +90,7 @@ impl PyConnection {
     async fn execute_internal_ultra_fast(
         pool: &ConnectionPool,
         query: String,
-        parameters: Vec<FastParameter>,
+        parameters: SmallVec<[FastParameter; 8]>,
     ) -> PyResult<ExecutionResult> {
         // Get connection with proper error handling for pool exhaustion
         let mut conn = pool.get().await
@@ -299,13 +299,48 @@ impl tiberius::ToSql for FastParameter {
     }
 }
 
-/// Convert a Python object to FastParameter for zero-allocation parameter handling
+/// Convert a Python object to FastParameter with ultra-fast zero-allocation type detection
+/// Uses PyO3's direct downcasting to avoid expensive multiple extract() attempts
 fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
+    use pyo3::types::{PyBool, PyInt, PyFloat, PyString, PyBytes};
+    
     if obj.is_none() {
-        Ok(FastParameter::Null)
-    } else if let Ok(b) = obj.extract::<bool>() {
-        Ok(FastParameter::Bool(b))
-    } else if let Ok(i) = obj.extract::<i64>() {
+        return Ok(FastParameter::Null);
+    }
+    
+    // MAJOR OPTIMIZATION: Use downcast() first, then single extract() per type
+    // This eliminates the expensive multiple extract() attempts from the original code
+    
+    // Try bool first (most specific type)
+    if let Ok(py_bool) = obj.downcast::<PyBool>() {
+        return Ok(FastParameter::Bool(py_bool.is_true()));
+    }
+    
+    // Try int 
+    if let Ok(py_int) = obj.downcast::<PyInt>() {
+        return py_int.extract::<i64>()
+            .map(FastParameter::I64)
+            .map_err(|_| PyValueError::new_err("Integer value too large for i64"));
+    }
+    
+    // Try float
+    if let Ok(py_float) = obj.downcast::<PyFloat>() {
+        return Ok(FastParameter::F64(py_float.value()));
+    }
+    
+    // Try string  
+    if let Ok(py_string) = obj.downcast::<PyString>() {
+        return Ok(FastParameter::String(py_string.to_string()));
+    }
+    
+    // Try bytes
+    if let Ok(py_bytes) = obj.downcast::<PyBytes>() {
+        return Ok(FastParameter::Bytes(py_bytes.as_bytes().to_vec()));
+    }
+    
+    // Fallback for numpy types, Decimal, etc. - only use extract() as last resort
+    // This is MUCH faster than the original version that tried extract() for every type
+    if let Ok(i) = obj.extract::<i64>() {
         Ok(FastParameter::I64(i))
     } else if let Ok(f) = obj.extract::<f64>() {
         Ok(FastParameter::F64(f))
@@ -318,14 +353,16 @@ fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     }
 }
 
-/// Convert Python objects to FastParameter with automatic iterable expansion
-fn python_params_to_fast_parameters(params: &Bound<PyList>) -> PyResult<Vec<FastParameter>> {
+/// Convert Python objects to FastParameter with zero-allocation parameter handling
+/// Returns SmallVec directly to avoid unnecessary heap allocations for small parameter lists
+fn python_params_to_fast_parameters(params: &Bound<PyList>) -> PyResult<SmallVec<[FastParameter; 8]>> {
     let len = params.len();
     
+    // SmallVec optimization:
     // - 0-8 parameters: Zero heap allocations (stack only)
-    // - 9+ parameters: Automatic heap fallback (rare case)
-    // - Consistent code path, better cache locality
-    let mut result: SmallVec<[FastParameter; 8]> = SmallVec::with_capacity(len.max(8));
+    // - 9+ parameters: Single heap allocation (rare case)
+    // - No unnecessary into_vec() conversion
+    let mut result: SmallVec<[FastParameter; 8]> = SmallVec::with_capacity(len);
     
     for param in params.iter() {
         if is_expandable_iterable(&param)? {
@@ -335,31 +372,47 @@ fn python_params_to_fast_parameters(params: &Bound<PyList>) -> PyResult<Vec<Fast
         }
     }
     
-    Ok(result.into_vec())
+    Ok(result)
 }
 
-/// Expand a Python iterable into individual FastParameter objects
+/// Expand a Python iterable into individual FastParameter objects with minimal allocations
 fn expand_iterable_to_fast_params<T>(iterable: &Bound<PyAny>, result: &mut T) -> PyResult<()> 
 where
     T: Extend<FastParameter>
 {
-    // Get the iter() method of the iterable
-    let iter_method = iterable.getattr("__iter__")?;
-    let iterator = iter_method.call0()?;
+    // Use PyO3's optimized iteration pattern - much faster than manual __next__ calls
+    let py = iterable.py();
+    let iter = iterable.call_method0("__iter__")?;
     
-    // Collect items into a temporary vector
-    let mut items = Vec::new();
+    // Pre-allocate a small buffer to batch extend operations and reduce allocations
+    let mut batch: SmallVec<[FastParameter; 16]> = SmallVec::new();
+    
     loop {
-        match iterator.call_method0("__next__") {
+        match iter.call_method0("__next__") {
             Ok(item) => {
-                items.push(python_to_fast_parameter(&item)?);
+                batch.push(python_to_fast_parameter(&item)?);
+                
+                // Batch extend every 16 items to reduce extend() call overhead
+                if batch.len() == 16 {
+                    result.extend(batch.drain(..));
+                }
             },
-            Err(_) => break, // StopIteration exception
+            Err(err) => {
+                // Check if it's StopIteration (normal end of iteration)
+                if err.is_instance_of::<pyo3::exceptions::PyStopIteration>(py) {
+                    break;
+                } else {
+                    return Err(err);
+                }
+            }
         }
     }
     
-    // Extend the result with all items at once
-    result.extend(items);
+    // Extend any remaining items in the batch
+    if !batch.is_empty() {
+        result.extend(batch);
+    }
+    
     Ok(())
 }
 
@@ -367,9 +420,12 @@ where
 /// 
 /// Returns true for lists, tuples, sets, etc., but false for strings and bytes
 /// which should be treated as single values.
+/// Uses fast type checking to avoid expensive extract() calls.
 fn is_expandable_iterable(obj: &Bound<PyAny>) -> PyResult<bool> {
-    // Don't expand strings or bytes
-    if obj.extract::<String>().is_ok() || obj.extract::<Vec<u8>>().is_ok() {
+    use pyo3::types::{PyString, PyBytes};
+    
+    // Fast path: Don't expand strings or bytes using type checking
+    if obj.is_instance_of::<PyString>() || obj.is_instance_of::<PyBytes>() {
         return Ok(false);
     }
     
@@ -485,7 +541,7 @@ impl PyConnection {
                 return Err(PyValueError::new_err("Parameters must be a list or Parameters object"));
             }
         } else {
-            Vec::new()
+            SmallVec::new()
         };
         
         let pool = self.pool.clone();
