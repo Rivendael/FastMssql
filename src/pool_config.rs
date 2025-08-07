@@ -157,11 +157,11 @@ impl PyPoolConfig {
     #[staticmethod]
     pub fn maximum_performance() -> Self {
         PyPoolConfig {
-            max_size: 75,           // Increased for maximum throughput
-            min_idle: Some(25),     // Fixed: was 50 > max_size!
-            max_lifetime: Some(std::time::Duration::from_secs(3600)), // 1 hour
-            idle_timeout: Some(std::time::Duration::from_secs(900)), // 15 minutes
-            connection_timeout: Some(std::time::Duration::from_secs(60)),
+            max_size: 100,          // Increased for ultra-high throughput
+            min_idle: Some(30),     // Keep more connections warm
+            max_lifetime: Some(std::time::Duration::from_secs(7200)), // 2 hours
+            idle_timeout: Some(std::time::Duration::from_secs(1800)), // 30 minutes
+            connection_timeout: Some(std::time::Duration::from_secs(10)), // Faster timeout
         }
     }
     
@@ -169,11 +169,23 @@ impl PyPoolConfig {
     #[staticmethod]
     pub fn load_test_worker() -> Self {
         PyPoolConfig {
-            max_size: 8,            // Small pool per worker
-            min_idle: Some(2),      // Keep some connections ready
-            max_lifetime: Some(std::time::Duration::from_secs(1800)), // 30 minutes
-            idle_timeout: Some(std::time::Duration::from_secs(300)), // 5 minutes
-            connection_timeout: Some(std::time::Duration::from_secs(10)), // Fast timeout
+            max_size: 12,           // Slightly larger per worker
+            min_idle: Some(4),      // More warm connections
+            max_lifetime: Some(std::time::Duration::from_secs(3600)), // 1 hour
+            idle_timeout: Some(std::time::Duration::from_secs(600)), // 10 minutes
+            connection_timeout: Some(std::time::Duration::from_secs(5)), // Very fast timeout
+        }
+    }
+    
+    /// Create a configuration for ultra-high-concurrency scenarios
+    #[staticmethod]
+    pub fn ultra_high_concurrency() -> Self {
+        PyPoolConfig {
+            max_size: 200,          // Very high for extreme loads
+            min_idle: Some(50),     // Many warm connections
+            max_lifetime: Some(std::time::Duration::from_secs(3600)), // 1 hour
+            idle_timeout: Some(std::time::Duration::from_secs(900)), // 15 minutes
+            connection_timeout: Some(std::time::Duration::from_secs(15)),
         }
     }
     

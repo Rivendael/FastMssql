@@ -27,20 +27,24 @@ fn version() -> String {
 /// The PyO3 module registration
 #[pymodule]
 fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Initialize pyo3-async-runtimes for tokio with high-performance settings
+    // Initialize pyo3-async-runtimes for tokio with ultra-high-performance settings
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     
-    // Detect CPU count or use sensible defaults
+    // Detect CPU count for optimal threading
     let cpu_count = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(8);  // Fallback to 8 cores
     
     builder
         .enable_all()
-        .worker_threads(cpu_count.max(12))  // Even more worker threads
-        .max_blocking_threads(256)  // MUCH higher for database I/O - this is key!
-        .thread_keep_alive(std::time::Duration::from_secs(120))  // Keep threads alive even longer
-        .thread_stack_size(4 * 1024 * 1024);  // 4MB stack for each thread
+        // Optimize for database I/O workloads
+        .worker_threads((cpu_count * 2).min(32))  // 2x CPU cores, capped at 32
+        .max_blocking_threads(512)  // Very high for database I/O - critical for performance!
+        .thread_keep_alive(std::time::Duration::from_secs(300))  // 5 minutes keep-alive
+        .thread_stack_size(8 * 1024 * 1024)  // 8MB stack for complex queries
+        // Enable work-stealing for better load balancing
+        .global_queue_interval(31)  // Prime number for better distribution
+        .event_interval(61);  // Another prime for reduced collisions
     
     pyo3_async_runtimes::tokio::init(builder);
     

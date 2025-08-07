@@ -7,6 +7,25 @@ edition = "2021"
 name = "fastmssql_core"
 crate-type = ["cdylib"]
 
+# Ultra-high performance profile
+[profile.release]
+opt-level = 3                # Maximum optimization
+lto = "fat"                  # Full link-time optimization
+codegen-units = 1            # Better optimization, slower compile
+panic = "abort"              # Smaller binary, faster code
+strip = true                 # Remove debug symbols
+overflow-checks = false      # Disable overflow checks for speed
+
+# Performance-focused development profile
+[profile.dev]
+opt-level = 1               # Some optimization for faster dev iteration
+overflow-checks = true      # Keep safety checks in dev
+debug = true               # Keep debug info for development
+
+# Optimize dependencies even in dev mode
+[profile.dev.package."*"]
+opt-level = 2
+
 [dependencies]
 pyo3 = { version = "0.25.0", features = ["extension-module"] }
 pyo3-async-runtimes = { version = "0.25.0", features = ["tokio", "tokio-runtime"] }
@@ -23,6 +42,9 @@ chrono = { version = "0.4.41", features = ["serde"] }
 uuid = { version = "1.17.0", features = ["serde"] }
 num_cpus = "1.17.0"
 memchr = "2.7"
+# Performance-critical additions
+ahash = "0.8"              # Faster hashing algorithm (used in optimized_types.rs)
+smallvec = "1.13"          # Stack-allocated vectors for small collections
 
 [dev-dependencies]
 tempfile = "3.0"
