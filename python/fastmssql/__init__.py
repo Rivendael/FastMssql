@@ -1,3 +1,6 @@
+# Copyright (c) 2025 Riveranda
+# Licensed under PolyForm Noncommercial 1.0.0
+
 """
 FastMSSQL - High-Performance Microsoft SQL Server Driver for Python
 ===================================================================
