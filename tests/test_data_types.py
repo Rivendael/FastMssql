@@ -26,7 +26,7 @@ async def test_numeric_types():
     """Test all numeric SQL Server data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST(127 AS TINYINT) as tinyint_val,
                     CAST(32767 AS SMALLINT) as smallint_val,
@@ -108,7 +108,7 @@ async def test_string_types():
     """Test all string SQL Server data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST('Hello' AS CHAR(10)) as char_val,
                     CAST('World' AS VARCHAR(50)) as varchar_val,
@@ -144,7 +144,7 @@ async def test_datetime_types():
     """Test all date/time SQL Server data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST('2023-12-25' AS DATE) as date_val,
                     CAST('14:30:45' AS TIME) as time_val,
@@ -175,7 +175,7 @@ async def test_binary_types():
     """Test binary SQL Server data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST(0x48656C6C6F AS BINARY(10)) as binary_val,
                     CAST(0x576F726C64 AS VARBINARY(50)) as varbinary_val,
@@ -202,7 +202,7 @@ async def test_special_types():
     """Test special SQL Server data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST(1 AS BIT) as bit_true,
                     CAST(0 AS BIT) as bit_false,
@@ -232,7 +232,7 @@ async def test_null_values():
     """Test NULL handling across different data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST(NULL AS INT) as null_int,
                     CAST(NULL AS VARCHAR(50)) as null_varchar,
@@ -264,13 +264,13 @@ async def test_large_values():
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test large string
             large_string = 'A' * 8000  # 8KB string
-            result = await conn.execute(f"SELECT '{large_string}' as large_string")
+            result = await conn.query(f"SELECT '{large_string}' as large_string")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['large_string'] == large_string
             
             # Test very large number
-            result = await conn.execute("SELECT CAST(9223372036854775806 AS BIGINT) as large_bigint")
+            result = await conn.query("SELECT CAST(9223372036854775806 AS BIGINT) as large_bigint")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['large_bigint'] == 9223372036854775806
@@ -287,7 +287,7 @@ async def test_async_data_types():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test with simpler query to avoid potential datetime issues in async context
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     42 as int_val,
                     'async_string' as str_val,

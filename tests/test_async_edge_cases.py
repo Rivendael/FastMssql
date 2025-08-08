@@ -157,7 +157,7 @@ async def test_nested_async_context_managers():
             worker_log.append(f"Worker {worker_id}: Outer connection opened")
             
             # Execute query in outer connection
-            result1 = await outer_conn.execute(f"SELECT {worker_id} as worker_id, 'outer' as context")
+            result1 = await outer_conn.query(f"SELECT {worker_id} as worker_id, 'outer' as context")
             worker_log.append(f"Worker {worker_id}: Outer query executed")
             
             # Inner context manager (different connection)
@@ -165,19 +165,19 @@ async def test_nested_async_context_managers():
                 worker_log.append(f"Worker {worker_id}: Inner connection opened")
                 
                 # Execute query in inner connection
-                result2 = await inner_conn.execute(f"SELECT {worker_id} as worker_id, 'inner' as context")
+                result2 = await inner_conn.query(f"SELECT {worker_id} as worker_id, 'inner' as context")
                 worker_log.append(f"Worker {worker_id}: Inner query executed")
                 
                 # Verify both connections work independently
-                outer_check = await outer_conn.execute("SELECT 'outer_check' as source")
-                inner_check = await inner_conn.execute("SELECT 'inner_check' as source")
+                outer_check = await outer_conn.query("SELECT 'outer_check' as source")
+                inner_check = await inner_conn.query("SELECT 'inner_check' as source")
                 
                 worker_log.append(f"Worker {worker_id}: Both connections verified")
             
             worker_log.append(f"Worker {worker_id}: Inner connection closed")
             
             # Execute another query in outer connection after inner is closed
-            result3 = await outer_conn.execute(f"SELECT {worker_id} as worker_id, 'after_inner' as context")
+            result3 = await outer_conn.query(f"SELECT {worker_id} as worker_id, 'after_inner' as context")
             worker_log.append(f"Worker {worker_id}: Final outer query executed")
         
         worker_log.append(f"Worker {worker_id}: Outer connection closed")
@@ -477,7 +477,7 @@ async def test_async_context_manager_with_background_tasks():
             for i in range(iterations):
                 try:
                     async with Connection(TEST_CONNECTION_STRING) as conn:
-                        result = await conn.execute(f"""
+                        result = await conn.query(f"""
                             SELECT 
                                 {task_id} as task_id,
                                 {i} as iteration,
@@ -504,7 +504,7 @@ async def test_async_context_manager_with_background_tasks():
             
             for main_op in range(5):
                 async with Connection(TEST_CONNECTION_STRING) as conn:
-                    result = await conn.execute(f"""
+                    result = await conn.query(f"""
                         SELECT 
                             {main_op} as main_operation,
                             'main_workflow' as source,

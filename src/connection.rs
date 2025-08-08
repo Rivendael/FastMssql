@@ -8,7 +8,7 @@ use tiberius::{Config, AuthMethod, Row};
 use pyo3::types::PyList;
 use pyo3::prelude::*;
 use std::sync::Arc;
-use once_cell::sync::OnceCell;
+use tokio::sync::RwLock;
 use bb8::Pool;
 use smallvec::SmallVec; // Only used for rare expandable parameter case
 
@@ -17,7 +17,7 @@ type ConnectionPool = Pool<ConnectionManager>;
 /// A connection pool to a Microsoft SQL Server database
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
-    pool: Arc<OnceCell<ConnectionPool>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Config,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>, // Prefix with underscore to silence unused warning
@@ -103,13 +103,6 @@ impl PyConnection {
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to create connection pool: {}", e)))?;
         
         Ok(pool)
-    }
-
-    /// Helper function to close the connection pool
-    async fn close_pool(_pool: Arc<OnceCell<ConnectionPool>>) {
-        // OnceCell doesn't support "clearing" - this is intentional for performance
-        // Connection pools should generally live for the application lifetime
-        // If needed, the pool will be dropped when the last Arc reference is dropped
     }
 
     /// ULTRA-FAST GIL-FREE execution for SELECT queries
@@ -417,41 +410,10 @@ impl PyConnection {
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
         Ok(PyConnection {
-            pool: Arc::new(OnceCell::new()),
+            pool: Arc::new(RwLock::new(None)),
             config,
             pool_config,
             _ssl_config: ssl_config,
-        })
-    }
-    
-    /// Connect to the database
-    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        let pool = self.pool.clone();
-        let config = self.config.clone();
-        let pool_config = self.pool_config.clone();
-        
-        future_into_py(py, async move {
-            // Check if already connected using OnceCell::get()
-            if pool.get().is_some() {
-                return Ok(());
-            }
-            
-            // Try to initialize the pool (only succeeds once)
-            let new_pool = Self::establish_pool(config, &pool_config).await?;
-            
-            // set() returns Err if already set, which is fine - just means another thread won
-            let _ = pool.set(new_pool);
-            Ok(())
-        })
-    }
-    
-    /// Disconnect from the database
-    pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        let pool = self.pool.clone();
-        
-        future_into_py(py, async move {
-            Self::close_pool(pool).await;
-            Ok(()) // Return unit from the async function
         })
     }
     
@@ -473,16 +435,28 @@ impl PyConnection {
         // Return the coroutine - now with ZERO GIL usage in async execution
         future_into_py(py, async move {
             // PERFORMANCE CRITICAL: Optimized pool access with auto-initialization
-            let pool_ref = if let Some(pool_ref) = pool.get() {
-                pool_ref
-            } else {
-                // Initialize pool if not already done
-                let new_pool = Self::establish_pool(config, &pool_config).await?;
-                let _ = pool.set(new_pool);
-                pool.get().ok_or_else(|| PyRuntimeError::new_err("Failed to initialize connection pool"))?
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard); // Release read lock
+                    
+                    // Acquire write lock to initialize
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        // Another thread initialized it while we were waiting
+                        pool_ref.clone()
+                    } else {
+                        // We need to initialize it
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
             };
             
-            let execution_result = Self::execute_query_async_gil_free(pool_ref, &query, &fast_parameters).await?;
+            let execution_result = Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
             
             // Convert results efficiently - acquire GIL only once per result set
             Python::with_gil(|py| -> PyResult<Py<PyAny>> {
@@ -511,16 +485,28 @@ impl PyConnection {
         // Return the coroutine - now with ZERO GIL usage in async execution
         future_into_py(py, async move {
             // PERFORMANCE CRITICAL: Optimized pool access with auto-initialization
-            let pool_ref = if let Some(pool_ref) = pool.get() {
-                pool_ref
-            } else {
-                // Initialize pool if not already done
-                let new_pool = Self::establish_pool(config, &pool_config).await?;
-                let _ = pool.set(new_pool);
-                pool.get().ok_or_else(|| PyRuntimeError::new_err("Failed to initialize connection pool"))?
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard); // Release read lock
+                    
+                    // Acquire write lock to initialize
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        // Another thread initialized it while we were waiting
+                        pool_ref.clone()
+                    } else {
+                        // We need to initialize it
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
             };
             
-            let affected_count = Self::execute_command_async_gil_free(pool_ref, &query, &fast_parameters).await?;
+            let affected_count = Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
             
             // Convert results efficiently - acquire GIL only once per result set
             Python::with_gil(|py| -> PyResult<Py<PyAny>> {
@@ -534,7 +520,8 @@ impl PyConnection {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            let is_connected = pool.get().is_some();
+            let pool_guard = pool.read().await;
+            let is_connected = pool_guard.is_some();
             Ok(is_connected)
         })
     }
@@ -545,7 +532,8 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            if let Some(pool_ref) = pool.get() {
+            let pool_guard = pool.read().await;
+            if let Some(ref pool_ref) = *pool_guard {
                 let state = pool_ref.state();
                 Ok((
                     true, // connected
@@ -567,16 +555,23 @@ impl PyConnection {
         let pool_config = slf.borrow().pool_config.clone();
         
         future_into_py(py, async move {
-            // Check if already connected using OnceCell::get()
-            if pool.get().is_some() {
+            // Check if already connected
+            let pool_guard = pool.read().await;
+            if pool_guard.is_some() {
+                return Ok(());
+            }
+            drop(pool_guard); // Release read lock
+            
+            // Acquire write lock to initialize
+            let mut pool_guard = pool.write().await;
+            if pool_guard.is_some() {
+                // Another thread initialized it while we were waiting
                 return Ok(());
             }
             
-            // Try to initialize the pool (only succeeds once)
+            // We need to initialize it
             let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
-            
-            // set() returns Err if already set, which is fine - just means another thread won
-            let _ = pool.set(new_pool);
+            *pool_guard = Some(new_pool);
             Ok(())
         })
     }
@@ -589,10 +584,17 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>, 
         _traceback: Option<Bound<PyAny>>
     ) -> PyResult<Bound<'p, PyAny>> {
-        // Don't disconnect on exit - let the pool manage connections
-        // This allows for connection reuse and prevents premature disconnection
+        let pool = self.pool.clone();
+        
         future_into_py(py, async move {
-            Ok(()) // Return unit, don't disconnect
+            // Properly close the pool when exiting the context manager
+            let mut pool_guard = pool.write().await;
+            if let Some(pool_ref) = pool_guard.take() {
+                // Explicitly close all connections in the pool
+                // The pool will be dropped here, which should clean up all connections
+                drop(pool_ref);
+            }
+            Ok(())
         })
     }
 }
