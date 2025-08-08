@@ -85,7 +85,6 @@ jobs:
         # Set environment variables
         CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH MACOSX_DEPLOYMENT_TARGET=10.12 CARGO_BUILD_TARGET=${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} RUSTFLAGS='-C link-arg=-mmacosx-version-min=10.12'"
-        CIBW_ENVIRONMENT_WINDOWS: "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
