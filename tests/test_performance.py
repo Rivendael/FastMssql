@@ -60,7 +60,7 @@ async def test_large_result_set():
                 
                 # Test retrieving large result set
                 start_time = time.time()
-                result = await conn.execute("SELECT * FROM test_large_data ORDER BY id")
+                result = await conn.query("SELECT * FROM test_large_data ORDER BY id")
                 end_time = time.time()
                 
                 rows = result.rows() if result.has_rows() else []
@@ -74,7 +74,7 @@ async def test_large_result_set():
                 
                 # Test filtering on large dataset
                 start_time = time.time()
-                filtered_result = await conn.execute("SELECT * FROM test_large_data WHERE data_number > 4000")
+                filtered_result = await conn.query("SELECT * FROM test_large_data WHERE data_number > 4000")
                 end_time = time.time()
                 
                 filtered_rows = filtered_result.rows()
@@ -99,7 +99,7 @@ async def test_concurrent_connections():
             """Function to run concurrent async queries."""
             async with Connection(TEST_CONNECTION_STRING) as conn:
                 # Each connection runs its own queries
-                result = await conn.execute(f"SELECT {connection_id} as connection_id, GETDATE() as execution_time")
+                result = await conn.query(f"SELECT {connection_id} as connection_id, GETDATE() as execution_time")
                 return {
                     'connection_id': connection_id,
                     'result': result.rows()[0] if result.has_rows() else {}     ,
@@ -232,7 +232,7 @@ async def test_repeated_query_performance():
                 
                 start_time = time.time()
                 for i in range(num_iterations):
-                    result = await conn.execute(query)
+                    result = await conn.query(query)
                     assert result.has_rows() and len(result.rows()) == 3# Should always return 3 categories
                 end_time = time.time()
                 
@@ -261,7 +261,7 @@ async def test_async_concurrent_queries():
         async def run_async_query(query_id):
             """Function to run async queries concurrently."""
             async with Connection(TEST_CONNECTION_STRING) as conn:
-                result = await conn.execute(f"""
+                result = await conn.query(f"""
                     SELECT 
                         {query_id} as query_id,
                         GETDATE() as execution_time,
@@ -333,7 +333,7 @@ async def test_memory_usage_with_large_strings():
                 await conn.execute(f"INSERT INTO test_large_strings (large_text) VALUES (N'{large_string}')")
 
                 # Retrieve and verify - use a simple SELECT instead of SCOPE_IDENTITY()
-                result = await conn.execute("SELECT large_text FROM test_large_strings")
+                result = await conn.query("SELECT large_text FROM test_large_strings")
                 assert result.has_rows() and len(result.rows()) == 1
                 assert len(result.rows()[0]['large_text']) == size
                 assert result.rows()[0]['large_text'] == large_string
@@ -364,7 +364,7 @@ async def test_connection_pool_simulation():
         
         for i in range(num_connections):
             async with Connection(TEST_CONNECTION_STRING) as conn:
-                result = await conn.execute("SELECT 1 as test_value")
+                result = await conn.query("SELECT 1 as test_value")
                 assert result.rows()[0]['test_value'] == 1
 
         end_time = time.time()
@@ -388,7 +388,7 @@ async def test_long_running_query():
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Run a query that takes some time to execute
             start_time = time.time()
-            result = await conn.execute("""
+            result = await conn.query("""
                 WITH NumberSequence AS (
                     SELECT 1 as n
                     UNION ALL
@@ -455,7 +455,7 @@ async def test_stress_mixed_operations():
                         """)
                     else:
                         # Select operation
-                        result = await conn.execute(f"""
+                        result = await conn.query(f"""
                             SELECT COUNT(*) as count 
                             FROM test_stress_operations 
                             WHERE data_value > {i // 2}
@@ -469,7 +469,7 @@ async def test_stress_mixed_operations():
                 print(f"Stress test: {num_operations} operations in {total_time:.3f}s, {ops_per_second:.0f} ops/sec")
                 
                 # Verify final state
-                result = await conn.execute("SELECT COUNT(*) as total FROM test_stress_operations")
+                result = await conn.query("SELECT COUNT(*) as total FROM test_stress_operations")
                 insert_count = num_operations // 3 + (1 if num_operations % 3 > 0 else 0)
                 assert result.rows()[0]['total'] == insert_count
 

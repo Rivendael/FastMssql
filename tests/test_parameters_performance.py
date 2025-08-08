@@ -85,7 +85,7 @@ class TestParametersPerformance:
                 list_start = time.time()
                 
                 for i in range(50):
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @P1 as id, @P2 as name, @P3 as value",
                         [i, f"list_test_{i}", i * 1.5]
                     )
@@ -99,7 +99,7 @@ class TestParametersPerformance:
                 
                 for i in range(50):
                     params = Parameters(i, f"params_test_{i}", i * 1.5)
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @P1 as id, @P2 as name, @P3 as value",
                         params
                     )
@@ -133,7 +133,7 @@ class TestParametersPerformance:
                 
                 # Reuse the same Parameters object many times
                 for i in range(100):
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @P1 as id, @P2 as name, @P3 as value, @P4 as iteration",
                         Parameters(params.to_list()[0], params.to_list()[1], params.to_list()[2], i)
                     )
