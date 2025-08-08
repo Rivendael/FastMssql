@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.2.9"
+version = "0.3.0"
 
 description = "A high-performance Python library for Microsoft SQL Server using Rust and Tiberius"
 readme = "README.md"
