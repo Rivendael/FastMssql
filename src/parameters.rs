@@ -1,6 +1,3 @@
-// Copyright (c) 2025 Riveranda
-// Licensed under PolyForm Noncommercial 1.0.0
-
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyDict, PyTuple};
 

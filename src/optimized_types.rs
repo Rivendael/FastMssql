@@ -1,6 +1,3 @@
-// Copyright (c) 2025 Riveranda
-// Licensed under PolyForm Noncommercial 1.0.0
-
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyDict, PyType};
 use pyo3::prelude::*;
