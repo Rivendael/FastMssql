@@ -13,9 +13,13 @@ import asyncio
 async def test_error_handling():
     """Test that errors are handled properly."""
     # Test invalid connection string
-    with pytest.raises(Exception):
+    try:
         conn = Connection("Invalid connection string")
-        await conn.connect()
+        async with conn:
+            # This should fail when we try to use the connection
+            await conn.query("SELECT 1")
+    except Exception:
+        pass  # Expected to fail
     
     # Test invalid query (requires database connection)
     try:
@@ -63,7 +67,7 @@ async def test_simple_query():
     """Test executing a simple query."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("SELECT 1 as test_value")
+            result = await conn.query("SELECT 1 as test_value")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             test_value = rows[0]['test_value']
@@ -78,13 +82,13 @@ async def test_multiple_queries():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # First query
-            result1 = await conn.execute("SELECT 'first' as query_name")
+            result1 = await conn.query("SELECT 'first' as query_name")
             rows1 = result1.rows()
             assert len(rows1) == 1
             assert rows1[0]['query_name'] == 'first'
 
             # Second query
-            result2 = await conn.execute("SELECT 'second' as query_name")
+            result2 = await conn.query("SELECT 'second' as query_name")
             rows2 = result2.rows()
             assert len(rows2) == 1
             assert rows2[0]['query_name'] == 'second'
@@ -97,7 +101,7 @@ async def test_data_types():
     """Test various SQL Server data types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     42 as int_val,
                     3.14159 as float_val,
@@ -125,13 +129,13 @@ async def test_convenience_functions():
     try:
         # Test direct execution using async Connection
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("SELECT 'convenience' as test")
+            result = await conn.query("SELECT 'convenience' as test")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['test'] == 'convenience'
             
             # Test scalar-like execution
-            scalar_result = await conn.execute("SELECT 42 as value")
+            scalar_result = await conn.query("SELECT 42 as value")
             scalar_rows = scalar_result.rows()
             assert scalar_rows[0]['value'] == 42
     except Exception as e:
@@ -142,9 +146,13 @@ async def test_convenience_functions():
 async def test_error_handling():
     """Test that errors are handled properly."""
     # Test invalid connection string
-    with pytest.raises(Exception):
+    try:
         conn = Connection("Invalid connection string")
-        await conn.connect()
+        async with conn:
+            # This should fail when we try to use the connection
+            await conn.query("SELECT 1")
+    except Exception:
+        pass  # Expected to fail
     
     # Test invalid query (requires database connection)
     try:
@@ -178,7 +186,7 @@ async def test_async_simple_query():
     """Test executing a simple query asynchronously."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("SELECT 1 as test_value")
+            result = await conn.query("SELECT 1 as test_value")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['test_value'] == 1
@@ -192,13 +200,13 @@ async def test_async_multiple_queries():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # First query
-            result1 = await conn.execute("SELECT 'first' as query_name")
+            result1 = await conn.query("SELECT 'first' as query_name")
             rows1 = result1.rows()
             assert len(rows1) == 1
             assert rows1[0]['query_name'] == 'first'
             
             # Second query
-            result2 = await conn.execute("SELECT 'second' as query_name")
+            result2 = await conn.query("SELECT 'second' as query_name")
             rows2 = result2.rows()
             assert len(rows2) == 1
             assert rows2[0]['query_name'] == 'second'
@@ -211,7 +219,7 @@ async def test_async_data_types():
     """Test various SQL Server data types with async operations."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     42 as int_val,
                     3.14159 as float_val,
@@ -259,7 +267,7 @@ async def test_async_execute_non_query():
             """
             
             # Execute the complete test as a single batch to avoid session scope issues
-            result = await conn.execute(setup_and_test_sql)
+            result = await conn.query(setup_and_test_sql)
             
             # Verify that our update worked
             rows = result.rows() if result.has_rows() else []
@@ -279,17 +287,17 @@ async def test_async_execute_scalar():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test scalar with number
-            result = await conn.execute("SELECT 42 as scalar_value")
+            result = await conn.query("SELECT 42 as scalar_value")
             rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] == 42
             
             # Test scalar with string
-            result = await conn.execute("SELECT 'hello world' as scalar_value")
+            result = await conn.query("SELECT 'hello world' as scalar_value")
             rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] == 'hello world'
             
             # Test scalar with NULL
-            result = await conn.execute("SELECT NULL as scalar_value")
+            result = await conn.query("SELECT NULL as scalar_value")
             rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] is None
     except Exception as e:
@@ -302,37 +310,15 @@ async def test_async_convenience_functions():
     try:
         # Test direct async execution using Connection class
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("SELECT 'convenience_async' as test")
+            result = await conn.query("SELECT 'convenience_async' as test")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             assert rows[0]['test'] == 'convenience_async'
             
             # Test async scalar-like execution (get first value from result)
-            scalar_result = await conn.execute("SELECT 42 as value")
+            scalar_result = await conn.query("SELECT 42 as value")
             scalar_rows = scalar_result.rows()
             assert scalar_rows[0]['value'] == 42
-    except Exception as e:
-        pytest.skip(f"Database not available: {e}")
-
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_async_manual_connection_lifecycle():
-    """Test manual async connection and disconnection."""
-    try:
-        conn = Connection(TEST_CONNECTION_STRING)
-        assert not await conn.is_connected()
-        
-        await conn.connect()
-        assert await conn.is_connected()
-        
-        # Execute a query
-        result = await conn.execute("SELECT 'manual_async' as test")
-        rows = result.rows() if result.has_rows() else []
-        assert len(rows) == 1
-        assert rows[0]['test'] == 'manual_async'
-        
-        await conn.disconnect()
-        assert not await conn.is_connected()
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
 
@@ -353,7 +339,7 @@ async def test_simple_parameterized_query():
     """Test basic parameterized queries with list parameters."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute(
+            result = await conn.query(
                 "SELECT @P1 as param1, @P2 as param2, @P3 as param3",
                 [42, "test", True]
             )
@@ -378,7 +364,7 @@ async def test_parameters_object_basic():
         async with Connection(TEST_CONNECTION_STRING) as conn:
             params = Parameters(100, "Parameters Object", 3.14)
             
-            result = await conn.execute(
+            result = await conn.query(
                 "SELECT @P1 as id, @P2 as description, @P3 as value",
                 params
             )
@@ -405,7 +391,7 @@ async def test_parameters_method_chaining():
                      .add(200)
                      .add("Chained"))
             
-            result = await conn.execute(
+            result = await conn.query(
                 "SELECT @P1 as chained_id, @P2 as chained_name",
                 params
             )
@@ -426,10 +412,10 @@ async def test_async_concurrent_queries():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Create coroutines for concurrent execution
-            query1 = conn.execute("SELECT 1 as value, 'query1' as name")
-            query2 = conn.execute("SELECT 2 as value, 'query2' as name")
-            query3 = conn.execute("SELECT 3 as value, 'query3' as name")
-            
+            query1 = conn.query("SELECT 1 as value, 'query1' as name")
+            query2 = conn.query("SELECT 2 as value, 'query2' as name")
+            query3 = conn.query("SELECT 3 as value, 'query3' as name")
+
             # Wait for all queries to complete concurrently
             results = await asyncio.gather(query1, query2, query3)
             

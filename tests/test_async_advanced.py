@@ -41,7 +41,7 @@ async def test_async_truly_non_blocking():
             """Execute a query that takes a specific amount of time."""
             async with Connection(TEST_CONNECTION_STRING) as conn:
                 # WAITFOR DELAY makes SQL Server wait for specified time
-                result = await conn.execute(f"""
+                result = await conn.query(f"""
                     WAITFOR DELAY '00:00:0{delay_seconds}';
                     SELECT {query_id} as query_id, GETDATE() as completion_time;
                 """)
@@ -108,7 +108,7 @@ async def test_connection_pool_race_conditions():
                         })
                         
                         # Execute a simple query
-                        result = await conn.execute("SELECT 1 as test_value")
+                        result = await conn.query("SELECT 1 as test_value")
                         assert result.has_rows() and result.rows()[0]['test_value'] == 1
                         
                         # Longer delay to reduce connection churn
@@ -221,7 +221,7 @@ async def test_concurrent_transaction_handling():
                     try:
                         # Test concurrent read operations using system tables
                         # This avoids needing to create/modify tables
-                        result = await conn.execute(f"""
+                        result = await conn.query(f"""
                             SELECT 
                                 {worker_id} as worker_id,
                                 {op} as operation,
@@ -314,7 +314,7 @@ async def test_async_connection_limit_behavior():
             try:
                 async with Connection(TEST_CONNECTION_STRING) as conn:
                     # Execute a query to ensure connection is active
-                    result = await conn.execute(f"SELECT {connection_id} as conn_id")
+                    result = await conn.query(f"SELECT {connection_id} as conn_id")
                     assert result.has_rows() and result.rows()[0]['conn_id'] == connection_id
                     
                     # Hold the connection for a shorter time
@@ -383,10 +383,10 @@ async def test_async_error_propagation_and_cleanup():
                     
                     if should_fail:
                         # This should cause an error
-                        await conn.execute("SELECT * FROM non_existent_table_xyz")
+                        await conn.query("SELECT * FROM non_existent_table_xyz")
                     else:
                         # This should succeed
-                        result = await conn.execute(f"SELECT {operation_id} as op_id")
+                        result = await conn.query(f"SELECT {operation_id} as op_id")
                         return {'operation_id': operation_id, 'success': True, 'result': result}
                         
             except Exception as e:
@@ -446,7 +446,7 @@ async def test_async_query_cancellation():
             """Execute a very long-running query."""
             async with Connection(TEST_CONNECTION_STRING) as conn:
                 # Query that would take 30 seconds if not cancelled
-                result = await conn.execute("""
+                result = await conn.query("""
                     WAITFOR DELAY '00:00:30';
                     SELECT 'This should not complete' as message;
                 """)
@@ -491,7 +491,7 @@ async def test_async_connection_state_consistency():
                     for op in range(3):  # Reduced from 5 to make test faster and more stable
                         try:
                             # Use a single combined query to reduce round trips
-                            result = await conn.execute("""
+                            result = await conn.query("""
                                 SELECT 
                                     DB_NAME() as current_db,
                                     @@SPID as connection_id,
@@ -637,7 +637,7 @@ async def test_connection_pool_statistics_and_configuration():
                 print(f"Initial pool stats: {initial_stats}")
                 
                 # Execute a query to activate connection
-                result = await conn.execute("SELECT 'Pool test' as message")
+                result = await conn.query("SELECT 'Pool test' as message")
                 assert result.has_rows() and len(result.rows()) == 1
                 # Values are now returned as native Python types
                 assert result.has_rows() and result.rows()[0]['message'] == 'Pool test'
@@ -651,7 +651,7 @@ async def test_connection_pool_statistics_and_configuration():
             except AttributeError:
                 # pool_stats method not implemented yet
                 print("Pool stats not available - testing basic functionality")
-                result = await conn.execute("SELECT 'Pool test' as message")
+                result = await conn.query("SELECT 'Pool test' as message")
                 assert result.has_rows() and len(result.rows()) == 1
                 assert result.has_rows() and result.rows()[0]['message'] == 'Pool test'
             
@@ -664,7 +664,7 @@ async def test_connection_pool_statistics_and_configuration():
         
         for config_name, config in configs_to_test:
             async with Connection(TEST_CONNECTION_STRING, config) as conn:
-                result = await conn.execute(f"SELECT '{config_name}' as config_type")
+                result = await conn.query(f"SELECT '{config_name}' as config_type")
                 assert result.has_rows() and result.rows()[0]['config_type'] == config_name
 
                 try:
@@ -693,7 +693,7 @@ async def test_connection_pool_reuse_efficiency():
             try:
                 async with Connection(TEST_CONNECTION_STRING) as conn:
                     # Get the SQL Server connection ID (SPID)
-                    result = await conn.execute("SELECT @@SPID as connection_id")
+                    result = await conn.query("SELECT @@SPID as connection_id")
                     if not result.has_rows():
                         return None
                         
@@ -701,7 +701,7 @@ async def test_connection_pool_reuse_efficiency():
                     connection_ids_seen.add(connection_id)
                     
                     # Execute a meaningful query
-                    result = await conn.execute(f"""
+                    result = await conn.query(f"""
                         SELECT 
                             {operation_id} as operation_id,
                             @@SPID as spid,

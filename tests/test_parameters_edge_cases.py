@@ -214,7 +214,7 @@ class TestParametersIntegrationEdgeCases:
                 params = Parameters(malicious_input)
                 
                 # This should treat the input as a literal string parameter
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as user_input",
                     params
                 )
@@ -246,7 +246,7 @@ class TestParametersIntegrationEdgeCases:
                 for special_str in special_strings:
                     params = Parameters(special_str)
                     
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @P1 as special_input",
                         params
                     )
@@ -268,7 +268,7 @@ class TestParametersIntegrationEdgeCases:
                 
                 params = Parameters(long_string)
                 
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT LEN(@P1) as string_length, LEFT(@P1, 10) as string_start",
                     params
                 )
@@ -299,7 +299,7 @@ class TestParametersIntegrationEdgeCases:
                 for case in test_cases:
                     params = Parameters(*case)
                     
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @P1 as col1, @P2 as col2, @P3 as col3",
                         params
                     )
@@ -323,13 +323,13 @@ class TestParametersIntegrationEdgeCases:
                 # Too few parameters
                 with pytest.raises(Exception):
                     params = Parameters(42)  # Only 1 parameter
-                    await conn.execute("SELECT @P1 as col1, @P2 as col2", params)  # 2 placeholders
+                    await conn.query("SELECT @P1 as col1, @P2 as col2", params)  # 2 placeholders
                 
                 # Too many parameters (might be silently ignored by some databases)
                 params = Parameters(1, 2, 3)  # 3 parameters
                 # This might not raise an error depending on database behavior
                 try:
-                    result = await conn.execute("SELECT @P1 as col1", params)  # 1 placeholder
+                    result = await conn.query("SELECT @P1 as col1", params)  # 1 placeholder
                     # If it doesn't error, verify it used the first parameter
                     rows = result.rows() if result.has_rows() else []
                     assert rows[0]['col1'] == 1
