@@ -8,41 +8,64 @@ use tiberius::{Config, AuthMethod, Row};
 use pyo3::types::PyList;
 use pyo3::prelude::*;
 use std::sync::Arc;
-use once_cell::sync::OnceCell;
+use tokio::sync::RwLock;
 use bb8::Pool;
 use smallvec::SmallVec; // Only used for rare expandable parameter case
-
-/// Internal result type for async operations
-#[derive(Debug)]
-enum ExecutionResult {
-    Rows(Vec<Row>),
-    AffectedCount(u64),
-}
 
 type ConnectionPool = Pool<ConnectionManager>;
 
 /// A connection pool to a Microsoft SQL Server database
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
-    pool: Arc<OnceCell<ConnectionPool>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Config,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>, // Prefix with underscore to silence unused warning
 }
 
 impl PyConnection {
+    /// Helper function to convert Python parameters to FastParameter with zero duplication
+    /// This reduces code duplication between query() and execute() methods
+    #[inline]
+    fn convert_parameters_to_fast(
+        parameters: Option<&Bound<PyAny>>,
+        py: Python,
+    ) -> PyResult<SmallVec<[FastParameter; 8]>> {
+        if let Some(params) = parameters {
+            // Check if it's a Parameters object and convert to list
+            if let Ok(params_obj) = params.extract::<Py<crate::parameters::Parameters>>() {
+                let params_bound = params_obj.bind(py);
+                let list = params_bound.call_method0("to_list")?;
+                let list_bound = list.downcast::<PyList>()?;
+                python_params_to_fast_parameters(list_bound)
+            } else if let Ok(list) = params.downcast::<PyList>() {
+                python_params_to_fast_parameters(list)
+            } else {
+                Err(PyValueError::new_err("Parameters must be a list or Parameters object"))
+            }
+        } else {
+            Ok(SmallVec::new())
+        }
+    }
+
     /// Execute database operation with ZERO GIL usage - completely GIL-free async execution
-    /// Pre-analyzed query type to avoid SQL parsing in async context
-    async fn execute_raw_async_gil_free(
-        pool: Arc<OnceCell<ConnectionPool>>,
-        query: String,
-        parameters: SmallVec<[FastParameter; 8]>,
-        is_result_returning: bool,
-    ) -> PyResult<ExecutionResult> {
-        let pool_ref = pool.get()
-            .ok_or_else(|| PyRuntimeError::new_err("Not connected to database"))?;
-        
-        Self::execute_internal_ultra_fast_gil_free(pool_ref, query, parameters, is_result_returning).await
+    /// For queries that return rows (SELECT statements)
+    async fn execute_query_async_gil_free(
+        pool: &ConnectionPool,  // Direct reference instead of Arc to avoid atomic ops
+        query: &str,           // Slice instead of String to avoid heap allocation
+        parameters: &[FastParameter],  // Slice instead of SmallVec to avoid move
+    ) -> PyResult<Vec<Row>> {
+        Self::execute_query_internal_gil_free(pool, query, parameters).await
+    }
+
+    /// Execute database operation with ZERO GIL usage - completely GIL-free async execution
+    /// For commands that don't return rows (INSERT/UPDATE/DELETE/DDL)
+    async fn execute_command_async_gil_free(
+        pool: &ConnectionPool,  // Direct reference instead of Arc to avoid atomic ops
+        query: &str,           // Slice instead of String to avoid heap allocation
+        parameters: &[FastParameter],  // Slice instead of SmallVec to avoid move
+    ) -> PyResult<u64> {
+        Self::execute_command_internal_gil_free(pool, query, parameters).await
     }
 
 
@@ -82,21 +105,13 @@ impl PyConnection {
         Ok(pool)
     }
 
-    /// Helper function to close the connection pool
-    async fn close_pool(_pool: Arc<OnceCell<ConnectionPool>>) {
-        // OnceCell doesn't support "clearing" - this is intentional for performance
-        // Connection pools should generally live for the application lifetime
-        // If needed, the pool will be dropped when the last Arc reference is dropped
-    }
-
-    /// ULTRA-FAST GIL-FREE execution - completely eliminates SQL parsing overhead
-    /// Uses pre-analyzed query type to skip SQL analysis entirely in async context
-    async fn execute_internal_ultra_fast_gil_free(
+    /// ULTRA-FAST GIL-FREE execution for SELECT queries
+    /// Uses query() method to get rows
+    async fn execute_query_internal_gil_free(
         pool: &ConnectionPool,
-        query: String,
-        parameters: SmallVec<[FastParameter; 8]>,
-        is_result_returning_query: bool,
-    ) -> PyResult<ExecutionResult> {
+        query: &str,
+        parameters: &[FastParameter],
+    ) -> PyResult<Vec<Row>> {
         // Get connection with proper error handling for pool exhaustion
         let mut conn = pool.get().await
             .map_err(|e| {
@@ -109,92 +124,58 @@ impl PyConnection {
                 }
             })?;
         
-        // Convert to references for tiberius - zero allocation
-        let tiberius_params: Vec<&dyn tiberius::ToSql> = parameters.iter()
+        // OPTIMIZED: Use stack-allocated array for small parameter counts (common case)
+        // This avoids heap allocation for the vast majority of queries (<=8 parameters)
+        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = parameters.iter()
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
         
-        // OPTIMIZATION: Use pre-analyzed query type - NO SQL parsing in async context!
-        if is_result_returning_query {
-            let stream = conn.query(&query, &tiberius_params)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-            
-            let rows = stream.into_first_result()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-            
-            Ok(ExecutionResult::Rows(rows))
-        } else {
-            let result = conn.execute(&query, &tiberius_params)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-
-            let total_affected: u64 = result.rows_affected().iter().sum();
-            Ok(ExecutionResult::AffectedCount(total_affected))
-        }
+        // PERFORMANCE CRITICAL: Use the fastest method for getting results
+        // into_first_result() is much faster than manual stream processing
+        let stream = conn.query(query, &tiberius_params)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        
+        let rows = stream.into_first_result()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
+        
+        Ok(rows)
     }
 
-    /// Ultra-fast SQL analysis - branch-optimized for hot path with zero allocations
-    #[inline(always)]
-    fn contains_result_returning_statements_ultra_fast(sql: &str) -> bool {
-        let sql_bytes = sql.as_bytes();
-        let len = sql_bytes.len();
-        
-        if len < 6 { return false; } // Minimum length for "SELECT"
-        
-        // OPTIMIZATION: Branchless lookup using perfect hash for common patterns
-        // This is faster than SIMD for small strings and avoids complex vectorization overhead
-        
-        // Fast path: Check for common patterns at start using optimized string comparison
-        if len >= 6 && Self::fast_starts_with_ignore_case(sql_bytes, b"select") { return true; }
-        if len >= 4 && Self::fast_starts_with_ignore_case(sql_bytes, b"with") { return true; }
-        if len >= 4 && Self::fast_starts_with_ignore_case(sql_bytes, b"exec") { return true; }
-        if len >= 7 && Self::fast_starts_with_ignore_case(sql_bytes, b"execute") { return true; }
-        
-        // OPTIMIZATION: Use Boyer-Moore-like algorithm for mid-string " SELECT " search
-        // More efficient than SIMD for typical SQL statement lengths (< 1KB)
-        Self::contains_select_keyword(sql_bytes)
-    }
-    
-    /// Optimized case-insensitive prefix check using bit manipulation
-    #[inline(always)]
-    fn fast_starts_with_ignore_case(haystack: &[u8], needle: &[u8]) -> bool {
-        if haystack.len() < needle.len() { return false; }
-        
-        // Branchless ASCII lowercase comparison using bit manipulation
-        for i in 0..needle.len() {
-            let h = haystack[i] | 0x20; // Convert to lowercase (works for ASCII letters)
-            let n = needle[i] | 0x20;
-            if h != n && !(haystack[i].is_ascii_alphabetic() && needle[i].is_ascii_alphabetic()) {
-                return false;
-            }
-        }
-        true
-    }
-    
-    /// Boyer-Moore inspired search for " SELECT " keyword in middle of string
-    #[inline(always)]
-    fn contains_select_keyword(sql_bytes: &[u8]) -> bool {
-        use memchr::memmem;
-        
-        // Fast Boyer-Moore search for space character, then check following pattern
-        let mut pos = 0;
-        while let Some(space_pos) = memmem::find(&sql_bytes[pos..], b" ") {
-            let absolute_pos = pos + space_pos;
-            if absolute_pos + 8 < sql_bytes.len() { // " SELECT "
-                let slice_start = absolute_pos + 1;
-                if slice_start + 6 <= sql_bytes.len() &&
-                   Self::fast_starts_with_ignore_case(&sql_bytes[slice_start..], b"select") &&
-                   slice_start + 6 < sql_bytes.len() && sql_bytes[slice_start + 6] == b' ' {
-                    return true;
+    /// ULTRA-FAST GIL-FREE execution for non-SELECT commands
+    /// Uses execute() method to get affected row count
+    async fn execute_command_internal_gil_free(
+        pool: &ConnectionPool,
+        query: &str,
+        parameters: &[FastParameter],
+    ) -> PyResult<u64> {
+        // Get connection with proper error handling for pool exhaustion
+        let mut conn = pool.get().await
+            .map_err(|e| {
+                // Better error handling for different types of connection failures
+                match e {
+                    _ if e.to_string().contains("timed out") => {
+                        PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
+                    },
+                    _ => PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
                 }
-            }
-            pos = absolute_pos + 1;
-            if pos >= sql_bytes.len().saturating_sub(7) { break; }
-        }
+            })?;
         
-        false
+        // OPTIMIZED: Use stack-allocated array for small parameter counts (common case)
+        // This avoids heap allocation for the vast majority of queries (<=8 parameters)
+        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = parameters.iter()
+            .map(|p| p as &dyn tiberius::ToSql)
+            .collect();
+        
+        // Use execute() for INSERT/UPDATE/DELETE/DDL statements
+        let result = conn.execute(query, &tiberius_params)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
+        
+        // Get the total affected rows
+        let total_affected: u64 = result.rows_affected().iter().sum();
+        Ok(total_affected)
     }
 }
 
@@ -429,98 +410,108 @@ impl PyConnection {
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
         
         Ok(PyConnection {
-            pool: Arc::new(OnceCell::new()),
+            pool: Arc::new(RwLock::new(None)),
             config,
             pool_config,
             _ssl_config: ssl_config,
         })
     }
     
-    /// Connect to the database
-    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+    /// Execute a SQL query that returns rows (SELECT statements)
+    /// Returns rows as PyFastExecutionResult
+    /// OPTIMIZED VERSION - parameter conversion done synchronously, GIL-free async execution
+    #[pyo3(signature = (query, parameters=None))]
+    pub fn query<'p>(&self, py: Python<'p>, query: String, parameters: Option<&Bound<PyAny>>) -> PyResult<Bound<'p, PyAny>> {
+        // OPTIMIZATION: Do ALL Python type checking/conversion synchronously while we have the GIL
+        // This moves GIL contention out of the async hot path entirely
+        let fast_parameters = Self::convert_parameters_to_fast(parameters, py)?;
+        
+        // PERFORMANCE CRITICAL: Clone self reference for async context
+        // We need access to the PyConnection instance methods
         let pool = self.pool.clone();
         let config = self.config.clone();
         let pool_config = self.pool_config.clone();
         
+        // Return the coroutine - now with ZERO GIL usage in async execution
         future_into_py(py, async move {
-            // Check if already connected using OnceCell::get()
-            if pool.get().is_some() {
-                return Ok(());
-            }
+            // PERFORMANCE CRITICAL: Optimized pool access with auto-initialization
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard); // Release read lock
+                    
+                    // Acquire write lock to initialize
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        // Another thread initialized it while we were waiting
+                        pool_ref.clone()
+                    } else {
+                        // We need to initialize it
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
+            };
             
-            // Try to initialize the pool (only succeeds once)
-            let new_pool = Self::establish_pool(config, &pool_config).await?;
+            let execution_result = Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
             
-            // set() returns Err if already set, which is fine - just means another thread won
-            let _ = pool.set(new_pool);
-            Ok(())
+            // Convert results efficiently - acquire GIL only once per result set
+            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                let fast_result = PyFastExecutionResult::with_rows(execution_result, py)?;
+                let py_result = Py::new(py, fast_result)?;
+                Ok(py_result.into_any())
+            })
         })
     }
     
-    /// Disconnect from the database
-    pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        let pool = self.pool.clone();
-        
-        future_into_py(py, async move {
-            Self::close_pool(pool).await;
-            Ok(()) // Return unit from the async function
-        })
-    }
-    
-    /// Execute a SQL statement efficiently and return appropriate results
-    /// 
-    /// For SELECT queries: Returns rows as PyFastExecutionResult
-    /// For INSERT/UPDATE/DELETE/DDL: Returns affected row count as u64
+    /// Execute a SQL command that doesn't return rows (INSERT/UPDATE/DELETE/DDL)
+    /// Returns affected row count as u64
     /// OPTIMIZED VERSION - parameter conversion done synchronously, GIL-free async execution
     #[pyo3(signature = (query, parameters=None))]
     pub fn execute<'p>(&self, py: Python<'p>, query: String, parameters: Option<&Bound<PyAny>>) -> PyResult<Bound<'p, PyAny>> {
         // OPTIMIZATION: Do ALL Python type checking/conversion synchronously while we have the GIL
         // This moves GIL contention out of the async hot path entirely
-        let fast_parameters = if let Some(params) = parameters {
-            // Check if it's a Parameters object and convert to list
-            if let Ok(params_obj) = params.extract::<Py<crate::parameters::Parameters>>() {
-                let params_bound = params_obj.bind(py);
-                let list = params_bound.call_method0("to_list")?;
-                let list_bound = list.downcast::<PyList>()?;
-                python_params_to_fast_parameters(list_bound)?
-            } else if let Ok(list) = params.downcast::<PyList>() {
-                python_params_to_fast_parameters(list)?
-            } else {
-                return Err(PyValueError::new_err("Parameters must be a list or Parameters object"));
-            }
-        } else {
-            SmallVec::new()
-        };
+        let fast_parameters = Self::convert_parameters_to_fast(parameters, py)?;
         
-        // OPTIMIZATION: Use weak reference to avoid Arc clone overhead
-        let pool_weak = Arc::downgrade(&self.pool);
-        
-        // Pre-analyze query while we have the GIL to avoid doing it in async context
-        let is_result_returning = Self::contains_result_returning_statements_ultra_fast(&query);
+        // PERFORMANCE CRITICAL: Clone self reference for async context
+        // We need access to the PyConnection instance methods
+        let pool = self.pool.clone();
+        let config = self.config.clone();
+        let pool_config = self.pool_config.clone();
         
         // Return the coroutine - now with ZERO GIL usage in async execution
         future_into_py(py, async move {
-            // Upgrade weak reference only when needed
-            let pool = pool_weak.upgrade()
-                .ok_or_else(|| PyRuntimeError::new_err("Connection pool has been dropped"))?;
+            // PERFORMANCE CRITICAL: Optimized pool access with auto-initialization
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard); // Release read lock
+                    
+                    // Acquire write lock to initialize
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        // Another thread initialized it while we were waiting
+                        pool_ref.clone()
+                    } else {
+                        // We need to initialize it
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
+            };
             
-            let execution_result = Self::execute_raw_async_gil_free(pool, query, fast_parameters, is_result_returning).await?;
+            let affected_count = Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
             
             // Convert results efficiently - acquire GIL only once per result set
-            match execution_result {
-                ExecutionResult::Rows(rows) => {
-                    Python::with_gil(|py| -> PyResult<Py<PyAny>> {
-                        let fast_result = PyFastExecutionResult::with_rows(rows, py)?;
-                        let py_result = Py::new(py, fast_result)?;
-                        Ok(py_result.into_any())
-                    })
-                },
-                ExecutionResult::AffectedCount(count) => {
-                    Python::with_gil(|py| -> PyResult<Py<PyAny>> {
-                        Ok(count.into_pyobject(py)?.into_any().unbind())
-                    })
-                }
-            }
+            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                Ok(affected_count.into_pyobject(py)?.into_any().unbind())
+            })
         })
     }
     
@@ -529,7 +520,8 @@ impl PyConnection {
         let pool = self.pool.clone();
         
         future_into_py(py, async move {
-            let is_connected = pool.get().is_some();
+            let pool_guard = pool.read().await;
+            let is_connected = pool_guard.is_some();
             Ok(is_connected)
         })
     }
@@ -540,7 +532,8 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
         
         future_into_py(py, async move {
-            if let Some(pool_ref) = pool.get() {
+            let pool_guard = pool.read().await;
+            if let Some(ref pool_ref) = *pool_guard {
                 let state = pool_ref.state();
                 Ok((
                     true, // connected
@@ -562,16 +555,23 @@ impl PyConnection {
         let pool_config = slf.borrow().pool_config.clone();
         
         future_into_py(py, async move {
-            // Check if already connected using OnceCell::get()
-            if pool.get().is_some() {
+            // Check if already connected
+            let pool_guard = pool.read().await;
+            if pool_guard.is_some() {
+                return Ok(());
+            }
+            drop(pool_guard); // Release read lock
+            
+            // Acquire write lock to initialize
+            let mut pool_guard = pool.write().await;
+            if pool_guard.is_some() {
+                // Another thread initialized it while we were waiting
                 return Ok(());
             }
             
-            // Try to initialize the pool (only succeeds once)
+            // We need to initialize it
             let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
-            
-            // set() returns Err if already set, which is fine - just means another thread won
-            let _ = pool.set(new_pool);
+            *pool_guard = Some(new_pool);
             Ok(())
         })
     }
@@ -584,10 +584,17 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>, 
         _traceback: Option<Bound<PyAny>>
     ) -> PyResult<Bound<'p, PyAny>> {
-        // Don't disconnect on exit - let the pool manage connections
-        // This allows for connection reuse and prevents premature disconnection
+        let pool = self.pool.clone();
+        
         future_into_py(py, async move {
-            Ok(()) // Return unit, don't disconnect
+            // Properly close the pool when exiting the context manager
+            let mut pool_guard = pool.write().await;
+            if let Some(pool_ref) = pool_guard.take() {
+                // Explicitly close all connections in the pool
+                // The pool will be dropped here, which should clean up all connections
+                drop(pool_ref);
+            }
+            Ok(())
         })
     }
 }

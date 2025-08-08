@@ -356,7 +356,7 @@ class TestParametersIntegration:
         """Test using simple list parameters (backward compatibility)."""
         try:
             async with Connection(TEST_CONNECTION_STRING) as conn:
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as num, @P2 as text", 
                     [42, "Hello"]
                 )
@@ -379,7 +379,7 @@ class TestParametersIntegration:
             async with Connection(TEST_CONNECTION_STRING) as conn:
                 params = Parameters(100, "Test Product", 29.99)
                 
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as id, @P2 as name, @P3 as price", 
                     params
                 )
@@ -406,7 +406,7 @@ class TestParametersIntegration:
                          .add("Chained Test", "NVARCHAR")
                          .add(True, "BIT"))
                 
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as id, @P2 as description, @P3 as active", 
                     params
                 )
@@ -430,7 +430,7 @@ class TestParametersIntegration:
             async with Connection(TEST_CONNECTION_STRING) as conn:
                 params = Parameters(1, None, "Not Null")
                 
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as id, @P2 as nullable_field, @P3 as text", 
                     params
                 )
@@ -460,7 +460,7 @@ class TestParametersIntegration:
                     b"binary",    # bytes
                 )
                 
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as int_val, @P2 as float_val, @P3 as str_val, @P4 as bool_val, @P5 as binary_val", 
                     params
                 )
@@ -488,7 +488,7 @@ class TestParametersIntegration:
         """Test execute with no parameters."""
         try:
             async with Connection(TEST_CONNECTION_STRING) as conn:
-                result = await conn.execute("SELECT 'No params' as message")
+                result = await conn.query("SELECT 'No params' as message")
                 
                 assert result.has_rows()
                 rows = result.rows() if result.has_rows() else []
@@ -504,7 +504,7 @@ class TestParametersIntegration:
         try:
             async with Connection(TEST_CONNECTION_STRING) as conn:
                 params = Parameters()
-                result = await conn.execute("SELECT 'Empty params' as message", params)
+                result = await conn.query("SELECT 'Empty params' as message", params)
                 
                 assert result.has_rows()
                 rows = result.rows() if result.has_rows() else []
@@ -523,13 +523,13 @@ class TestParametersIntegration:
                 params = Parameters(42, "Reused")
                 
                 # First query
-                result1 = await conn.execute(
+                result1 = await conn.query(
                     "SELECT @P1 as num, @P2 as text, 'Query 1' as query_id", 
                     params
                 )
                 
                 # Second query with same parameters
-                result2 = await conn.execute(
+                result2 = await conn.query(
                     "SELECT @P1 as id, @P2 as name, 'Query 2' as query_id", 
                     params
                 )
@@ -562,7 +562,7 @@ class TestParametersIntegration:
                 params = Parameters(ids)
                 
                 # This should work: the list gets expanded automatically
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as expanded_values", 
                     params
                 )
@@ -593,7 +593,7 @@ class TestParametersIntegration:
                     25             # Regular int
                 )
                 
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @P1 as name, @P2 as id_list, @P3 as age", 
                     params
                 )

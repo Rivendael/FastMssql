@@ -18,7 +18,23 @@ A Python library for Microsoft SQL Server built with Rust using the [Tiberius](h
 - **Type Safety**: Strong typing with automatic Python type conversion
 - **Thread Safety**: Support for concurrent operations
 - **Cross-Platform**: Works on Windows, macOS, and Linux
-- **Simple API**: Clean, intuitive async-only interface
+- **Simple API**: Clean, intuitive async-only interface with separate `query()` and `execute()` methods
+
+## Key API Methods
+
+FastMSSQL provides two distinct methods for database operations:
+
+- **`query()`** - For SELECT statements that return rows
+- **`execute()`** - For INSERT/UPDATE/DELETE statements that return affected row count
+
+```python
+# Use query() for SELECT statements
+result = await conn.query("SELECT * FROM users WHERE age > @P1", [25])
+rows = result.rows()
+
+# Use execute() for data modification
+affected = await conn.execute("INSERT INTO users (name) VALUES (@P1)", ["John"])
+```
 
 ## Performance Highlights
 
@@ -97,7 +113,9 @@ async def main():
     
     # Automatic connection pool management
     async with Connection(connection_string) as conn:
-        rows = await conn.execute("SELECT @@VERSION as version")
+        # Use query() for SELECT statements that return rows
+        result = await conn.query("SELECT @@VERSION as version")
+        rows = result.rows()
         for row in rows:
             print(row['version'])
         
@@ -123,8 +141,10 @@ async def main():
     connection_string = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
     
     async with Connection(connection_string=connection_string) as conn:
-        result = await conn.execute("SELECT @@VERSION as version")
-        for row in result.rows():
+        # Use query() for SELECT statements that return rows
+        result = await conn.query("SELECT @@VERSION as version")
+        rows = result.rows()
+        for row in rows:
             print(row['version'])
 
 asyncio.run(main())
@@ -146,8 +166,10 @@ async def main():
         username="myuser",
         password="mypassword"
     ) as conn:
-        result = await conn.execute("SELECT SUSER_NAME() as login")
-        for row in result.rows():
+        # Use query() for SELECT statements that return rows
+        result = await conn.query("SELECT SUSER_NAME() as login")
+        rows = result.rows()
+        for row in rows:
             print(f"Logged in as: {row['login']}")
 
 asyncio.run(main())
@@ -170,8 +192,9 @@ async def high_performance_pattern():
         # Each worker gets its own Connection object for maximum throughput
         async with Connection(connection_string, pool_config=config) as conn:
             for _ in range(1000):
-                # Use proper SQL Server parameterization with @param syntax
-                result = await conn.execute("SELECT data FROM my_table WHERE id = @id", {"id": 123})
+                # Use query() for SELECT statements that return rows
+                result = await conn.query("SELECT data FROM my_table WHERE id = @P1", [123])
+                rows = result.rows()
                 # Process results...
     
     # Launch multiple workers - each with their own connection
@@ -206,7 +229,11 @@ async def main():
     )
 
     async with Connection(connection_string, pool_config) as conn:
-        result = await conn.execute("SELECT * FROM users")
+        # Use query() for SELECT statements that return rows
+        result = await conn.query("SELECT * FROM users")
+        rows = result.rows()
+        for row in rows:
+            print(f"User: {row['name']}")
         
     # Predefined configurations for different scenarios
     high_throughput_config = PoolConfig.high_throughput()     # 100 connections, optimized for high RPS
@@ -220,7 +247,8 @@ async def main():
     # For maximum throughput, use multiple Connection objects:
     async def high_perf_worker():
         async with Connection(connection_string, maximum_performance) as conn:
-            result = await conn.execute("SELECT * FROM fast_table")
+            # Use query() for SELECT statements that return rows
+            result = await conn.query("SELECT * FROM fast_table")
             return result.rows()
     
     # Each worker gets its own connection for optimal performance
@@ -255,21 +283,37 @@ from fastmssql import Connection
 
 async def main():
     async with Connection(connection_string) as conn:
-        # Execute queries
-        users = await conn.execute("SELECT id, name, email FROM users WHERE active = 1")
+        # === SELECT QUERIES - Use query() method (returns rows) ===
+        result = await conn.query("SELECT id, name, email FROM users WHERE active = 1")
+        rows = result.rows()
         
         # Iterate through results
-        for user in users:
-            print(f"User {user['id']}: {user['name']} ({user['email']})")
+        for row in rows:
+            print(f"User {row['id']}: {row['name']} ({row['email']})")
         
-        # Execute non-query operations
-        rows_affected = await conn.execute_non_query(
-            "UPDATE users SET last_login = GETDATE() WHERE id = 123"
+        # === DATA MODIFICATION - Use execute() method (returns affected row count) ===
+        # INSERT operation
+        rows_affected = await conn.execute(
+            "INSERT INTO users (name, email, active) VALUES (@P1, @P2, @P3)",
+            ["John Doe", "john@example.com", 1]
         )
-        print(f"Updated {rows_affected} rows")
+        print(f"Inserted {rows_affected} row(s)")
         
-        # Work with different data types
-        data = await conn.execute("""
+        # UPDATE operation
+        rows_affected = await conn.execute(
+            "UPDATE users SET last_login = GETDATE() WHERE id = @P1",
+            [123]
+        )
+        print(f"Updated {rows_affected} row(s)")
+        
+        # DELETE operation
+        rows_affected = await conn.execute(
+            "DELETE FROM users WHERE active = 0 AND last_login < DATEADD(year, -1, GETDATE())"
+        )
+        print(f"Deleted {rows_affected} inactive users")
+        
+        # === WORKING WITH DIFFERENT DATA TYPES ===
+        result = await conn.query("""
             SELECT 
                 42 as int_value,
                 3.14159 as float_value,
@@ -279,9 +323,11 @@ async def main():
                 NULL as null_value
         """)
         
-        row = data[0]
-        for column_name, value in row.items():
-            print(f"{column_name}: {value} (type: {type(value).__name__})")
+        rows = result.rows()
+        if rows:
+            row = rows[0]
+            for column_name, value in row.items():
+                print(f"{column_name}: {value} (type: {type(value).__name__})")
 
 asyncio.run(main())
 ```
@@ -301,7 +347,9 @@ async def main():
     
     # Async context manager with automatic pool management
     async with Connection(connection_string) as conn:
-        rows = await conn.execute("SELECT name FROM sys.databases")
+        # Use query() for SELECT statements that return rows
+        result = await conn.query("SELECT name FROM sys.databases")
+        rows = result.rows()
         for row in rows:
             print(row['name'])
             
@@ -312,7 +360,9 @@ async def main():
     # High-performance concurrent operations
     async def fetch_user_data(user_id):
         async with Connection(connection_string) as conn:
-            return await conn.execute(f"SELECT * FROM users WHERE id = {user_id}")
+            # Use query() for SELECT statements that return rows
+            result = await conn.query(f"SELECT * FROM users WHERE id = {user_id}")
+            return result.rows()
     
     # Execute multiple queries concurrently using the connection pool
     user_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -379,6 +429,29 @@ python examples/advanced_usage.py
 
 ## API Reference
 
+### Query vs Execute Methods
+
+FastMSSQL provides two distinct methods for database operations:
+
+- **`query()`** - For SELECT statements that return rows
+  - Returns a `QueryResult` object with a `rows()` method
+  - Use for retrieving data from the database
+
+- **`execute()`** - For INSERT, UPDATE, DELETE statements  
+  - Returns the number of affected rows as an integer
+  - Use for modifying data in the database
+
+**SQL Server Parameter Syntax**: Use positional parameters `@P1`, `@P2`, `@P3`, etc.
+
+```python
+# SELECT queries - use query()
+result = await conn.query("SELECT * FROM users WHERE age > @P1 AND city = @P2", [25, "New York"])
+rows = result.rows()
+
+# INSERT/UPDATE/DELETE - use execute()  
+affected = await conn.execute("INSERT INTO users (name, email) VALUES (@P1, @P2)", ["John", "john@example.com"])
+```
+
 ### Core Classes
 
 #### `Connection`
@@ -391,20 +464,44 @@ Connection(connection_string: str, pool_config: Optional[PoolConfig] = None)
 
 **Context Manager Support:**
 ```python
-# Synchronous
-with Connection(conn_str) as conn:
-    result = conn.execute("SELECT * FROM table")
-
-# Asynchronous  
+# Asynchronous (recommended)
 async with Connection(conn_str) as conn:
-    result = await conn.execute_async("SELECT * FROM table")
+    # Use query() for SELECT statements
+    result = await conn.query("SELECT * FROM table")
+    rows = result.rows()
+    
+    # Use execute() for INSERT/UPDATE/DELETE statements  
+    affected = await conn.execute("INSERT INTO table (col) VALUES (@P1)", ["value"])
+```
 ```
 
 **Methods:**
-- `execute(sql: str) -> List[Row]` - Execute a query synchronously
+- `query(sql: str, params: Optional[List] = None) -> QueryResult` - Execute SELECT queries that return rows
+- `execute(sql: str, params: Optional[List] = None) -> int` - Execute INSERT/UPDATE/DELETE statements, returns affected row count
 - `pool_stats() -> dict` - Get connection pool statistics
 - `disconnect()` - Close the connection pool
 - `is_connected() -> bool` - Check if pool is active
+
+**Method Details:**
+
+`query()` - For SELECT statements that return data:
+```python
+# Returns a QueryResult object with rows() method
+result = await conn.query("SELECT * FROM users WHERE age > @P1", [21])
+rows = result.rows()
+for row in rows:
+    print(row['name'])
+```
+
+`execute()` - For INSERT/UPDATE/DELETE statements:
+```python
+# Returns the number of affected rows
+affected = await conn.execute("INSERT INTO users (name) VALUES (@P1)", ["John"])
+print(f"Inserted {affected} row(s)")
+
+affected = await conn.execute("UPDATE users SET age = @P1 WHERE name = @P2", [25, "John"])
+print(f"Updated {affected} row(s)")
+```
 
 **Pool Statistics:**
 ```python
@@ -456,15 +553,17 @@ Represents a database row with column access.
 
 #### Connection Management
 ```python
-# Create connection with default pool settings
-connect(connection_string: str) -> Connection
+# Create connection with connection pooling
+Connection(connection_string: str, pool_config: Optional[PoolConfig] = None) -> Connection
 
-# Create async connection with default pool settings
-connect_async(connection_string: str) -> Connection
-
-# One-liner query execution
-execute(connection_string: str, sql: str) -> List[dict]
-execute_async(connection_string: str, sql: str) -> List[dict]
+# Usage with async context manager (recommended)
+async with Connection(connection_string) as conn:
+    # Use query() for SELECT statements that return rows
+    result = await conn.query("SELECT * FROM users")
+    rows = result.rows()
+    
+    # Use execute() for INSERT/UPDATE/DELETE statements that return affected count
+    affected = await conn.execute("INSERT INTO users (name) VALUES (@P1)", ["John"])
 ```
 
 #### Utility Functions
@@ -487,7 +586,8 @@ The library uses the bb8 connection pool for efficient resource management:
 ```python
 try:
     async with mssql.connect_async(connection_string) as conn:
-        result = await conn.execute("SELECT * FROM invalid_table")
+        result = await conn.query("SELECT * FROM invalid_table")
+        rows = result.rows()
 except Exception as e:
     print(f"Database error: {e}")
     # Connection automatically returned to pool even on error
@@ -501,7 +601,8 @@ This library has been upgraded to use async-only operations with the bb8 connect
 ```python  
 # Async-only with automatic connection pooling
 async with mssql.connect_async(conn_str) as conn:
-    result = await conn.execute("SELECT * FROM table")
+    result = await conn.query("SELECT * FROM table")
+    rows = result.rows()
     
     # Pool statistics
     stats = conn.pool_stats()
@@ -573,7 +674,7 @@ async def oltp_operations():
     async with mssql.connect_async(conn_str, oltp_config) as conn:
         # Fast, concurrent transactions
         tasks = [
-            conn.execute_async("SELECT * FROM users WHERE id = $1", [user_id])
+            conn.query("SELECT * FROM users WHERE id = @P1", [user_id])
             for user_id in range(1, 101)
         ]
         results = await asyncio.gather(*tasks)
@@ -583,7 +684,7 @@ olap_config = PoolConfig.low_resource()
 async def olap_operations():
     async with mssql.connect_async(conn_str, olap_config) as conn:
         # Long-running analytical queries
-        quarterly_report = await conn.execute_async("""
+        result = await conn.query("""
             SELECT 
                 DATE_TRUNC('quarter', order_date) as quarter,
                 SUM(total_amount) as total_revenue,
@@ -593,7 +694,7 @@ async def olap_operations():
             GROUP BY DATE_TRUNC('quarter', order_date)
             ORDER BY quarter
         """)
-        return quarterly_report
+        return result.rows()
 ```
 
 ## API Reference

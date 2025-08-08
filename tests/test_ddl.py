@@ -25,6 +25,7 @@ async def test_create_drop_table():
     """Test creating and dropping tables."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
+            await conn.execute("DROP TABLE IF EXISTS test_ddl_table")
             # Create table
             create_sql = """
                 CREATE TABLE test_ddl_table (
@@ -44,7 +45,7 @@ async def test_create_drop_table():
                 FROM INFORMATION_SCHEMA.TABLES 
                 WHERE TABLE_NAME = 'test_ddl_table'
             """
-            result = await conn.execute(check_sql)
+            result = await conn.query(check_sql)
             assert result.has_rows()
             rows = result.rows() if result.has_rows() else []
             assert rows[0]['table_count'] == 1
@@ -53,7 +54,7 @@ async def test_create_drop_table():
             await conn.execute("DROP TABLE test_ddl_table")
 
             # Verify table is gone
-            result = await conn.execute(check_sql)
+            result = await conn.query(check_sql)
             assert result.has_rows()
             rows = result.rows() if result.has_rows() else []
             assert rows[0]['table_count'] == 0
@@ -67,6 +68,7 @@ async def test_alter_table():
     """Test altering table structure."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
+            await conn.execute("DROP TABLE IF EXISTS test_alter_table")
             # Create initial table
             await conn.execute("""
                 CREATE TABLE test_alter_table (
@@ -82,7 +84,7 @@ async def test_alter_table():
             await conn.execute("ALTER TABLE test_alter_table ALTER COLUMN name NVARCHAR(100)")
 
             # Check column exists and has correct properties
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_NAME = 'test_alter_table'
@@ -141,7 +143,7 @@ async def test_create_drop_index():
             """)
             
             # Verify indexes exist
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT name FROM sys.indexes 
                 WHERE object_id = OBJECT_ID('test_index_table')
                 AND name IS NOT NULL
@@ -218,7 +220,7 @@ async def test_create_drop_view():
             """)
             
             # Test view
-            result = await conn.execute("SELECT * FROM test_view_employees ORDER BY name")
+            result = await conn.query("SELECT * FROM test_view_employees ORDER BY name")
             assert result.has_rows() and len(result.rows()) == 2
             assert result.rows()[0]['name'] == 'Bob Johnson'
             assert result.rows()[1]['name'] == 'John Doe'
@@ -268,7 +270,7 @@ async def test_create_drop_procedure():
             """)
             
             # Verify procedure exists
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT COUNT(*) as proc_count
                 FROM INFORMATION_SCHEMA.ROUTINES
                 WHERE ROUTINE_NAME = 'test_procedure' AND ROUTINE_TYPE = 'PROCEDURE'
@@ -282,7 +284,7 @@ async def test_create_drop_procedure():
                 pass
             
             # Verify procedure is gone
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT COUNT(*) as proc_count
                 FROM INFORMATION_SCHEMA.ROUTINES
                 WHERE ROUTINE_NAME = 'test_procedure' AND ROUTINE_TYPE = 'PROCEDURE'
@@ -325,7 +327,7 @@ async def test_create_drop_function():
             """)
             
             # Test function
-            result = await conn.execute("SELECT dbo.test_function(5) as result")
+            result = await conn.query("SELECT dbo.test_function(5) as result")
             assert result.rows()[0]['result'] == 25
 
             # Drop function
@@ -398,7 +400,7 @@ async def test_async_ddl_operations():
     """Test DDL operations with async connections."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-
+            await conn.execute("DROP TABLE IF EXISTS test_async_ddl")
             await conn.execute("""
                 CREATE TABLE test_async_ddl (
                     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -413,7 +415,7 @@ async def test_async_ddl_operations():
             """)
             
             # Query data
-            results = await conn.execute("SELECT * FROM test_async_ddl")
+            results = await conn.query("SELECT * FROM test_async_ddl")
             assert results.has_rows() and len(results.rows()) == 1
             assert results.has_rows() and results.rows()[0]['name'] == 'Async Test'
 
@@ -461,7 +463,7 @@ async def test_schema_operations():
             await conn.execute("INSERT INTO test_schema.test_table (name) VALUES ('Schema Test')")
 
             # Query data
-            results = await conn.execute("SELECT * FROM test_schema.test_table")
+            results = await conn.query("SELECT * FROM test_schema.test_table")
             assert results.has_rows() and len(results.rows()) == 1
             assert results.has_rows() and results.rows()[0]['name'] == 'Schema Test'
 

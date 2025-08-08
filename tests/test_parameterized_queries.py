@@ -29,7 +29,7 @@ async def test_simple_parameterized_query():
     """Test executing a simple parameterized query."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute(
+            result = await conn.query(
                 "SELECT @P1 + @P2 as sum_result", 
                 [10, 5]
             )
@@ -49,7 +49,7 @@ async def test_parameter_types():
     """Test different parameter types."""
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     @P1 as string_param,
                     @P2 as int_param,
@@ -88,7 +88,7 @@ async def test_string_sql_injection_protection():
             # This should be safe from SQL injection
             malicious_input = "'; DROP TABLE users; --"
             
-            result = await conn.execute(
+            result = await conn.query(
                 "SELECT @P1 as safe_string",
                 [malicious_input]
             )

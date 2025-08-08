@@ -91,7 +91,7 @@ async def test_insert_operations(setup_test_table):
         assert affected_count == 1
 
         # Verify total count - this is the real test
-        results = await conn.execute("SELECT COUNT(*) as total FROM test_dml_employees")
+        results = await conn.query("SELECT COUNT(*) as total FROM test_dml_employees")
         assert results.has_rows()
         assert results.has_rows() and results.rows()[0]['total'] == 5
 
@@ -112,20 +112,20 @@ async def test_select_operations(setup_test_table):
             """)
             
             # Simple SELECT
-            results = await conn.execute("SELECT * FROM test_dml_employees")
+            results = await conn.query("SELECT * FROM test_dml_employees")
             assert results.has_rows() and len(results.rows()) == 5
 
             # SELECT with WHERE
-            results = await conn.execute("SELECT * FROM test_dml_employees WHERE department = 'IT'")
+            results = await conn.query("SELECT * FROM test_dml_employees WHERE department = 'IT'")
             assert results.has_rows() and len(results.rows()) == 3
 
             # SELECT with ORDER BY
-            results = await conn.execute("SELECT first_name, last_name FROM test_dml_employees ORDER BY salary DESC")
+            results = await conn.query("SELECT first_name, last_name FROM test_dml_employees ORDER BY salary DESC")
             assert results.has_rows() and results.rows()[0]['first_name'] == 'Alice'# Highest salary
             assert results.rows()[-1]['first_name'] == 'Charlie'  # Lowest salary
             
             # SELECT with aggregate functions
-            results = await conn.execute("""
+            results = await conn.query("""
                 SELECT 
                     department,
                     COUNT(*) as employee_count,
@@ -143,7 +143,7 @@ async def test_select_operations(setup_test_table):
             assert dept_stats['Finance']['employee_count'] == 1
             
             # SELECT with JOIN (self-join example)
-            results = await conn.execute("""
+            results = await conn.query("""
                 SELECT DISTINCT e1.department
                 FROM test_dml_employees e1
                 INNER JOIN test_dml_employees e2 ON e1.department = e2.department
@@ -153,7 +153,7 @@ async def test_select_operations(setup_test_table):
             assert results.has_rows() and results.rows()[0]['department'] == 'IT'
 
             # SELECT with HAVING
-            results = await conn.execute("""
+            results = await conn.query("""
                 SELECT department, COUNT(*) as emp_count
                 FROM test_dml_employees
                 GROUP BY department
@@ -207,7 +207,7 @@ async def test_update_operations(setup_test_table):
             assert affected_count == 3
             
             # Verify updates
-            results = await conn.execute("SELECT first_name, salary, email FROM test_dml_employees WHERE first_name = 'John'")
+            results = await conn.query("SELECT first_name, salary, email FROM test_dml_employees WHERE first_name = 'John'")
             assert results.has_rows() and len(results.rows()) == 1
             assert results.has_rows() and results.rows()[0]['salary'] == 57200.00# 52000 * 1.1
             assert results.has_rows() and results.rows()[0]['email'] == 'john.doe@company.com'
@@ -263,7 +263,7 @@ async def test_delete_operations(setup_test_table):
             assert affected_count == 3
 
             # Verify remaining data
-            results = await conn.execute("SELECT COUNT(*) as remaining FROM test_dml_employees")
+            results = await conn.query("SELECT COUNT(*) as remaining FROM test_dml_employees")
             assert results.has_rows() and results.rows()[0]['remaining'] == 0# No employees should remain
 
     except Exception as e:
@@ -301,7 +301,7 @@ async def test_upsert_operations(setup_test_table):
             assert affected_count == 2  # 1 update, 1 insert
 
             # Verify results
-            results = await conn.execute("SELECT * FROM test_dml_employees ORDER BY first_name")
+            results = await conn.query("SELECT * FROM test_dml_employees ORDER BY first_name")
             assert results.has_rows() and len(results.rows()) == 3
 
             # John should be updated
@@ -346,7 +346,7 @@ async def test_bulk_operations(setup_test_table):
             assert affected_count == 100
             
             # Verify bulk operations
-            results = await conn.execute("SELECT COUNT(*) as total, AVG(salary) as avg_salary FROM test_dml_employees")
+            results = await conn.query("SELECT COUNT(*) as total, AVG(salary) as avg_salary FROM test_dml_employees")
             assert results.has_rows() and results.rows()[0]['total'] == 100
             assert results.has_rows() and results.rows()[0]['avg_salary'] > 40000# Should be higher due to the +1000 update
             
@@ -384,7 +384,7 @@ async def test_async_dml_operations():
             assert affected_count == 2
             
             # Async SELECT
-            results = await conn.execute("SELECT * FROM test_async_dml ORDER BY value")
+            results = await conn.query("SELECT * FROM test_async_dml ORDER BY value")
             assert results.has_rows() and len(results.rows()) == 2
             assert results.has_rows() and results.rows()[0]['name'] == 'Async Test 1'
             
@@ -427,7 +427,7 @@ async def test_transaction_rollback(setup_test_table):
             """)
             
             # Verify data exists
-            results = await conn.execute("SELECT COUNT(*) as count FROM test_dml_employees")
+            results = await conn.query("SELECT COUNT(*) as count FROM test_dml_employees")
             assert results.has_rows() and results.rows()[0]['count'] == 1
 
             # Attempt operation that should fail
@@ -441,7 +441,7 @@ async def test_transaction_rollback(setup_test_table):
                 pass  # Expected to fail
             
             # Data should still be there (this test would be more meaningful with explicit transactions)
-            results = await conn.execute("SELECT COUNT(*) as count FROM test_dml_employees")
+            results = await conn.query("SELECT COUNT(*) as count FROM test_dml_employees")
             assert results.has_rows() and results.rows()[0]['count'] >= 1
 
     except Exception as e:

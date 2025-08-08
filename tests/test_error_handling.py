@@ -34,36 +34,6 @@ INVALID_CONNECTION_STRING = "Server=invalid_server;Database=invalid_db;User=inva
 #         async with Connection(INVALID_CONNECTION_STRING) as conn:
 #             pass
 
-@pytest.mark.asyncio
-async def test_connection_without_connect():
-    """Test operations on unconnected connection objects."""
-    try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
-        # Don't call connect() manually
-        
-            # Check if connection is established automatically or needs explicit connect
-            if await conn.is_connected():
-                # If auto-connected, disconnect first
-                await conn.disconnect()
-                assert not await conn.is_connected()
-
-                # Now these should fail because we're not connected
-                with pytest.raises(Exception):
-                    await conn.execute("SELECT 1")
-                    
-                with pytest.raises(Exception):
-                    await conn.execute("SELECT 1")
-            else:
-                # Connection not auto-established, test as expected
-                with pytest.raises(Exception):
-                    await conn.execute("SELECT 1")
-                    
-                with pytest.raises(Exception):
-                    await conn.execute("SELECT 1")
-
-    except Exception as e:
-        pytest.skip(f"Could not create connection object: {e}")
-
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_sql_syntax_errors():
@@ -81,7 +51,7 @@ async def test_sql_syntax_errors():
                 await conn.execute("INSERT INTO non_existent_table VALUES (1, 2, 3)")
                 
             # Connection should still be usable after errors
-            result = await conn.execute("SELECT 1 as recovery_test")
+            result = await conn.query("SELECT 1 as recovery_test")
             if result and result.rows():
                 assert result.rows()[0]['recovery_test'] == 1
 
@@ -143,7 +113,7 @@ async def test_constraint_violations():
                     """)
                 
                 # Verify original data is still there
-                result = await conn.execute("SELECT COUNT(*) as count FROM test_constraints_error")
+                result = await conn.query("SELECT COUNT(*) as count FROM test_constraints_error")
                 assert result and result.rows()
                 assert result.rows()[0]['count'] == 1
 
@@ -183,7 +153,7 @@ async def test_data_type_conversion_errors():
                 await conn.execute("SELECT CAST('not-a-number' AS INT)")
 
             # Connection should still work after errors
-            result = await conn.execute("SELECT 'still working' as status")
+            result = await conn.query("SELECT 'still working' as status")
             assert result and result.has_rows()
             assert result.rows()[0]['status'] == 'still working'
 
@@ -193,34 +163,19 @@ async def test_data_type_conversion_errors():
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_connection_interruption():
-    """Test behavior when connection is interrupted."""
+    """Test behavior when connection has issues."""
     try:
-        # Create connection
-        async with Connection(TEST_CONNECTION_STRING) as conn:
-            await conn.connect()
-
-            # Verify it works
-            result = await conn.execute("SELECT 1 as test")
-            assert result and result.rows()
-            assert result.rows()[0]['test'] == 1
-        
-            # Manually disconnect
-            await conn.disconnect()
-            assert not await conn.is_connected()
-
-            # Try to use disconnected connection
-            with pytest.raises(Exception):
-                await conn.execute("SELECT 1")
-
-            # Should be able to reconnect
-            await conn.connect()
-            assert await conn.is_connected()
-
-            result = await conn.execute("SELECT 2 as test")
-            assert result and result.rows()
-            assert result.rows()[0]['test'] == 2
-
-            await conn.disconnect()
+        # Test multiple connections work independently
+        async with Connection(TEST_CONNECTION_STRING) as conn1:
+            async with Connection(TEST_CONNECTION_STRING) as conn2:
+                # Verify both work
+                result1 = await conn1.query("SELECT 1 as test")
+                assert result1 and result1.rows()
+                assert result1.rows()[0]['test'] == 1
+                
+                result2 = await conn2.query("SELECT 2 as test")
+                assert result2 and result2.rows()
+                assert result2.rows()[0]['test'] == 2
 
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
@@ -255,7 +210,7 @@ async def test_null_and_empty_values():
                 """)
                 
                 # Query and verify NULL handling
-                result = await conn.execute("SELECT * FROM test_null_empty ORDER BY id")
+                result = await conn.query("SELECT * FROM test_null_empty ORDER BY id")
                 rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 4
 
@@ -323,7 +278,7 @@ async def test_special_characters():
                     await conn.execute(f"INSERT INTO test_special_chars (text_data) VALUES (N'{escaped_str}')")
 
                 # Retrieve and verify
-                result = await conn.execute("SELECT * FROM test_special_chars ORDER BY id")
+                result = await conn.query("SELECT * FROM test_special_chars ORDER BY id")
 
                 assert result.has_rows() and len(result.rows()) == len(special_strings)
 
@@ -346,7 +301,7 @@ async def test_boundary_values():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Test numeric boundaries
-            result = await conn.execute("""
+            result = await conn.query("""
                 SELECT 
                     CAST(-2147483648 AS INT) as min_int,
                     CAST(2147483647 AS INT) as max_int,
@@ -368,7 +323,7 @@ async def test_boundary_values():
             
             # Test string length boundaries
             max_varchar = 'A' * 8000  # Max for VARCHAR
-            result = await conn.execute(f"SELECT '{max_varchar}' as max_varchar")
+            result = await conn.query(f"SELECT '{max_varchar}' as max_varchar")
             if result.has_rows():
                 assert len(result.rows()[0]['max_varchar']) == 8000
 
@@ -386,7 +341,7 @@ async def test_async_error_handling():
                 await conn.execute("INVALID ASYNC SQL")
             
             # Connection should still work after error
-            result = await conn.execute("SELECT 'async recovery' as status")
+            result = await conn.query("SELECT 'async recovery' as status")
             assert result.rows()[0]['status'] == 'async recovery'
 
             # Clean up any existing table first
@@ -421,12 +376,12 @@ async def test_empty_result_sets():
     try:
         async with Connection(TEST_CONNECTION_STRING) as conn:
             # Query that returns no rows
-            result = await conn.execute("SELECT 1 as test WHERE 1 = 0")
+            result = await conn.query("SELECT 1 as test WHERE 1 = 0")
             assert not result.has_rows() and len(result.rows()) == 0
             assert isinstance(result.rows(), list)
 
             # Query with no rows - should still return an ExecutionResult object
-            result = await conn.execute("SELECT 1 WHERE 1 = 0")
+            result = await conn.query("SELECT 1 WHERE 1 = 0")
             assert result is not None
             assert not result.has_rows() and len(result.rows()) == 0
             assert isinstance(result.rows(), list)
@@ -444,7 +399,7 @@ async def test_multiple_result_sets():
             # This should work across different SQL Server editions
             try:
                 # Execute multiple SELECT statements in a single batch
-                result = await conn.execute("""
+                result = await conn.query("""
                     SELECT 1 as first_result;
                     SELECT 2 as second_result;
                     SELECT 3 as third_result;
