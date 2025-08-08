@@ -78,17 +78,14 @@ jobs:
         # Install system dependencies and Rust
         CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env && rustup target add ${{ matrix.arch == 'aarch64' && 'aarch64-unknown-linux-gnu' || 'x86_64-unknown-linux-gnu' }}"
         CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env && rustup target add ${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} && export MACOSX_DEPLOYMENT_TARGET=10.12"
-        CIBW_BEFORE_ALL_WINDOWS: "rustup toolchain install stable"
         
-        # Install specific versions to avoid download issues and use build frontend
-        CIBW_BEFORE_BUILD: "pip install 'virtualenv>=20.17.0,<21.0' maturin"
-        
-        # Use build frontend to handle virtualenv management
-        CIBW_BUILD_FRONTEND: "build"
+        # Install maturin for building Rust-Python extensions
+        CIBW_BEFORE_BUILD: "pip install maturin"
         
         # Set environment variables
         CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH MACOSX_DEPLOYMENT_TARGET=10.12 CARGO_BUILD_TARGET=${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} RUSTFLAGS='-C link-arg=-mmacosx-version-min=10.12'"
+        CIBW_ENVIRONMENT_WINDOWS: "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
