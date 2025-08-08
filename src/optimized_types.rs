@@ -5,7 +5,6 @@ use tiberius::Row;
 use ahash::AHashMap as HashMap;
 use std::sync::Arc;
 use chrono::{Datelike, Timelike};
-
 /// Holds shared column information for a result set to reduce memory usage.
 /// This is shared across all `PyFastRow` instances in a result set.
 #[derive(Debug)]
