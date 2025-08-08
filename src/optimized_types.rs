@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Riveranda
+// Licensed under PolyForm Noncommercial 1.0.0
+
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyDict, PyType};
 use pyo3::prelude::*;
@@ -5,7 +8,6 @@ use tiberius::Row;
 use ahash::AHashMap as HashMap;
 use std::sync::Arc;
 use chrono::{Datelike, Timelike};
-
 /// Holds shared column information for a result set to reduce memory usage.
 /// This is shared across all `PyFastRow` instances in a result set.
 #[derive(Debug)]

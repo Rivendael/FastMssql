@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Riveranda
+// Licensed under PolyForm Noncommercial 1.0.0
+
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3_async_runtimes::tokio::future_into_py;
 use crate::pool_config::PyPoolConfig;
