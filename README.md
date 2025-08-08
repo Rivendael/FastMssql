@@ -714,7 +714,22 @@ Contributions are welcome! Please open an issue or submit a pull request for any
 
 ## License
 
-This project is licensed under the PolyForm Noncommercial License 1.0.0. See the LICENSE file for details.
+FastMSSQL is available under your choice of two licenses:
+
+### Option 1: GNU General Public License v3.0 (GPL-3.0)
+
+**Free for open source projects.** If you distribute your application, you must make your entire application open source under GPL-3.0.
+
+### Option 2: Commercial License
+
+**Paid license for proprietary applications.** Allows you to keep your application closed source. Contact riverb514@gmail.com for commercial licensing.
+
+See the [LICENSE](LICENSE) file for full GPL-3.0 terms and commercial licensing details.
+
+### Examples and Benchmarks
+
+- **Examples Directory**: All files in the `examples/` directory are licensed under the MIT License. See `examples/LICENSE` for full terms.
+- **Benchmarks Directory**: All files in the `benchmarks/` directory are licensed under the MIT License. See `licenses/MIT_LICENSE.txt` for full terms.
 
 ## Third-Party Attributions
 
