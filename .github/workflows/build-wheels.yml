@@ -68,9 +68,18 @@ jobs:
         # Use latest dependency versions to avoid virtualenv download issues
         CIBW_DEPENDENCY_VERSIONS: "latest"
         
+        # Skip pip upgrade on Windows to avoid permission issues
+        CIBW_BEFORE_BUILD_WINDOWS: "python -m pip install maturin"
+        CIBW_BEFORE_BUILD_LINUX: "pip install maturin"
+        CIBW_BEFORE_BUILD_MACOS: "pip install maturin"
+        
+        # Disable pip upgrade to avoid Windows permission issues
+        PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        
         # Try to bypass virtualenv download issues by using system venv
         CIBW_ENVIRONMENT_PASS_LINUX: "PIP_*"
         CIBW_ENVIRONMENT_PASS_MACOS: "PIP_* MACOSX_DEPLOYMENT_TARGET CARGO_BUILD_TARGET RUSTFLAGS"
+        CIBW_ENVIRONMENT_PASS_WINDOWS: "PIP_*"
         
         # Build ARM64 on Linux and macOS
         CIBW_ARCHS: ${{ matrix.cibw_archs }}
@@ -79,12 +88,10 @@ jobs:
         CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env && rustup target add ${{ matrix.arch == 'aarch64' && 'aarch64-unknown-linux-gnu' || 'x86_64-unknown-linux-gnu' }}"
         CIBW_BEFORE_ALL_MACOS: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y && source $HOME/.cargo/env && rustup target add ${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} && export MACOSX_DEPLOYMENT_TARGET=10.12"
         
-        # Install maturin for building Rust-Python extensions
-        CIBW_BEFORE_BUILD: "pip install maturin"
-        
         # Set environment variables
         CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH MACOSX_DEPLOYMENT_TARGET=10.12 CARGO_BUILD_TARGET=${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} RUSTFLAGS='-C link-arg=-mmacosx-version-min=10.12'"
+        CIBW_ENVIRONMENT_WINDOWS: "PIP_DISABLE_PIP_VERSION_CHECK=1"
       
     - name: Upload wheels
       uses: actions/upload-artifact@v4
