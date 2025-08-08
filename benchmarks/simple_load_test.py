@@ -6,7 +6,6 @@ Simple load test using a single connection pool for accurate results.
 import asyncio
 import time
 import os
-import sys
 import statistics
 from collections import defaultdict
 
