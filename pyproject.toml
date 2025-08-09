@@ -4,9 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.3.1"
+version = "0.3.2"
 
-description = "A high-performance Python library for Microsoft SQL Server using Rust and Tiberius"
+description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "GPL-3.0-or-later OR Commercial" }
