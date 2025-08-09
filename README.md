@@ -1,6 +1,8 @@
 # FastMSSQL ⚡
 
-Blazing‑fast Microsoft SQL Server driver for Python, powered by Rust.
+FastMSSQL is an async Python library for Microsoft SQL Server (MSSQL), built in Rust.
+Unlike pyodbc or pymssql, it uses a native SQL Server client—no ODBC required—simplifying installation on Windows, macOS, and Linux.
+Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![PyPI](https://img.shields.io/pypi/v/fastmssql)](https://pypi.org/project/fastmssql/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastmssql)](https://pypi.org/project/fastmssql/)
@@ -8,7 +10,6 @@ Blazing‑fast Microsoft SQL Server driver for Python, powered by Rust.
 [![Async](https://img.shields.io/badge/async-tokio-blue)](https://github.com/Rivendael/pymssql-rs)
 [![License](https://img.shields.io/badge/license-GPL--3.0%20or%20Commercial-green)](LICENSE)
 
-Built on Tiberius, PyO3, and bb8 for zero‑ODBC, high‑throughput SQL Server access.
 
 
 ## Contents
