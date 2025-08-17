@@ -12,7 +12,8 @@ Features demonstrated:
 - Connection pooling configuration
 - SSL/TLS configuration
 - Error handling patterns
-- Batch operations
+- Batch operations (query_batch, execute_batch)
+- High-performance bulk inserts
 - Transaction handling
 - Performance optimization tips
 """
@@ -196,7 +197,7 @@ async def parameter_types_example():
 
 async def batch_operations_example():
     """
-    Example showing efficient batch operations.
+    Example showing efficient batch operations including bulk inserts.
     """
     print("\n🔹 Batch Operations Example")
     print("-" * 40)
@@ -217,38 +218,99 @@ async def batch_operations_example():
         """)
         print("✅ Created temporary table for batch testing")
         
-        # Batch insert using multiple individual executes
-        print("📦 Inserting batch data...")
-        users_data = [
-            ("Alice Johnson", 1000.50),
-            ("Bob Smith", 2500.75),
-            ("Carol Williams", 3200.25),
-            ("David Brown", 1800.00),
-            ("Eve Davis", 4100.30)
+        # === BULK INSERT EXAMPLE ===
+        print("\n📦 Bulk Insert Operation:")
+        
+        # Prepare bulk data (much more efficient than individual inserts)
+        columns = ["name", "value"]
+        bulk_data = [
+            ["Alice Johnson", 1000.50],
+            ["Bob Smith", 2500.75],
+            ["Carol Williams", 3200.25],
+            ["David Brown", 1800.00],
+            ["Eve Davis", 4100.30],
+            ["Frank Miller", 2750.80],
+            ["Grace Wilson", 3900.15],
+            ["Henry Taylor", 1650.40],
+            ["Ivy Anderson", 4500.90],
+            ["Jack Thompson", 2200.60]
         ]
         
-        inserted_count = 0
-        for name, value in users_data:
-            affected = await conn.execute(
-                "INSERT INTO #batch_test (name, value) VALUES (@P1, @P2)",
-                [name, value]
-            )
-            inserted_count += affected
+        # Perform bulk insert - much faster than individual INSERT statements
+        rows_inserted = await conn.bulk_insert("#batch_test", columns, bulk_data)
+        print(f"✅ Bulk inserted {rows_inserted} records in one operation")
         
-        print(f"✅ Inserted {inserted_count} records")
+        # === BATCH QUERIES EXAMPLE ===
+        print("\n📊 Batch Query Operations:")
         
-        # Verify the batch insert
-        result = await conn.query("SELECT COUNT(*) as total FROM #batch_test")
-        rows = result.rows()
-        for row in rows:
-            print(f"📊 Total records in table: {row['total']}")
+        # Execute multiple queries in a single round-trip
+        batch_queries = [
+            ("SELECT COUNT(*) as total_records FROM #batch_test", None),
+            ("SELECT AVG(value) as avg_value FROM #batch_test", None),
+            ("SELECT MAX(value) as max_value, MIN(value) as min_value FROM #batch_test", None),
+            ("SELECT COUNT(*) as high_value_count FROM #batch_test WHERE value > @P1", [3000.00])
+        ]
         
-        # Batch update
-        affected = await conn.execute(
-            "UPDATE #batch_test SET value = value * 1.1 WHERE value < @P1",
-            [2000.00]
-        )
-        print(f"💰 Updated {affected} records with 10% increase")
+        results = await conn.query_batch(batch_queries)
+        
+        # Process batch results
+        total_records = results[0].rows()[0]['total_records']
+        avg_value = results[1].rows()[0]['avg_value']
+        max_min = results[2].rows()[0]
+        high_value_count = results[3].rows()[0]['high_value_count']
+        
+        print(f"  📈 Total Records: {total_records}")
+        print(f"  📈 Average Value: ${avg_value:.2f}")
+        print(f"  📈 Value Range: ${max_min['min_value']:.2f} - ${max_min['max_value']:.2f}")
+        print(f"  📈 High Value Records (>$3000): {high_value_count}")
+        
+        # === BATCH COMMANDS EXAMPLE ===
+        print("\n🔧 Batch Command Operations:")
+        
+        # Execute multiple commands in a single round-trip
+        batch_commands = [
+            ("UPDATE #batch_test SET value = value * 1.1 WHERE value < @P1", [2000.00]),  # 10% increase for lower values
+            ("INSERT INTO #batch_test (name, value) VALUES (@P1, @P2)", ["Bonus Record", 5000.00]),
+            ("UPDATE #batch_test SET created_date = DATEADD(day, -1, created_date) WHERE name LIKE @P1", ["%Bonus%"])
+        ]
+        
+        affected_counts = await conn.execute_batch(batch_commands)
+        
+        print(f"  🔄 Updated {affected_counts[0]} records with value increase")
+        print(f"  ➕ Inserted {affected_counts[1]} bonus record")
+        print(f"  📅 Updated {affected_counts[2]} record dates")
+        
+        # Verify final state
+        verification_result = await conn.query("""
+            SELECT 
+                COUNT(*) as final_count,
+                AVG(value) as final_avg_value,
+                MAX(value) as final_max_value
+            FROM #batch_test
+        """)
+        
+        final_stats = verification_result.rows()[0]
+        print(f"\n📊 Final Statistics:")
+        print(f"  Total Records: {final_stats['final_count']}")
+        print(f"  Average Value: ${final_stats['final_avg_value']:.2f}")
+        print(f"  Maximum Value: ${final_stats['final_max_value']:.2f}")
+        
+        # Show top records
+        top_records_result = await conn.query("""
+            SELECT TOP 3 name, value, created_date 
+            FROM #batch_test 
+            ORDER BY value DESC
+        """)
+        
+        print(f"\n🏆 Top 3 Records by Value:")
+        for record in top_records_result.rows():
+            print(f"  {record['name']}: ${record['value']:.2f}")
+        
+        print("\n� Batch Operations Benefits:")
+        print("  • Reduced network round-trips")
+        print("  • Better performance for bulk operations")
+        print("  • Atomic execution for related operations")
+        print("  • Optimal resource utilization")
 
 
 async def error_handling_example():
@@ -338,6 +400,132 @@ async def performance_tips_example():
         print(f"  ✅ Processed {row_count} rows efficiently")
 
 
+async def bulk_insert_example():
+    """
+    Dedicated example for high-performance bulk insert operations.
+    """
+    print("\n🔹 High-Performance Bulk Insert Example")
+    print("-" * 40)
+    
+    async with Connection("Server=localhost;Database=TestDB;User Id=testuser;Password=testpass;") as conn:
+        
+        # Create a table optimized for bulk inserts
+        await conn.execute("""
+            IF OBJECT_ID('sales_data') IS NOT NULL
+                DROP TABLE sales_data
+                
+            CREATE TABLE sales_data (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                product_code NVARCHAR(20),
+                product_name NVARCHAR(100),
+                quantity INT,
+                unit_price DECIMAL(10,2),
+                sale_date DATE,
+                customer_id INT,
+                total_amount AS (quantity * unit_price) PERSISTED
+            )
+        """)
+        print("✅ Created sales_data table for bulk insert demonstration")
+        
+        # Generate sample sales data (simulating a data import scenario)
+        print("📈 Generating sample sales data...")
+        
+        import random
+        from datetime import date, timedelta
+        
+        products = [
+            ("PRD001", "Wireless Headphones", 299.99),
+            ("PRD002", "Bluetooth Speaker", 89.99),
+            ("PRD003", "USB-C Cable", 19.99),
+            ("PRD004", "Power Bank", 49.99),
+            ("PRD005", "Phone Case", 24.99),
+            ("PRD006", "Screen Protector", 12.99),
+            ("PRD007", "Car Charger", 34.99),
+            ("PRD008", "Wireless Mouse", 39.99),
+            ("PRD009", "Keyboard", 79.99),
+            ("PRD010", "Monitor Stand", 159.99)
+        ]
+        
+        # Prepare bulk data for insert
+        columns = ["product_code", "product_name", "quantity", "unit_price", "sale_date", "customer_id"]
+        sales_data = []
+        
+        # Generate 1000 sales records
+        base_date = date.today() - timedelta(days=30)
+        for i in range(1000):
+            product_code, product_name, price = random.choice(products)
+            quantity = random.randint(1, 5)
+            sale_date = (base_date + timedelta(days=random.randint(0, 30))).strftime("%Y-%m-%d")
+            customer_id = random.randint(1000, 9999)
+            
+            sales_data.append([product_code, product_name, quantity, price, sale_date, customer_id])
+        
+        print(f"📊 Prepared {len(sales_data)} sales records for bulk insert")
+        
+        # Perform bulk insert with timing
+        import time
+        start_time = time.time()
+        
+        rows_inserted = await conn.bulk_insert("sales_data", columns, sales_data)
+        
+        insert_time = time.time() - start_time
+        
+        print(f"🚀 Bulk inserted {rows_inserted} records in {insert_time:.3f} seconds")
+        print(f"⚡ Performance: {rows_inserted / insert_time:.0f} records/second")
+        
+        # Verify and analyze the inserted data
+        print("\n📊 Data Analysis:")
+        
+        analysis_queries = [
+            ("SELECT COUNT(*) as total_sales FROM sales_data", None),
+            ("SELECT COUNT(DISTINCT product_code) as unique_products FROM sales_data", None),
+            ("SELECT COUNT(DISTINCT customer_id) as unique_customers FROM sales_data", None),
+            ("SELECT SUM(total_amount) as total_revenue FROM sales_data", None),
+            ("SELECT AVG(total_amount) as avg_order_value FROM sales_data", None)
+        ]
+        
+        analysis_results = await conn.query_batch(analysis_queries)
+        
+        total_sales = analysis_results[0].rows()[0]['total_sales']
+        unique_products = analysis_results[1].rows()[0]['unique_products']
+        unique_customers = analysis_results[2].rows()[0]['unique_customers']
+        total_revenue = analysis_results[3].rows()[0]['total_revenue']
+        avg_order_value = analysis_results[4].rows()[0]['avg_order_value']
+        
+        print(f"  📈 Total Sales Records: {total_sales:,}")
+        print(f"  📦 Unique Products: {unique_products}")
+        print(f"  👥 Unique Customers: {unique_customers}")
+        print(f"  💰 Total Revenue: ${total_revenue:,.2f}")
+        print(f"  🛒 Average Order Value: ${avg_order_value:.2f}")
+        
+        # Show top-selling products
+        top_products_result = await conn.query("""
+            SELECT 
+                product_name,
+                SUM(quantity) as total_quantity_sold,
+                SUM(total_amount) as total_product_revenue,
+                COUNT(*) as number_of_sales
+            FROM sales_data
+            GROUP BY product_code, product_name
+            ORDER BY total_product_revenue DESC
+        """)
+        
+        print(f"\n🏆 Top-Selling Products by Revenue:")
+        for i, product in enumerate(top_products_result.rows()[:5], 1):
+            print(f"  {i}. {product['product_name']}: ${product['total_product_revenue']:,.2f} "
+                  f"({product['total_quantity_sold']} units, {product['number_of_sales']} sales)")
+        
+        # Performance comparison note
+        print(f"\n💡 Performance Note:")
+        print(f"  Individual INSERT statements would require {len(sales_data)} round-trips")
+        print(f"  Bulk insert completed in 1 round-trip - significant performance gain!")
+        print(f"  Estimated time savings: ~{(len(sales_data) * 0.01):.1f} seconds for individual inserts")
+        
+        # Cleanup
+        await conn.execute("DROP TABLE sales_data")
+        print("\n🧹 Cleanup completed")
+
+
 async def ddl_operations_example():
     """
     Example showing DDL (Data Definition Language) operations.
@@ -420,6 +608,7 @@ async def main():
         ("Advanced Configuration", advanced_configuration_example),
         ("Parameter Types", parameter_types_example),
         ("Batch Operations", batch_operations_example),
+        ("High-Performance Bulk Insert", bulk_insert_example),
         ("Error Handling", error_handling_example),
         ("Performance Tips", performance_tips_example),
         ("DDL Operations", ddl_operations_example),

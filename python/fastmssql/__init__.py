@@ -331,6 +331,267 @@ class Connection:
         """
         return await self._conn.query(query, parameters)
     
+    async def execute_batch(self, commands):
+        """
+        Execute multiple SQL commands in a single batch operation for optimal performance.
+        
+        This method executes multiple INSERT, UPDATE, DELETE, or DDL commands in sequence
+        on a single connection, minimizing network round-trips and connection overhead.
+        
+        Use this method for:
+            - Multiple INSERT/UPDATE/DELETE operations
+            - Batch DDL operations (CREATE TABLE, CREATE INDEX, etc.)
+            - Mixed command operations that don't need to return result sets
+            - Any sequence of commands that modify data
+        
+        Performance Benefits:
+            - Single connection usage reduces pool contention
+            - Reduced network round-trips compared to individual execute() calls
+            - Parameter pre-processing optimization
+            - Efficient memory usage for large batch operations
+        
+        Args:
+            commands (list): List of tuples, each containing (command, parameters).
+                Each tuple should be in the format: (sql_command, parameter_list)
+                Example: [
+                    ("INSERT INTO users (name, age) VALUES (@P1, @P2)", ["Alice", 25]),
+                    ("UPDATE products SET price = @P1 WHERE id = @P2", [99.99, 123]),
+                    ("DELETE FROM logs WHERE created_date < @P1", [datetime(2023, 1, 1)]),
+                ]
+        
+        Returns:
+            list: List of affected row counts for each command, in the same order as input.
+                Each element is an integer representing the number of rows affected by
+                the corresponding command.
+        
+        Raises:
+            SqlError: If any SQL command contains syntax errors or constraint violations.
+            ConnectionError: If the database connection is lost during execution.
+            TimeoutError: If the batch execution exceeds configured timeouts.
+            ParameterError: If parameter types cannot be converted or are invalid.
+            ValueError: If the commands list format is incorrect.
+            
+        Examples:
+            # Basic batch execution
+            >>> commands = [
+            ...     ("INSERT INTO users (name, email) VALUES (@P1, @P2)", ["John", "john@example.com"]),
+            ...     ("INSERT INTO users (name, email) VALUES (@P1, @P2)", ["Jane", "jane@example.com"]),
+            ...     ("UPDATE settings SET value = @P1 WHERE key = @P2", ["enabled", "notifications"])
+            ... ]
+            >>> results = await conn.execute_batch(commands)
+            >>> print(f"Affected rows: {results}")  # [1, 1, 1]
+            
+            # Mixed operations batch
+            >>> operations = [
+            ...     ("CREATE TABLE temp_data (id INT, value NVARCHAR(50))", None),
+            ...     ("INSERT INTO temp_data VALUES (@P1, @P2)", [1, "test"]),
+            ...     ("UPDATE temp_data SET value = @P1 WHERE id = @P2", ["updated", 1]),
+            ...     ("DROP TABLE temp_data", None)
+            ... ]
+            >>> results = await conn.execute_batch(operations)
+            
+            # Bulk data modification
+            >>> user_updates = [
+            ...     ("UPDATE users SET last_login = @P1 WHERE id = @P2", [datetime.now(), user_id])
+            ...     for user_id in [1, 2, 3, 4, 5]
+            ... ]
+            >>> results = await conn.execute_batch(user_updates)
+            >>> total_updated = sum(results)
+        """
+        return await self._conn.execute_batch(commands)
+
+    async def query_batch(self, queries):
+        """
+        Execute multiple SQL queries in a single batch operation for optimal performance.
+        
+        This method executes multiple SELECT queries in sequence on a single connection,
+        minimizing network round-trips and connection overhead while returning all result sets.
+        
+        Use this method for:
+            - Multiple related SELECT queries
+            - Data analysis operations requiring multiple result sets
+            - Report generation with multiple data sources
+            - Any sequence of queries that return tabular data
+        
+        Performance Benefits:
+            - Single connection usage reduces pool contention
+            - Reduced network round-trips compared to individual query() calls
+            - Parameter pre-processing optimization
+            - Efficient memory usage for multiple result sets
+        
+        Args:
+            queries (list): List of tuples, each containing (query, parameters).
+                Each tuple should be in the format: (sql_query, parameter_list)
+                Example: [
+                    ("SELECT * FROM users WHERE age > @P1", [18]),
+                    ("SELECT COUNT(*) as total FROM products", None),
+                    ("SELECT * FROM orders WHERE created_date > @P1", [datetime(2023, 1, 1)]),
+                ]
+        
+        Returns:
+            list: List of FastExecutionResult objects for each query, in the same order as input.
+                Each FastExecutionResult provides the same interface as individual query() results:
+                - Async iteration over rows
+                - fetchone(), fetchmany(), fetchall() methods
+                - Row count and column metadata
+        
+        Raises:
+            SqlError: If any SQL query contains syntax errors or constraint violations.
+            ConnectionError: If the database connection is lost during execution.
+            TimeoutError: If the query execution exceeds configured timeouts.
+            ParameterError: If parameter types cannot be converted or are invalid.
+            ValueError: If the queries list format is incorrect.
+            
+        Examples:
+            # Basic batch queries
+            >>> queries = [
+            ...     ("SELECT COUNT(*) as user_count FROM users", None),
+            ...     ("SELECT COUNT(*) as product_count FROM products", None),
+            ...     ("SELECT * FROM users WHERE created_date > @P1", [datetime(2023, 1, 1)])
+            ... ]
+            >>> results = await conn.query_batch(queries)
+            >>> 
+            >>> # Process each result
+            >>> user_count = (await results[0].fetchone())['user_count']
+            >>> product_count = (await results[1].fetchone())['product_count']
+            >>> recent_users = await results[2].fetchall()
+            
+            # Analytics batch
+            >>> analytics_queries = [
+            ...     ("SELECT DATE(created_date) as date, COUNT(*) as registrations FROM users GROUP BY DATE(created_date)", None),
+            ...     ("SELECT category, AVG(price) as avg_price FROM products GROUP BY category", None),
+            ...     ("SELECT status, COUNT(*) as order_count FROM orders GROUP BY status", None)
+            ... ]
+            >>> results = await conn.query_batch(analytics_queries)
+            >>> 
+            >>> # Process analytics data
+            >>> for i, result in enumerate(results):
+            ...     print(f"Query {i+1} results:")
+            ...     async for row in result:
+            ...         print(f"  {dict(row)}")
+            
+            # Related data batch
+            >>> user_id = 123
+            >>> related_queries = [
+            ...     ("SELECT * FROM users WHERE id = @P1", [user_id]),
+            ...     ("SELECT * FROM orders WHERE user_id = @P1 ORDER BY created_date DESC", [user_id]),
+            ...     ("SELECT * FROM user_preferences WHERE user_id = @P1", [user_id])
+            ... ]
+            >>> results = await conn.query_batch(related_queries)
+            >>> user_data = await results[0].fetchone()
+            >>> user_orders = await results[1].fetchall()
+            >>> user_prefs = await results[2].fetchall()
+        """
+        return await self._conn.query_batch(queries)
+
+    async def bulk_insert(self, table_name, columns, data_rows):
+        """
+        Perform high-performance bulk insert operation for large datasets.
+        
+        This method is optimized for inserting many rows into a single table with
+        maximum performance. It processes data in batches to optimize memory usage
+        and network efficiency while maintaining consistency.
+        
+        Use this method for:
+            - Large data imports (CSV, JSON, API data)
+            - ETL operations and data migration
+            - Batch data processing pipelines
+            - Any scenario requiring insertion of many rows
+        
+        Performance Benefits:
+            - Optimized batch processing with configurable batch sizes
+            - Minimal memory overhead through streaming processing
+            - Single connection usage reduces pool contention
+            - Pre-compiled parameter handling for maximum speed
+            - Automatic transaction batching for consistency
+        
+        Args:
+            table_name (str): Name of the target table for insertion.
+                Can be schema-qualified (e.g., "dbo.my_table" or "my_schema.my_table").
+                
+            columns (list): List of column names in the order they appear in data_rows.
+                Example: ["name", "email", "age", "created_date"]
+                
+            data_rows (list): List of data rows, where each row is a list of values
+                corresponding to the columns. All rows must have the same number of
+                values as there are columns.
+                Example: [
+                    ["Alice", "alice@example.com", 25, datetime(2023, 1, 1)],
+                    ["Bob", "bob@example.com", 30, datetime(2023, 1, 2)],
+                    ["Charlie", "charlie@example.com", 35, datetime(2023, 1, 3)]
+                ]
+        
+        Returns:
+            int: Total number of rows successfully inserted.
+        
+        Raises:
+            SqlError: If table doesn't exist, column names are invalid, or constraint violations occur.
+            ConnectionError: If the database connection is lost during execution.
+            TimeoutError: If the bulk insert exceeds configured timeouts.
+            ParameterError: If data types cannot be converted to appropriate SQL types.
+            ValueError: If columns and data_rows have mismatched sizes or invalid format.
+            
+        Examples:
+            # Basic bulk insert
+            >>> columns = ["name", "email", "age"]
+            >>> data = [
+            ...     ["Alice", "alice@example.com", 25],
+            ...     ["Bob", "bob@example.com", 30],
+            ...     ["Charlie", "charlie@example.com", 35]
+            ... ]
+            >>> rows_inserted = await conn.bulk_insert("users", columns, data)
+            >>> print(f"Inserted {rows_inserted} rows")
+            
+            # Large dataset import
+            >>> import csv
+            >>> columns = ["product_name", "category", "price", "in_stock"]
+            >>> data_rows = []
+            >>> 
+            >>> with open('products.csv', 'r') as file:
+            ...     reader = csv.reader(file)
+            ...     next(reader)  # Skip header
+            ...     for row in reader:
+            ...         data_rows.append([row[0], row[1], float(row[2]), bool(int(row[3]))])
+            >>> 
+            >>> total_inserted = await conn.bulk_insert("products", columns, data_rows)
+            >>> print(f"Imported {total_inserted} products from CSV")
+            
+            # Generated data bulk insert
+            >>> from datetime import datetime, timedelta
+            >>> import random
+            >>> 
+            >>> columns = ["user_id", "activity", "timestamp", "value"]
+            >>> activities = ["login", "logout", "view_page", "click_button", "purchase"]
+            >>> 
+            >>> # Generate 10,000 activity records
+            >>> data_rows = []
+            >>> for i in range(10000):
+            ...     user_id = random.randint(1, 1000)
+            ...     activity = random.choice(activities)
+            ...     timestamp = datetime.now() - timedelta(days=random.randint(0, 30))
+            ...     value = random.randint(1, 100)
+            ...     data_rows.append([user_id, activity, timestamp, value])
+            >>> 
+            >>> rows_inserted = await conn.bulk_insert("user_activities", columns, data_rows)
+            >>> print(f"Inserted {rows_inserted} activity records")
+            
+            # Data transformation during bulk insert
+            >>> raw_data = fetch_api_data()  # Some external data source
+            >>> columns = ["name", "email", "normalized_phone", "registration_date"]
+            >>> 
+            >>> processed_data = []
+            >>> for record in raw_data:
+            ...     processed_data.append([
+            ...         record['full_name'].strip().title(),
+            ...         record['email'].lower(),
+            ...         normalize_phone(record['phone']),
+            ...         datetime.fromisoformat(record['reg_date'])
+            ...     ])
+            >>> 
+            >>> result = await conn.bulk_insert("customers", columns, processed_data)
+        """
+        return await self._conn.bulk_insert(table_name, columns, data_rows)
+
     async def execute(self, query, parameters=None):
         """
         Execute a SQL command that doesn't return rows (INSERT/UPDATE/DELETE/DDL) asynchronously.

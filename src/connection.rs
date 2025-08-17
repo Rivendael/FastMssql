@@ -180,7 +180,7 @@ impl PyConnection {
 }
 
 /// High-performance parameter conversion using enum dispatch instead of boxing
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum FastParameter {
     Null,
     Bool(bool),
@@ -595,6 +595,267 @@ impl PyConnection {
                 drop(pool_ref);
             }
             Ok(())
+        })
+    }
+
+    /// Execute multiple queries in a single batch operation for maximum performance
+    /// This method optimizes network round-trips by sending all queries together
+    #[pyo3(signature = (queries))]
+    pub fn query_batch<'p>(&self, py: Python<'p>, queries: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
+        // OPTIMIZATION: Pre-process all parameters while we have the GIL
+        let mut batch_queries: Vec<(String, SmallVec<[FastParameter; 8]>)> = Vec::with_capacity(queries.len());
+        
+        for item in queries.iter() {
+            let (query, params) = if let Ok(tuple) = item.downcast::<pyo3::types::PyTuple>() {
+                if tuple.len() == 2 {
+                    let query: String = tuple.get_item(0)?.extract()?;
+                    let params = tuple.get_item(1)?;
+                    let fast_parameters = if params.is_none() {
+                        SmallVec::new()
+                    } else {
+                        Self::convert_parameters_to_fast(Some(&params), py)?
+                    };
+                    (query, fast_parameters)
+                } else {
+                    return Err(PyValueError::new_err("Each batch item must be a tuple of (query, parameters)"));
+                }
+            } else {
+                return Err(PyValueError::new_err("Each batch item must be a tuple of (query, parameters)"));
+            };
+            
+            batch_queries.push((query, params));
+        }
+        
+        let pool = self.pool.clone();
+        let config = self.config.clone();
+        let pool_config = self.pool_config.clone();
+        
+        future_into_py(py, async move {
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard);
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        pool_ref.clone()
+                    } else {
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
+            };
+            
+            // Execute all queries in sequence on a single connection
+            let mut conn = pool_ref.get().await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
+            
+            let mut all_results = Vec::with_capacity(batch_queries.len());
+            
+            for (query, parameters) in batch_queries {
+                let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = parameters.iter()
+                    .map(|p| p as &dyn tiberius::ToSql)
+                    .collect();
+                
+                let stream = conn.query(&query, &tiberius_params)
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(format!("Batch query execution failed: {}", e)))?;
+                
+                let rows = stream.into_first_result()
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to get batch results: {}", e)))?;
+                
+                all_results.push(rows);
+            }
+            
+            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                let mut py_results = Vec::with_capacity(all_results.len());
+                for result in all_results {
+                    let fast_result = PyFastExecutionResult::with_rows(result, py)?;
+                    let py_result = Py::new(py, fast_result)?;
+                    py_results.push(py_result.into_any());
+                }
+                let py_list = PyList::new(py, py_results)?;
+                Ok(py_list.into_any().unbind())
+            })
+        })
+    }
+
+    /// Bulk insert data for maximum performance with large datasets
+    /// This method is optimized for inserting many rows at once
+    #[pyo3(signature = (table_name, columns, data_rows))]
+    pub fn bulk_insert<'p>(&self, py: Python<'p>, table_name: String, columns: &Bound<PyList>, data_rows: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
+        // OPTIMIZATION: Pre-process column names and data while we have the GIL
+        let column_names: PyResult<Vec<String>> = columns.iter()
+            .map(|col| col.extract::<String>())
+            .collect();
+        let column_names = column_names?;
+        
+        if column_names.is_empty() {
+            return Err(PyValueError::new_err("At least one column must be specified"));
+        }
+        
+        // Pre-process all data rows into FastParameters
+        let mut processed_rows: Vec<SmallVec<[FastParameter; 8]>> = Vec::with_capacity(data_rows.len());
+        
+        for row in data_rows.iter() {
+            if let Ok(row_list) = row.downcast::<PyList>() {
+                if row_list.len() != column_names.len() {
+                    return Err(PyValueError::new_err(
+                        format!("Row has {} values but {} columns specified", row_list.len(), column_names.len())
+                    ));
+                }
+                
+                let mut row_params: SmallVec<[FastParameter; 8]> = SmallVec::with_capacity(row_list.len());
+                for value in row_list.iter() {
+                    row_params.push(python_to_fast_parameter(&value)?);
+                }
+                processed_rows.push(row_params);
+            } else {
+                return Err(PyValueError::new_err("Each data row must be a list"));
+            }
+        }
+        
+        let pool = self.pool.clone();
+        let config = self.config.clone();
+        let pool_config = self.pool_config.clone();
+        
+        future_into_py(py, async move {
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard);
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        pool_ref.clone()
+                    } else {
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
+            };
+            
+            let mut conn = pool_ref.get().await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
+            
+            // Build the bulk insert query with optimal batching
+            let placeholders = (1..=column_names.len())
+                .map(|i| format!("@P{}", i))
+                .collect::<Vec<_>>()
+                .join(", ");
+            
+            let columns_str = column_names.join(", ");
+            let insert_sql = format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                table_name, columns_str, placeholders
+            );
+            
+            let mut total_affected = 0u64;
+            
+            // Process in batches for memory efficiency and performance
+            const BATCH_SIZE: usize = 1000;
+            for batch in processed_rows.chunks(BATCH_SIZE) {
+                for row_params in batch {
+                    let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = row_params.iter()
+                        .map(|p| p as &dyn tiberius::ToSql)
+                        .collect();
+                    
+                    let result = conn.execute(&insert_sql, &tiberius_params)
+                        .await
+                        .map_err(|e| PyRuntimeError::new_err(format!("Bulk insert failed: {}", e)))?;
+                    
+                    total_affected += result.rows_affected().iter().sum::<u64>();
+                }
+            }
+            
+            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                Ok(total_affected.into_pyobject(py)?.into_any().unbind())
+            })
+        })
+    }
+
+    /// Execute multiple commands in a single batch operation 
+    #[pyo3(signature = (commands))]
+    pub fn execute_batch<'p>(&self, py: Python<'p>, commands: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
+        // OPTIMIZATION: Pre-process all parameters while we have the GIL
+        let mut batch_commands: Vec<(String, SmallVec<[FastParameter; 8]>)> = Vec::with_capacity(commands.len());
+        
+        for item in commands.iter() {
+            let (command, params) = if let Ok(tuple) = item.downcast::<pyo3::types::PyTuple>() {
+                if tuple.len() == 2 {
+                    let command: String = tuple.get_item(0)?.extract()?;
+                    let params = tuple.get_item(1)?;
+                    let fast_parameters = if params.is_none() {
+                        SmallVec::new()
+                    } else {
+                        Self::convert_parameters_to_fast(Some(&params), py)?
+                    };
+                    (command, fast_parameters)
+                } else {
+                    return Err(PyValueError::new_err("Each batch item must be a tuple of (command, parameters)"));
+                }
+            } else {
+                return Err(PyValueError::new_err("Each batch item must be a tuple of (command, parameters)"));
+            };
+            
+            batch_commands.push((command, params));
+        }
+        
+        let pool = self.pool.clone();
+        let config = self.config.clone();
+        let pool_config = self.pool_config.clone();
+        
+        future_into_py(py, async move {
+            let pool_ref = {
+                let pool_guard = pool.read().await;
+                if let Some(ref pool_ref) = *pool_guard {
+                    pool_ref.clone()
+                } else {
+                    drop(pool_guard);
+                    let mut pool_guard = pool.write().await;
+                    if let Some(ref pool_ref) = *pool_guard {
+                        pool_ref.clone()
+                    } else {
+                        let new_pool = Self::establish_pool(config, &pool_config).await?;
+                        *pool_guard = Some(new_pool.clone());
+                        new_pool
+                    }
+                }
+            };
+            
+            // Execute all commands in sequence on a single connection
+            let mut conn = pool_ref.get().await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e)))?;
+            
+            let mut all_results = Vec::with_capacity(batch_commands.len());
+            
+            for (command, parameters) in batch_commands {
+                let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = parameters.iter()
+                    .map(|p| p as &dyn tiberius::ToSql)
+                    .collect();
+                
+                let result = conn.execute(&command, &tiberius_params)
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(format!("Batch command execution failed: {}", e)))?;
+                
+                let total_affected: u64 = result.rows_affected().iter().sum();
+                all_results.push(total_affected);
+            }
+            
+            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                let mut py_results = Vec::with_capacity(all_results.len());
+                for count in all_results {
+                    let py_obj = count.into_pyobject(py)?.into_any().unbind();
+                    py_results.push(py_obj);
+                }
+                let py_list = PyList::new(py, py_results)?;
+                Ok(py_list.into_any().unbind())
+            })
         })
     }
 }

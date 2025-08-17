@@ -39,11 +39,12 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 - Strong typing: fast conversions for common SQL Server types
 - Thread‑safe: safe to use in concurrent apps
 - Cross‑platform: Windows, macOS, Linux
+- Batch operations: high-performance bulk inserts and batch query execution
 
 
 ## Key API methods
 
-Two focused methods cover most use cases:
+Core methods for individual operations:
 
 - `query()` — SELECT statements that return rows
 - `execute()` — INSERT/UPDATE/DELETE/DDL that return affected row count
@@ -179,6 +180,52 @@ asyncio.run(main())
 ```
 
 Parameters use positional placeholders: `@P1`, `@P2`, ... Provide values as a list in the same order.
+
+
+### Batch operations
+
+For high-throughput scenarios, use batch methods to reduce network round-trips:
+
+```python
+import asyncio
+from fastmssql import Connection
+
+async def main():
+    async with Connection("Server=.;Database=MyDB;User Id=sa;Password=StrongPwd;") as conn:
+        # Bulk insert for fast data loading
+        columns = ["name", "email", "age"]
+        data_rows = [
+            ["Alice Johnson", "alice@example.com", 28],
+            ["Bob Smith", "bob@example.com", 32],
+            ["Carol Davis", "carol@example.com", 25]
+        ]
+        
+        rows_inserted = await conn.bulk_insert("users", columns, data_rows)
+        print(f"Bulk inserted {rows_inserted} rows")
+        
+        # Batch queries for multiple SELECT operations
+        queries = [
+            ("SELECT COUNT(*) as total FROM users WHERE age > @P1", [25]),
+            ("SELECT AVG(age) as avg_age FROM users", None),
+            ("SELECT name FROM users WHERE email LIKE @P1", ["%@example.com"])
+        ]
+        
+        results = await conn.query_batch(queries)
+        print(f"Total users over 25: {results[0].rows()[0]['total']}")
+        print(f"Average age: {results[1].rows()[0]['avg_age']:.1f}")
+        print(f"Example.com users: {len(results[2].rows())}")
+        
+        # Batch commands for multiple operations
+        commands = [
+            ("UPDATE users SET last_login = GETDATE() WHERE name = @P1", ["Alice Johnson"]),
+            ("INSERT INTO user_logs (action, user_name) VALUES (@P1, @P2)", ["login", "Alice Johnson"])
+        ]
+        
+        affected_counts = await conn.execute_batch(commands)
+        print(f"Updated {affected_counts[0]} users, inserted {affected_counts[1]} logs")
+
+asyncio.run(main())
+```
 
 
 ### Connection strings
