@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.3.3"
+version = "0.3.4"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
@@ -17,6 +17,10 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -30,7 +34,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Rivendael/pymssql-rs"
+Homepage = "https://github.com/Rivendael/FastMssql"
+Repository = "https://github.com/Rivendael/FastMssql"
+"Bug Tracker" = "https://github.com/Rivendael/FastMssql/issues"
+Documentation = "https://github.com/Rivendael/FastMssql#readme"
 
 [project.optional-dependencies]
 dev = [
