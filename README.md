@@ -4,30 +4,18 @@ FastMSSQL is an async Python library for Microsoft SQL Server (MSSQL), built in 
 Unlike pyodbc or pymssql, it uses a native SQL Server client—no ODBC required—simplifying installation on Windows, macOS, and Linux.
 Great for data ingestion, bulk inserts, and large-scale query workloads.
 
-[![PyPI](https://img.shields.io/pypi/v/fastmssql)](https://pypi.org/project/fastmssql/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastmssql)](https://pypi.org/project/fastmssql/)
-[![Rust Backend](https://img.shields.io/badge/backend-rust-orange)](https://github.com/Rivendael/pymssql-rs)
-[![Async](https://img.shields.io/badge/async-tokio-blue)](https://github.com/Rivendael/pymssql-rs)
+[![Python 3.14 Experimental](https://img.shields.io/badge/python-3.14%20experimental-yellow)](https://github.com/Rivendael/fastmssql)
+
 [![License](https://img.shields.io/badge/license-GPL--3.0%20or%20Commercial-green)](LICENSE)
 
+[![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/build.yml)
 
+[![Latest Release](https://img.shields.io/github/v/release/Rivendael/fastmssql)](https://github.com/Rivendael/fastmssql/releases)
 
-## Contents
+[![Platform](https://img.shields.io/badge/platform-Windows%20|%20Linux%20|%20macOS-lightgrey)](https://github.com/Rivendael/fastmssql)
 
-- Features
-- Installation
-- Quick start
-- Usage
-  - Connection options
-  - Working with data (query vs execute)
-  - Connection pooling
-  - SSL/TLS
-- Performance tips
-- Examples & benchmarks
-- Troubleshooting
-- Contributing
-- License
-
+[![Rust Backend](https://img.shields.io/badge/backend-rust-orange)](https://github.com/Rivendael/pymssql-rs)
 
 ## Features
 
