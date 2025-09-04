@@ -459,7 +459,7 @@ impl PyConnection {
             let execution_result = Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
             
             // Convert results efficiently - acquire GIL only once per result set
-            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let fast_result = PyFastExecutionResult::with_rows(execution_result, py)?;
                 let py_result = Py::new(py, fast_result)?;
                 Ok(py_result.into_any())
@@ -509,7 +509,7 @@ impl PyConnection {
             let affected_count = Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
             
             // Convert results efficiently - acquire GIL only once per result set
-            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Ok(affected_count.into_pyobject(py)?.into_any().unbind())
             })
         })
@@ -670,7 +670,7 @@ impl PyConnection {
                 all_results.push(rows);
             }
             
-            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let mut py_results = Vec::with_capacity(all_results.len());
                 for result in all_results {
                     let fast_result = PyFastExecutionResult::with_rows(result, py)?;
@@ -773,7 +773,7 @@ impl PyConnection {
                 }
             }
             
-            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Ok(total_affected.into_pyobject(py)?.into_any().unbind())
             })
         })
@@ -847,7 +847,7 @@ impl PyConnection {
                 all_results.push(total_affected);
             }
             
-            Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let mut py_results = Vec::with_capacity(all_results.len());
                 for count in all_results {
                     let py_obj = count.into_pyobject(py)?.into_any().unbind();

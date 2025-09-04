@@ -19,7 +19,7 @@ pub struct ColumnInfo {
 #[pyclass(name = "FastRow")]
 pub struct PyFastRow {
     // Row values stored in column order for cache-friendly access
-    values: Vec<PyObject>,
+    values: Vec<Py<PyAny>>,
     // Shared pointer to column metadata for the entire result set
     column_info: Arc<ColumnInfo>,
 }
@@ -42,7 +42,7 @@ impl PyFastRow {
 
     /// Convert value directly from Tiberius to Python - zero intermediate allocations
     #[inline]
-    fn extract_value_direct(row: &Row, index: usize, py: Python) -> PyResult<PyObject> {
+    fn extract_value_direct(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         use tiberius::ColumnType;
         
         let col_type = row.columns()[index].column_type();
@@ -252,7 +252,7 @@ impl PyFastRow {
 #[pymethods]
 impl PyFastRow {
     /// Ultra-fast column access using shared column map and direct Vec indexing
-    pub fn __getitem__(&self, py: Python, key: Bound<PyAny>) -> PyResult<PyObject> {
+    pub fn __getitem__(&self, py: Python, key: Bound<PyAny>) -> PyResult<Py<PyAny>> {
         if let Ok(name) = key.extract::<String>() {
             // Access by name: O(1) hash lookup + O(1) Vec access
             if let Some(&index) = self.column_info.map.get(&name) {
@@ -283,12 +283,12 @@ impl PyFastRow {
     }
 
     /// Get a specific column value by name
-    pub fn get(&self, py: Python, column: &str) -> PyResult<PyObject> {
+    pub fn get(&self, py: Python, column: &str) -> PyResult<Py<PyAny>> {
         self.__getitem__(py, column.into_pyobject(py)?.into_any())
     }
 
     /// Get a value by column index
-    pub fn get_by_index(&self, py: Python, index: usize) -> PyResult<PyObject> {
+    pub fn get_by_index(&self, py: Python, index: usize) -> PyResult<Py<PyAny>> {
         self.__getitem__(py, index.into_pyobject(py)?.into_any())
     }
 
@@ -302,7 +302,7 @@ impl PyFastRow {
     }
 
     /// Convert to dictionary - optimized with zip iterator
-    pub fn to_dict(&self, py: Python) -> PyResult<PyObject> {
+    pub fn to_dict(&self, py: Python) -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
         
         for (name, value) in self.column_info.names.iter().zip(self.values.iter()) {
@@ -336,7 +336,7 @@ pub struct PyFastExecutionResult {
 #[pymethods]
 impl PyFastExecutionResult {
     /// Get the returned rows (if any) - zero-copy reference access
-    pub fn rows(&self, py: Python) -> PyResult<PyObject> {
+    pub fn rows(&self, py: Python) -> PyResult<Py<PyAny>> {
         match &self.rows {
             Some(rows) => {
                 let py_list = pyo3::types::PyList::empty(py);
