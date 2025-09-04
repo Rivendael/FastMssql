@@ -5,12 +5,21 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+      inputs:
+        python-version:
+          description: 'Python version to run'
+          required: false
+          default: '3.13'
 
 permissions: {}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -22,8 +31,8 @@ jobs:
           - 1433:1433
         options: >-
           --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q 'SELECT 1' -C"
-          --health-interval=10s 
-          --health-timeout=5s 
+          --health-interval=10s
+          --health-timeout=5s
           --health-retries=10
 
     steps:
@@ -32,7 +41,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: ${{ github.event.inputs.python-version || matrix.python-version }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -63,17 +72,11 @@ jobs:
           export PATH="$PATH:/opt/mssql-tools18/bin"
           for i in {1..60}; do
             echo "Attempt $i/60..."
-            # First check if port 1433 is open
             if nc -z localhost 1433; then
-              echo "Port 1433 is open, testing SQL connection..."
               if sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C 2>/dev/null; then
                 echo "SQL Server is ready!"
                 break
-              else
-                echo "Port is open but SQL Server not ready yet..."
               fi
-            else
-              echo "Port 1433 not yet open..."
             fi
             sleep 5
             if [ $i -eq 60 ]; then
