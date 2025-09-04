@@ -17,7 +17,7 @@ impl Parameter {
     #[pyo3(signature = (value, sql_type=None))]
     pub fn new(value: Py<PyAny>, sql_type: Option<String>) -> Self {
         // Determine if the value is an expandable iterable
-        let is_expanded = Python::with_gil(|py| {
+        let is_expanded = Python::attach(|py| {
             let value_bound = value.bind(py);
             Parameter::is_expandable_iterable(&value_bound).unwrap_or(false)
         });
