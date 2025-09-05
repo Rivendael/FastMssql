@@ -598,6 +598,49 @@ impl PyConnection {
         })
     }
 
+    /// Explicitly establish a connection (initialize the pool if not already connected)
+    pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let pool = self.pool.clone();
+        let config = self.config.clone();
+        let pool_config = self.pool_config.clone();
+
+        future_into_py(py, async move {
+            // Check if already connected
+            let pool_guard = pool.read().await;
+            if pool_guard.is_some() {
+                return Ok(true); // Already connected
+            }
+            drop(pool_guard); // Release read lock
+
+            // Acquire write lock to initialize
+            let mut pool_guard = pool.write().await;
+            if pool_guard.is_some() {
+                return Ok(true); // Another task connected while we waited
+            }
+
+            // Initialize the pool
+            let new_pool = PyConnection::establish_pool(config, &pool_config).await?;
+            *pool_guard = Some(new_pool);
+            Ok(true)
+        })
+    }
+
+    /// Explicitly close the connection (drop the pool)
+    pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let pool = self.pool.clone();
+
+        future_into_py(py, async move {
+            let mut pool_guard = pool.write().await;
+            if let Some(pool_ref) = pool_guard.take() {
+                // Dropping the pool here will close all connections
+                drop(pool_ref);
+                Ok(true)
+            } else {
+                Ok(false) // Already disconnected
+            }
+        })
+    }
+    
     /// Execute multiple queries in a single batch operation for maximum performance
     /// This method optimizes network round-trips by sending all queries together
     #[pyo3(signature = (queries))]
