@@ -92,7 +92,35 @@ async def main():
 asyncio.run(main())
 ```
 
+## Explicit Connection Management
 
+When not utilizing Python's context manager (async with), **FastMssql** uses *lazy connection initialization*:  
+if you call `query()` or `execute()` on a new `Connection`, the underlying pool is created if not already present. 
+
+For more control, you can explicitly connect and disconnect:
+
+```python
+import asyncio
+from fastmssql import Connection
+
+async def main():
+    conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
+    conn = Connection(conn_str)
+
+    # Explicitly connect
+    await conn.connect()
+    assert await conn.is_connected()
+
+    # Run queries
+    result = await conn.query("SELECT 42 as answer")
+    print(result.rows()[0]["answer"])  # -> 42
+
+    # Explicitly disconnect
+    await conn.disconnect()
+    assert not await conn.is_connected()
+    
+asyncio.run(main())
+```
 ## Usage
 
 ### Connection options
