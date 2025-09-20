@@ -16,7 +16,6 @@ impl Parameter {
     #[new]
     #[pyo3(signature = (value, sql_type=None))]
     pub fn new(value: Py<PyAny>, sql_type: Option<String>) -> Self {
-        // Determine if the value is an expandable iterable
         let is_expanded = Python::attach(|py| {
             let value_bound = value.bind(py);
             Parameter::is_expandable_iterable(&value_bound).unwrap_or(false)
@@ -30,7 +29,6 @@ impl Parameter {
     }
 
     fn __repr__(&self, py: Python) -> String {
-        // Get the Python representation of the value
         let value_bound = self.value.bind(py);
         let value_repr = match value_bound.repr() {
             Ok(repr) => repr.to_string(),
