@@ -2,7 +2,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3_async_runtimes::tokio::future_into_py;
 use crate::pool_config::PyPoolConfig;
 use crate::ssl_config::PySslConfig;
-use crate::optimized_types::PyFastExecutionResult;
+use crate::types::PyFastExecutionResult;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{Config, AuthMethod, Row};
 use pyo3::types::PyList;
@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use bb8::Pool;
-use smallvec::SmallVec; // Only used for rare expandable parameter case
+use smallvec::SmallVec;
 
 type ConnectionPool = Pool<ConnectionManager>;
 
@@ -20,12 +20,10 @@ pub struct PyConnection {
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Config,
     pool_config: PyPoolConfig,
-    _ssl_config: Option<PySslConfig>, // Prefix with underscore to silence unused warning
+    _ssl_config: Option<PySslConfig>,
 }
 
 impl PyConnection {
-    /// Helper function to convert Python parameters to FastParameter with zero duplication
-    /// This reduces code duplication between query() and execute() methods
     #[inline]
     fn convert_parameters_to_fast(
         parameters: Option<&Bound<PyAny>>,
@@ -48,22 +46,20 @@ impl PyConnection {
         }
     }
 
-    /// Execute database operation with ZERO GIL usage - completely GIL-free async execution
     /// For queries that return rows (SELECT statements)
     async fn execute_query_async_gil_free(
-        pool: &ConnectionPool,  // Direct reference instead of Arc to avoid atomic ops
-        query: &str,           // Slice instead of String to avoid heap allocation
-        parameters: &[FastParameter],  // Slice instead of SmallVec to avoid move
+        pool: &ConnectionPool,
+        query: &str,
+        parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
         Self::execute_query_internal_gil_free(pool, query, parameters).await
     }
 
-    /// Execute database operation with ZERO GIL usage - completely GIL-free async execution
     /// For commands that don't return rows (INSERT/UPDATE/DELETE/DDL)
     async fn execute_command_async_gil_free(
-        pool: &ConnectionPool,  // Direct reference instead of Arc to avoid atomic ops
-        query: &str,           // Slice instead of String to avoid heap allocation
-        parameters: &[FastParameter],  // Slice instead of SmallVec to avoid move
+        pool: &ConnectionPool,
+        query: &str,
+        parameters: &[FastParameter],
     ) -> PyResult<u64> {
         Self::execute_command_internal_gil_free(pool, query, parameters).await
     }
@@ -105,17 +101,14 @@ impl PyConnection {
         Ok(pool)
     }
 
-    /// ULTRA-FAST GIL-FREE execution for SELECT queries
     /// Uses query() method to get rows
     async fn execute_query_internal_gil_free(
         pool: &ConnectionPool,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
-        // Get connection with proper error handling for pool exhaustion
         let mut conn = pool.get().await
             .map_err(|e| {
-                // Better error handling for different types of connection failures
                 match e {
                     _ if e.to_string().contains("timed out") => {
                         PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
@@ -124,14 +117,10 @@ impl PyConnection {
                 }
             })?;
         
-        // OPTIMIZED: Use stack-allocated array for small parameter counts (common case)
-        // This avoids heap allocation for the vast majority of queries (<=8 parameters)
         let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = parameters.iter()
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
         
-        // PERFORMANCE CRITICAL: Use the fastest method for getting results
-        // into_first_result() is much faster than manual stream processing
         let stream = conn.query(query, &tiberius_params)
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
@@ -143,17 +132,14 @@ impl PyConnection {
         Ok(rows)
     }
 
-    /// ULTRA-FAST GIL-FREE execution for non-SELECT commands
     /// Uses execute() method to get affected row count
     async fn execute_command_internal_gil_free(
         pool: &ConnectionPool,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
-        // Get connection with proper error handling for pool exhaustion
         let mut conn = pool.get().await
             .map_err(|e| {
-                // Better error handling for different types of connection failures
                 match e {
                     _ if e.to_string().contains("timed out") => {
                         PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
@@ -162,24 +148,19 @@ impl PyConnection {
                 }
             })?;
         
-        // OPTIMIZED: Use stack-allocated array for small parameter counts (common case)
-        // This avoids heap allocation for the vast majority of queries (<=8 parameters)
         let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 8]> = parameters.iter()
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
         
-        // Use execute() for INSERT/UPDATE/DELETE/DDL statements
         let result = conn.execute(query, &tiberius_params)
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
         
-        // Get the total affected rows
         let total_affected: u64 = result.rows_affected().iter().sum();
         Ok(total_affected)
     }
 }
 
-/// High-performance parameter conversion using enum dispatch instead of boxing
 #[derive(Debug, Clone)]
 enum FastParameter {
     Null,
@@ -203,17 +184,12 @@ impl tiberius::ToSql for FastParameter {
     }
 }
 
-/// Convert a Python object to FastParameter with ultra-fast zero-allocation type detection
-/// Uses PyO3's direct downcasting to avoid expensive multiple extract() attempts
 fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     use pyo3::types::{PyBool, PyInt, PyFloat, PyString, PyBytes};
     
     if obj.is_none() {
         return Ok(FastParameter::Null);
     }
-    
-    // ULTRA-OPTIMIZATION: Use fastest possible type checking order
-    // Ordered by frequency in typical database queries
     
     // Try string first (most common in SQL)
     if let Ok(py_string) = obj.downcast::<PyString>() {
@@ -244,7 +220,6 @@ fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     }
     
     // Fallback for numpy types, Decimal, etc. - only use extract() as last resort
-    // This is MUCH faster than the original version that tried extract() for every type
     if let Ok(i) = obj.extract::<i64>() {
         Ok(FastParameter::I64(i))
     } else if let Ok(f) = obj.extract::<f64>() {
@@ -285,7 +260,6 @@ fn expand_iterable_to_fast_params<T>(iterable: &Bound<PyAny>, result: &mut T) ->
 where
     T: Extend<FastParameter>
 {
-    // OPTIMIZATION: Use PyO3's iterator trait for better performance
     use pyo3::types::{PyList, PyTuple};
     
     // Fast path for common collection types - avoid iterator overhead
@@ -419,7 +393,6 @@ impl PyConnection {
     
     /// Execute a SQL query that returns rows (SELECT statements)
     /// Returns rows as PyFastExecutionResult
-    /// OPTIMIZED VERSION - parameter conversion done synchronously, GIL-free async execution
     #[pyo3(signature = (query, parameters=None))]
     pub fn query<'p>(&self, py: Python<'p>, query: String, parameters: Option<&Bound<PyAny>>) -> PyResult<Bound<'p, PyAny>> {
         // OPTIMIZATION: Do ALL Python type checking/conversion synchronously while we have the GIL
@@ -469,7 +442,6 @@ impl PyConnection {
     
     /// Execute a SQL command that doesn't return rows (INSERT/UPDATE/DELETE/DDL)
     /// Returns affected row count as u64
-    /// OPTIMIZED VERSION - parameter conversion done synchronously, GIL-free async execution
     #[pyo3(signature = (query, parameters=None))]
     pub fn execute<'p>(&self, py: Python<'p>, query: String, parameters: Option<&Bound<PyAny>>) -> PyResult<Bound<'p, PyAny>> {
         // OPTIMIZATION: Do ALL Python type checking/conversion synchronously while we have the GIL
@@ -645,7 +617,6 @@ impl PyConnection {
     /// This method optimizes network round-trips by sending all queries together
     #[pyo3(signature = (queries))]
     pub fn query_batch<'p>(&self, py: Python<'p>, queries: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
-        // OPTIMIZATION: Pre-process all parameters while we have the GIL
         let mut batch_queries: Vec<(String, SmallVec<[FastParameter; 8]>)> = Vec::with_capacity(queries.len());
         
         for item in queries.iter() {
@@ -727,10 +698,8 @@ impl PyConnection {
     }
 
     /// Bulk insert data for maximum performance with large datasets
-    /// This method is optimized for inserting many rows at once
     #[pyo3(signature = (table_name, columns, data_rows))]
     pub fn bulk_insert<'p>(&self, py: Python<'p>, table_name: String, columns: &Bound<PyList>, data_rows: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
-        // OPTIMIZATION: Pre-process column names and data while we have the GIL
         let column_names: PyResult<Vec<String>> = columns.iter()
             .map(|col| col.extract::<String>())
             .collect();
@@ -825,7 +794,6 @@ impl PyConnection {
     /// Execute multiple commands in a single batch operation 
     #[pyo3(signature = (commands))]
     pub fn execute_batch<'p>(&self, py: Python<'p>, commands: &Bound<PyList>) -> PyResult<Bound<'p, PyAny>> {
-        // OPTIMIZATION: Pre-process all parameters while we have the GIL
         let mut batch_commands: Vec<(String, SmallVec<[FastParameter; 8]>)> = Vec::with_capacity(commands.len());
         
         for item in commands.iter() {
