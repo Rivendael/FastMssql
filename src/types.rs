@@ -40,14 +40,13 @@ impl PyFastRow {
         })
     }
 
-    /// Convert value directly from Tiberius to Python - zero intermediate allocations
+    /// Convert value directly from Tiberius to Python
     #[inline]
     fn extract_value_direct(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         use tiberius::ColumnType;
         
         let col_type = row.columns()[index].column_type();
         
-        // Direct conversion - no intermediate PyValue
         match col_type {
             ColumnType::Int4 => {
                 match row.try_get::<i32, usize>(index) {
@@ -62,7 +61,6 @@ impl PyFastRow {
                 }
             }
             ColumnType::Bit | ColumnType::Bitn => {
-                // Simple boolean handling - convert through integer to avoid PyBool issues
                 match row.try_get::<bool, usize>(index) {
                     Ok(Some(val)) => {
                         let int_val = if val { 1i32 } else { 0i32 };
@@ -90,11 +88,9 @@ impl PyFastRow {
                 }
             }
             ColumnType::Money => {
-                // SQL Server MONEY type - try multiple conversion approaches
                 if let Ok(Some(val)) = row.try_get::<f64, usize>(index) {
                     Ok(val.into_pyobject(py)?.into_any().unbind())
                 } else if let Ok(Some(val)) = row.try_get::<i64, usize>(index) {
-                    // Money might be returned as scaled integer (cents)
                     let money_val = (val as f64) / 10000.0; // SQL Server MONEY has 4 decimal places
                     Ok(money_val.into_pyobject(py)?.into_any().unbind())
                 } else {
@@ -102,18 +98,15 @@ impl PyFastRow {
                 }
             }
             ColumnType::Money4 => {
-                // SQL Server SMALLMONEY type - try multiple conversion approaches  
                 if let Ok(Some(val)) = row.try_get::<f32, usize>(index) {
                     Ok((val as f64).into_pyobject(py)?.into_any().unbind())
                 } else if let Ok(Some(val)) = row.try_get::<i32, usize>(index) {
-                    // SmallMoney might be returned as scaled integer (cents)
                     let money_val = (val as f64) / 10000.0; // SQL Server SMALLMONEY has 4 decimal places
                     Ok(money_val.into_pyobject(py)?.into_any().unbind())
                 } else {
                     Ok(py.None())
                 }
             }
-            // Handle all other SQL Server types with direct conversion
             ColumnType::Int1 => {
                 match row.try_get::<u8, usize>(index) {
                     Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
@@ -396,7 +389,6 @@ impl PyFastExecutionResult {
         }
 
         let first_row = &tiberius_rows[0];
-        // OPTIMIZATION: Build names and map in single pass to avoid redundant string cloning
         let mut names = Vec::with_capacity(first_row.columns().len());
         let mut map = HashMap::with_capacity(first_row.columns().len());
         
@@ -410,7 +402,6 @@ impl PyFastExecutionResult {
 
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
         for row in tiberius_rows.into_iter() {
-            // Arc::clone is cheap (just atomic increment), not cloning the data
             fast_rows.push(PyFastRow::from_tiberius_row(row, py, Arc::clone(&column_info))?);
         }
         
@@ -440,7 +431,6 @@ impl PyFastExecutionResult {
 
         // Create shared column info from the first row - optimized to avoid cloning
         let first_row = &tiberius_rows[0];
-        // OPTIMIZATION: Build names and map in single pass to avoid redundant string cloning
         let mut names = Vec::with_capacity(first_row.columns().len());
         let mut map = HashMap::with_capacity(first_row.columns().len());
         
@@ -454,7 +444,6 @@ impl PyFastExecutionResult {
 
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
         for row in tiberius_rows.into_iter() {
-            // Arc::clone is cheap (just atomic increment), not cloning the data
             fast_rows.push(PyFastRow::from_tiberius_row(row, py, Arc::clone(&column_info))?);
         }
         
