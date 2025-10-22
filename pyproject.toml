@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.3.9"
+version = "0.4.0"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
@@ -41,9 +41,9 @@ Documentation = "https://github.com/Rivendael/FastMssql#readme"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
-    "pytest-asyncio>=0.21",
-    "psutil>=5.9.0",  # For memory and process monitoring in stress tests
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "psutil>=7.1.1",  # For memory and process monitoring in stress tests
 ]
 
 [tool.maturin]

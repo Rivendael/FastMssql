@@ -6,15 +6,12 @@ This module tests INSERT, UPDATE, DELETE, and SELECT operations.
 
 import pytest
 import pytest_asyncio
-import sys
 import os
-
-# Add the parent directory to Python path for development
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -163,7 +160,7 @@ async def test_select_operations(setup_test_table):
             assert results.has_rows() and results.rows()[0]['department'] == 'IT'
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -213,7 +210,7 @@ async def test_update_operations(setup_test_table):
             assert results.has_rows() and results.rows()[0]['email'] == 'john.doe@company.com'
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -267,7 +264,7 @@ async def test_delete_operations(setup_test_table):
             assert results.has_rows() and results.rows()[0]['remaining'] == 0# No employees should remain
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -314,7 +311,7 @@ async def test_upsert_operations(setup_test_table):
             assert bob['email'] == 'bob.johnson@newcompany.com'
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -351,7 +348,7 @@ async def test_bulk_operations(setup_test_table):
             assert results.has_rows() and results.rows()[0]['avg_salary'] > 40000# Should be higher due to the +1000 update
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -409,7 +406,7 @@ async def test_async_dml_operations():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -445,4 +442,4 @@ async def test_transaction_rollback(setup_test_table):
             assert results.has_rows() and results.rows()[0]['count'] >= 1
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")

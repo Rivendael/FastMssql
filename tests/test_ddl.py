@@ -5,15 +5,12 @@ This module tests CREATE, ALTER, DROP operations for various database objects.
 """
 
 import pytest
-import sys
 import os
-
-# Add the parent directory to Python path for development
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -60,7 +57,7 @@ async def test_create_drop_table():
             assert rows[0]['table_count'] == 0
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -100,7 +97,7 @@ async def test_alter_table():
             await conn.execute("DROP TABLE test_alter_table")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -164,7 +161,7 @@ async def test_create_drop_index():
             await conn.execute("DROP TABLE test_index_table")
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -233,7 +230,7 @@ async def test_create_drop_view():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -292,7 +289,7 @@ async def test_create_drop_procedure():
             assert result.rows()[0]['proc_count'] == 0
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -340,7 +337,7 @@ async def test_create_drop_function():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -392,7 +389,7 @@ async def test_constraints():
             await conn.execute("DROP TABLE test_constraints")
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -423,7 +420,7 @@ async def test_async_ddl_operations():
             await conn.execute("DROP TABLE test_async_ddl")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -481,4 +478,4 @@ async def test_schema_operations():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")

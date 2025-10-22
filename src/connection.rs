@@ -34,9 +34,9 @@ impl PyConnection {
             if let Ok(params_obj) = params.extract::<Py<crate::parameters::Parameters>>() {
                 let params_bound = params_obj.bind(py);
                 let list = params_bound.call_method0("to_list")?;
-                let list_bound = list.downcast::<PyList>()?;
+                let list_bound = list.cast::<PyList>()?;
                 python_params_to_fast_parameters(list_bound)
-            } else if let Ok(list) = params.downcast::<PyList>() {
+            } else if let Ok(list) = params.cast::<PyList>() {
                 python_params_to_fast_parameters(list)
             } else {
                 Err(PyValueError::new_err("Parameters must be a list or Parameters object"))
@@ -192,30 +192,30 @@ fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     }
     
     // Try string first (most common in SQL)
-    if let Ok(py_string) = obj.downcast::<PyString>() {
+    if let Ok(py_string) = obj.cast::<PyString>() {
         // CRITICAL: Use to_cow() to avoid allocation when possible
         return Ok(FastParameter::String(py_string.to_str()?.to_owned()));
     }
     
     // Try int second (very common)
-    if let Ok(py_int) = obj.downcast::<PyInt>() {
+    if let Ok(py_int) = obj.cast::<PyInt>() {
         return py_int.extract::<i64>()
             .map(FastParameter::I64)
             .map_err(|_| PyValueError::new_err("Integer value too large for i64"));
     }
     
     // Try float third
-    if let Ok(py_float) = obj.downcast::<PyFloat>() {
+    if let Ok(py_float) = obj.cast::<PyFloat>() {
         return Ok(FastParameter::F64(py_float.value()));
     }
     
     // Try bool fourth (less common)
-    if let Ok(py_bool) = obj.downcast::<PyBool>() {
+    if let Ok(py_bool) = obj.cast::<PyBool>() {
         return Ok(FastParameter::Bool(py_bool.is_true()));
     }
     
     // Try bytes last (least common)
-    if let Ok(py_bytes) = obj.downcast::<PyBytes>() {
+    if let Ok(py_bytes) = obj.cast::<PyBytes>() {
         return Ok(FastParameter::Bytes(py_bytes.as_bytes().to_vec()));
     }
     
@@ -263,7 +263,7 @@ where
     use pyo3::types::{PyList, PyTuple};
     
     // Fast path for common collection types - avoid iterator overhead
-    if let Ok(list) = iterable.downcast::<PyList>() {
+    if let Ok(list) = iterable.cast::<PyList>() {
         result.extend(
             list.iter()
                 .map(|item| python_to_fast_parameter(&item))
@@ -272,7 +272,7 @@ where
         return Ok(());
     }
     
-    if let Ok(tuple) = iterable.downcast::<PyTuple>() {
+    if let Ok(tuple) = iterable.cast::<PyTuple>() {
         result.extend(
             tuple.iter()
                 .map(|item| python_to_fast_parameter(&item))
@@ -620,7 +620,7 @@ impl PyConnection {
         let mut batch_queries: Vec<(String, SmallVec<[FastParameter; 8]>)> = Vec::with_capacity(queries.len());
         
         for item in queries.iter() {
-            let (query, params) = if let Ok(tuple) = item.downcast::<pyo3::types::PyTuple>() {
+            let (query, params) = if let Ok(tuple) = item.cast::<pyo3::types::PyTuple>() {
                 if tuple.len() == 2 {
                     let query: String = tuple.get_item(0)?.extract()?;
                     let params = tuple.get_item(1)?;
@@ -713,7 +713,7 @@ impl PyConnection {
         let mut processed_rows: Vec<SmallVec<[FastParameter; 8]>> = Vec::with_capacity(data_rows.len());
         
         for row in data_rows.iter() {
-            if let Ok(row_list) = row.downcast::<PyList>() {
+            if let Ok(row_list) = row.cast::<PyList>() {
                 if row_list.len() != column_names.len() {
                     return Err(PyValueError::new_err(
                         format!("Row has {} values but {} columns specified", row_list.len(), column_names.len())
@@ -797,7 +797,7 @@ impl PyConnection {
         let mut batch_commands: Vec<(String, SmallVec<[FastParameter; 8]>)> = Vec::with_capacity(commands.len());
         
         for item in commands.iter() {
-            let (command, params) = if let Ok(tuple) = item.downcast::<pyo3::types::PyTuple>() {
+            let (command, params) = if let Ok(tuple) = item.cast::<pyo3::types::PyTuple>() {
                 if tuple.len() == 2 {
                     let command: String = tuple.get_item(0)?.extract()?;
                     let params = tuple.get_item(1)?;

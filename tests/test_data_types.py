@@ -6,15 +6,12 @@ between Rust/Tiberius and Python types.
 """
 
 import pytest
-import sys
 import os
-
-# Add the parent directory to Python path for development
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -100,7 +97,7 @@ async def test_numeric_types():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -135,7 +132,7 @@ async def test_string_types():
             assert row.get('ntext_val') == 'NText data'
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.integration
@@ -167,7 +164,7 @@ async def test_datetime_types():
             assert row['smalldatetime_val'] is not None
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -194,7 +191,7 @@ async def test_binary_types():
             assert row['image_val'] is not None
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -224,7 +221,7 @@ async def test_special_types():
             assert row['json_like_val'] == '{"key": "value"}'
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -254,7 +251,7 @@ async def test_null_values():
             assert row['null_guid'] is None
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -276,7 +273,7 @@ async def test_large_values():
             assert rows[0]['large_bigint'] == 9223372036854775806
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -307,4 +304,4 @@ async def test_async_data_types():
             assert row['null_val'] is None
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")

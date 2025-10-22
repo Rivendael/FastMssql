@@ -16,7 +16,7 @@ load_dotenv()
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -101,7 +101,7 @@ async def stored_procedures():
             
         except Exception as e:
             # If setup fails, skip the test
-            pytest.skip(f"Database setup failed: {e}")
+            pytest.fail(f"Database setup failed: {e}")
         
         yield
         
@@ -320,7 +320,7 @@ async def test_common_table_expressions():
             await conn.execute("DROP TABLE test_cte_employees")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -411,7 +411,7 @@ async def test_window_functions():
             await conn.execute("DROP TABLE test_window_sales")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -468,7 +468,7 @@ async def test_pivot_and_unpivot():
             await conn.execute("DROP TABLE test_pivot_sales")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio

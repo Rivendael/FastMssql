@@ -5,40 +5,35 @@ Run with: python -m pytest tests/
 """
 
 import pytest
-import sys
 import os
 import asyncio
-
-# Add the parent director@pytest.mark.asyncio
-async def test_error_handling():
-    """Test that errors are handled properly."""
-    # Test invalid connection string
-    try:
-        conn = Connection("Invalid connection string")
-        async with conn:
-            # This should fail when we try to use the connection
-            await conn.query("SELECT 1")
-    except Exception:
-        pass  # Expected to fail
-    
-    # Test invalid query (requires database connection)
-    try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
-            with pytest.raises(Exception):
-                await conn.execute("SELECT * FROM non_existent_table_12345")
-    except Exception as e:
-        pytest.skip(f"Database not available for error testing: {e}")
 
 try:
     import fastmssql
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
+    pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration - adjust as needed
 TEST_CONNECTION_STRING = os.getenv(
     "FASTMSSQL_TEST_CONNECTION_STRING",
 )
+
+async def test_error_handling():
+    """Test that errors are handled properly."""
+    try:
+        conn = Connection("Invalid connection string")
+        async with conn:
+            await conn.query("SELECT 1")
+    except Exception:
+        pass
+    
+    try:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            with pytest.raises(Exception):
+                await conn.execute("SELECT * FROM non_existent_table_12345")
+    except Exception as e:
+        pytest.fail(f"Database not available for error testing: {e}")
 
 def test_version():
     """Test that we can get the library version."""
@@ -59,7 +54,7 @@ async def test_basic_connection():
         async with Connection(TEST_CONNECTION_STRING) as conn:
             assert await conn.is_connected()
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -73,7 +68,7 @@ async def test_simple_query():
             test_value = rows[0]['test_value']
             assert test_value == 1
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -93,7 +88,7 @@ async def test_multiple_queries():
             assert len(rows2) == 1
             assert rows2[0]['query_name'] == 'second'
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -120,7 +115,7 @@ async def test_data_types():
             assert row['bool_val'] == True
             assert row['null_val'] is None
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -139,7 +134,7 @@ async def test_convenience_functions():
             scalar_rows = scalar_result.rows()
             assert scalar_rows[0]['value'] == 42
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -160,7 +155,7 @@ async def test_error_handling():
             with pytest.raises(Exception):
                 await conn.execute("SELECT * FROM non_existent_table_12345")
     except Exception as e:
-        pytest.skip(f"Database not available for error testing: {e}")
+        pytest.fail(f"Database not available for error testing: {e}")
 
 # Async Tests
 @pytest.mark.asyncio
@@ -178,7 +173,7 @@ async def test_async_basic_connection():
         async with Connection(TEST_CONNECTION_STRING) as conn:
             assert await conn.is_connected()
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -191,7 +186,7 @@ async def test_async_simple_query():
             assert len(rows) == 1
             assert rows[0]['test_value'] == 1
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -211,7 +206,7 @@ async def test_async_multiple_queries():
             assert len(rows2) == 1
             assert rows2[0]['query_name'] == 'second'
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -238,7 +233,7 @@ async def test_async_data_types():
             assert row['bool_val'] == True
             assert row['null_val'] is None
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration 
@@ -278,7 +273,7 @@ async def test_async_execute_non_query():
             await conn.execute("DROP TABLE IF EXISTS test_async_execute_non_query")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -301,7 +296,7 @@ async def test_async_execute_scalar():
             rows = result.rows() if result.has_rows() else []
             assert rows[0]['scalar_value'] is None
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -320,7 +315,7 @@ async def test_async_convenience_functions():
             scalar_rows = scalar_result.rows()
             assert scalar_rows[0]['value'] == 42
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -331,7 +326,7 @@ async def test_async_error_handling():
             with pytest.raises(Exception):
                 await conn.execute("SELECT * FROM non_existent_table_async_12345")
     except Exception as e:
-        pytest.skip(f"Database not available for error testing: {e}")
+        pytest.fail(f"Database not available for error testing: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -352,7 +347,7 @@ async def test_simple_parameterized_query():
             assert row['param2'] == "test"
             assert row['param3'] == True
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -377,7 +372,7 @@ async def test_parameters_object_basic():
             assert row['description'] == "Parameters Object"
             assert abs(row['value'] - 3.14) < 0.001
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -403,7 +398,7 @@ async def test_parameters_method_chaining():
             assert row['chained_id'] == 200
             assert row['chained_name'] == "Chained"
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -427,7 +422,7 @@ async def test_async_concurrent_queries():
             assert set(values) == {1, 2, 3}
             assert set(names) == {'query1', 'query2', 'query3'}
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 if __name__ == "__main__":
     # Run basic tests when executed directly

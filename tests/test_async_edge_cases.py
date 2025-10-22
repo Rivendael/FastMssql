@@ -459,7 +459,7 @@ async def test_async_connection_resource_cleanup():
         print(f"   Resource management: ✓")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -561,7 +561,7 @@ async def test_async_context_manager_with_background_tasks():
         print(f"   Total workflow time: {total_time:.2f}s")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 if __name__ == "__main__":
