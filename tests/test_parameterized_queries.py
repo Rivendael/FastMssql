@@ -5,7 +5,6 @@ Test parameterized queries functionality
 
 import pytest
 import asyncio
-import sys
 import os
 
 # Add the python module to the path
@@ -39,7 +38,7 @@ async def test_simple_parameterized_query():
             sum_result = rows[0]['sum_result']
             assert sum_result == 15
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.integration
@@ -75,7 +74,7 @@ async def test_parameter_types():
             assert row['bool_param'] == True
             assert row['null_param'] is None
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.integration
@@ -98,7 +97,7 @@ async def test_string_sql_injection_protection():
             assert len(rows) == 1
             assert rows[0]['safe_string'] == malicious_input
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 if __name__ == "__main__":
     # Run a simple smoke test

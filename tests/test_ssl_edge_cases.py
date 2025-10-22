@@ -7,13 +7,10 @@ import tempfile
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Import the library components
-import sys
-
 try:
-    from fastmssql import SslConfig, EncryptionLevel, Connection
+    from fastmssql import SslConfig, EncryptionLevel
 except ImportError as e:
-    pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
+    pytest.fail(f"Cannot import mssql library: {e}", allow_module_level=True)
 
 
 class TestSslConfigThreadSafety:
@@ -250,7 +247,7 @@ class TestSslConfigErrorRecovery:
         
         # Skip if running as root (common in CI environments) - only on POSIX systems
         if hasattr(os, 'getuid') and os.getuid() == 0:
-            pytest.skip("Running as root - file permissions are not enforced")
+            pytest.fail("Running as root - file permissions are not enforced")
             
         content = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
         
@@ -272,7 +269,7 @@ class TestSslConfigErrorRecovery:
                     # Verify permissions are actually restricted
                     stat_info = os.stat(cert_path)
                     if stat_info.st_mode & 0o777 != 0o000:
-                        pytest.skip("Unable to restrict file permissions in this environment")
+                        pytest.fail("Unable to restrict file permissions in this environment")
                     
                     # Test that the SSL config raises an exception
                     with pytest.raises(Exception):

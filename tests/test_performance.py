@@ -15,7 +15,7 @@ import time
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
+    pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -87,7 +87,7 @@ async def test_large_result_set():
                 await conn.execute("DROP TABLE IF EXISTS test_large_data")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration
@@ -128,7 +128,7 @@ async def test_concurrent_connections():
         assert total_time < 30.0  # Should complete within 30 seconds
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration
@@ -198,7 +198,7 @@ async def test_bulk_insert_performance():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration
@@ -250,7 +250,7 @@ async def test_repeated_query_performance():
                 await conn.execute("DROP TABLE IF EXISTS test_repeated_queries")
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.performance
@@ -294,7 +294,7 @@ async def test_async_concurrent_queries():
         assert total_time < 15.0  # Should complete within 15 seconds
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration
@@ -350,7 +350,7 @@ async def test_memory_usage_with_large_strings():
                 pass
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration 
@@ -377,7 +377,7 @@ async def test_connection_pool_simulation():
         assert connections_per_second > 5
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.performance
 @pytest.mark.integration
@@ -412,7 +412,7 @@ async def test_long_running_query():
             # as this depends on the server performance
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.stress
 @pytest.mark.integration
@@ -478,4 +478,4 @@ async def test_stress_mixed_operations():
                 await conn.execute("DROP TABLE IF EXISTS test_stress_operations")
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
