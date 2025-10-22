@@ -17,7 +17,6 @@ import pytest
 import gc
 import psutil
 import os
-import random
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -168,7 +167,7 @@ async def test_memory_leak_detection():
         print(f"   Memory recovered: {memory_recovered:.1f}MB")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -254,7 +253,7 @@ async def test_connection_exhaustion_recovery():
         print(f"   Times: Phase1={phase1_time:.1f}s, Recovery={recovery_time:.1f}s")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -384,7 +383,7 @@ async def test_rapid_connect_disconnect_stress():
         print(f"   Timing: avg={avg_operation_time:.3f}s, min={min_time:.3f}s, max={max_time:.3f}s, median={median_time:.3f}s")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 if __name__ == "__main__":
     # Run stress tests

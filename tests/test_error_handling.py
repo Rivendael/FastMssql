@@ -6,15 +6,12 @@ and failure scenarios to ensure robust error handling.
 """
 
 import pytest
-import sys
 import os
-
-# Add the parent directory to Python path for development
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
+    pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -56,7 +53,7 @@ async def test_sql_syntax_errors():
                 assert result.rows()[0]['recovery_test'] == 1
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -122,7 +119,7 @@ async def test_constraint_violations():
                 await conn.execute("DROP TABLE IF EXISTS test_constraints_error")
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -158,7 +155,7 @@ async def test_data_type_conversion_errors():
             assert result.rows()[0]['status'] == 'still working'
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -178,7 +175,7 @@ async def test_connection_interruption():
                 assert result2.rows()[0]['test'] == 2
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -236,7 +233,7 @@ async def test_null_and_empty_values():
                 await conn.execute("DROP TABLE IF EXISTS test_null_empty")
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -292,7 +289,7 @@ async def test_special_characters():
                 await conn.execute("DROP TABLE IF EXISTS test_special_chars")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -328,7 +325,7 @@ async def test_boundary_values():
                 assert len(result.rows()[0]['max_varchar']) == 8000
 
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -367,7 +364,7 @@ async def test_async_error_handling():
                 await conn.execute("DROP TABLE IF EXISTS test_async_error")
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -387,7 +384,7 @@ async def test_empty_result_sets():
             assert isinstance(result.rows(), list)
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -440,4 +437,4 @@ async def test_multiple_result_sets():
                     raise
             
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")

@@ -22,7 +22,6 @@ TEST_CONNECTION_STRING = os.getenv(
     "FASTMSSQL_TEST_CONNECTION_STRING",
 )
 try:
-    # Import the classes from the Python wrapper module  
     from fastmssql import Connection, PoolConfig
     MSSQL_AVAILABLE = True
 except ImportError:
@@ -77,7 +76,7 @@ async def test_async_truly_non_blocking():
         print(f"✅ Async non-blocking test passed: {total_time:.2f}s total for 3x2s queries")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -203,7 +202,7 @@ async def test_connection_pool_race_conditions():
         print(f"✅ Connection pool race test passed: {successful_connections}/{expected_total} connections in {total_time:.2f}s (success rate: {success_rate:.2f})")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -300,7 +299,7 @@ async def test_concurrent_transaction_handling():
         print(f"✅ Concurrent transaction test passed: {len(successful_operations)}/{total_operations} operations across {len(connection_ids)} connections in {total_time:.2f}s")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -364,7 +363,7 @@ async def test_async_connection_limit_behavior():
         print(f"✅ Connection limit test passed: {len(successful_connections)}/{reasonable_connections} concurrent connections in {total_time:.2f}s")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -433,7 +432,7 @@ async def test_async_error_propagation_and_cleanup():
         print(f"✅ Error propagation test passed: {len(successful_ops)} success, {len(failed_ops)} handled failures")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -473,7 +472,7 @@ async def test_async_query_cancellation():
             print(f"✅ Query cancellation test passed: cancelled in {cancellation_time:.3f}s")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -608,7 +607,7 @@ async def test_async_connection_state_consistency():
         print(f"✅ Connection state consistency test passed: {len(successful_operations)}/{expected_operations} operations in {total_time:.2f}s (success rate: {success_rate:.2f})")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -676,7 +675,7 @@ async def test_connection_pool_statistics_and_configuration():
         print("✅ Connection pool configuration test passed")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.asyncio
@@ -742,7 +741,7 @@ async def test_connection_pool_reuse_efficiency():
         print(f"✅ Connection reuse test passed: {unique_connections} unique connections for {len(successful_operations)} operations")
         
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")
+        pytest.fail(f"Database not available: {e}")
 
 
 if __name__ == "__main__":

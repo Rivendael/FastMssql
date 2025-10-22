@@ -6,13 +6,10 @@ import pytest
 import tempfile
 import os
 
-# Import the library components
-import sys
-
 try:
-    from fastmssql import SslConfig, EncryptionLevel, Connection, PoolConfig
+    from fastmssql import SslConfig, EncryptionLevel, Connection
 except ImportError as e:
-    pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
+    pytest.fail(f"Cannot import mssql library: {e}", allow_module_level=True)
 
 
 class TestSslConnectionIntegration:

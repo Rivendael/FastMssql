@@ -20,7 +20,7 @@ import os
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("FastMSSQL wrapper not available", allow_module_level=True)
+    pytest.fail("FastMSSQL wrapper not available", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -62,7 +62,7 @@ class TestBatchQueries:
                 assert rows3[0]['param_value'] == 42
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_batch_queries_with_parameters(self):
@@ -100,7 +100,7 @@ class TestBatchQueries:
                 assert rows4[0]['null_val'] is None
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_empty_batch_queries(self):
@@ -111,7 +111,7 @@ class TestBatchQueries:
                 assert len(results) == 0
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_batch_query_error_handling(self):
@@ -129,7 +129,7 @@ class TestBatchQueries:
                     await conn.query_batch(queries)
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
 
 
 class TestBatchCommands:
@@ -180,7 +180,7 @@ class TestBatchCommands:
                     await conn.execute("DROP TABLE IF EXISTS batch_test")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_batch_commands_mixed_operations(self):
@@ -225,7 +225,7 @@ class TestBatchCommands:
                     await conn.execute("DROP TABLE IF EXISTS batch_test2")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
 
 
 class TestBulkInsert:
@@ -282,7 +282,7 @@ class TestBulkInsert:
                     await conn.execute("DROP TABLE IF EXISTS bulk_test")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_large_bulk_insert(self):
@@ -331,7 +331,7 @@ class TestBulkInsert:
                     await conn.execute("DROP TABLE IF EXISTS bulk_large_test")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_bulk_insert_error_handling(self):
@@ -363,7 +363,7 @@ class TestBulkInsert:
                     await conn.execute("DROP TABLE IF EXISTS bulk_error_test")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
 
 
 class TestBatchPerformance:
@@ -415,7 +415,7 @@ class TestBatchPerformance:
                     print(f"Performance improvement: {improvement:.1f}%")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_batch_vs_individual_commands(self):
@@ -471,7 +471,7 @@ class TestBatchPerformance:
                     await conn.execute("DROP TABLE IF EXISTS perf_test")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
 
 
 class TestBatchEdgeCases:
@@ -495,7 +495,7 @@ class TestBatchEdgeCases:
                     ])
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_bulk_insert_edge_cases(self):
@@ -536,7 +536,7 @@ class TestBatchEdgeCases:
                     await conn.execute("DROP TABLE IF EXISTS edge_test")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
 
 
 @pytest.mark.integration
@@ -630,4 +630,4 @@ class TestBatchIntegration:
                     await conn.execute("DROP TABLE IF EXISTS etl_target")
                     
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
