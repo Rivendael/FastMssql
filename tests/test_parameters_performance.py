@@ -7,7 +7,6 @@ overhead compared to using simple lists.
 
 import pytest
 import time
-import sys
 import os
 
 # Add the parent directory to Python path for development
@@ -15,7 +14,7 @@ import os
 try:
     from fastmssql import Connection, Parameters
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -48,7 +47,7 @@ class TestParametersPerformance:
             print(f"Created 1000 Parameters objects in {creation_time:.3f}s")
             
         except Exception as e:
-            pytest.skip(f"Performance test failed: {e}")
+            pytest.fail(f"Performance test failed: {e}")
     
     @pytest.mark.asyncio
     async def test_method_chaining_performance(self):
@@ -74,7 +73,7 @@ class TestParametersPerformance:
             print(f"Method chaining 500 times took {chaining_time:.3f}s")
             
         except Exception as e:
-            pytest.skip(f"Performance test failed: {e}")
+            pytest.fail(f"Performance test failed: {e}")
     
     @pytest.mark.asyncio
     async def test_list_vs_parameters_query_performance(self):
@@ -119,7 +118,7 @@ class TestParametersPerformance:
                 assert overhead_ratio < 1.5, f"Parameters overhead too high: {overhead_ratio:.2f}x"
                 
         except Exception as e:
-            pytest.skip(f"Database not available for performance test: {e}")
+            pytest.fail(f"Database not available for performance test: {e}")
     
     @pytest.mark.asyncio
     async def test_parameter_reuse_performance(self):
@@ -148,7 +147,7 @@ class TestParametersPerformance:
                 assert reuse_time < 10.0, f"Parameter reuse too slow: {reuse_time:.3f}s"
                 
         except Exception as e:
-            pytest.skip(f"Database not available for reuse test: {e}")
+            pytest.fail(f"Database not available for reuse test: {e}")
 
 
 @pytest.mark.integration  

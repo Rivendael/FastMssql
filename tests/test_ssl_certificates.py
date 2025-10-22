@@ -6,13 +6,10 @@ import pytest
 import tempfile
 import os
 
-# Import the library components
-import sys
-
 try:
     from fastmssql import SslConfig
 except ImportError as e:
-    pytest.skip(f"Cannot import mssql library: {e}", allow_module_level=True)
+    pytest.fail(f"Cannot import mssql library: {e}", allow_module_level=True)
 
 
 class TestCertificateFileFormats:
@@ -213,7 +210,7 @@ class TestCertificateFilePermissions:
         
         # Skip if running as root (common in CI environments)
         if os.getuid() == 0:
-            pytest.skip("Running as root - file permissions are not enforced")
+            pytest.fail("Running as root - file permissions are not enforced")
             
         content = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
         
@@ -228,7 +225,7 @@ class TestCertificateFilePermissions:
             # Verify permissions are actually restricted
             stat_info = os.stat(cert_path)
             if stat_info.st_mode & 0o777 != 0o000:
-                pytest.skip("Unable to restrict file permissions in this environment")
+                pytest.fail("Unable to restrict file permissions in this environment")
             
             # Test that the SSL config raises an exception
             with pytest.raises(Exception):

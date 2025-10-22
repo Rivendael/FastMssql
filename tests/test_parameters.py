@@ -6,7 +6,6 @@ with optional type hints and method chaining.
 """
 
 import pytest
-import sys
 import os
 
 # Add the parent directory to Python path for development
@@ -14,7 +13,7 @@ import os
 try:
     from fastmssql import Connection, Parameter, Parameters
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -370,7 +369,7 @@ class TestParametersIntegration:
                 assert row['text'] == "Hello"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_object_basic(self):
@@ -394,7 +393,7 @@ class TestParametersIntegration:
                 assert abs(row['price'] - 29.99) < 0.01
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_method_chaining_integration(self):
@@ -421,7 +420,7 @@ class TestParametersIntegration:
                 assert row['active'] == True
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_with_nulls(self):
@@ -445,7 +444,7 @@ class TestParametersIntegration:
                 assert row['text'] == "Not Null"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_various_types(self):
@@ -481,7 +480,7 @@ class TestParametersIntegration:
                 assert binary_val == b"binary"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_no_parameters(self):
@@ -496,7 +495,7 @@ class TestParametersIntegration:
                 assert rows[0]['message'] == "No params"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_empty_parameters_object(self):
@@ -512,7 +511,7 @@ class TestParametersIntegration:
                 assert rows[0]['message'] == "Empty params"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameter_reuse(self):
@@ -550,7 +549,7 @@ class TestParametersIntegration:
             assert row2['query_id'] == "Query 2"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_automatic_in_clause_expansion(self):
@@ -579,37 +578,37 @@ class TestParametersIntegration:
                 assert expanded_val is not None
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
-    
+            pytest.fail(f"Database not available: {e}")
+
     @pytest.mark.asyncio
     async def test_mixed_parameters_with_iterables(self):
         """Test mixed regular and iterable parameters."""
         try:
             async with Connection(TEST_CONNECTION_STRING) as conn:
-                # Mix of regular values and iterables
                 params = Parameters(
-                    "John",        # Regular string
-                    [1, 2, 3],     # Should be expanded  
-                    25             # Regular int
+                    "John",        # @P1
+                    [1, 2, 3],     # expands to @P2, @P3, @P4
+                    25             # becomes @P5
                 )
                 
                 result = await conn.query(
-                    "SELECT @P1 as name, @P2 as id_list, @P3 as age", 
+                    "SELECT @P1 AS name, @P2 AS id1, @P3 AS id2, @P4 AS id3, @P5 AS age",
                     params
                 )
-                
+
                 assert result.has_rows()
-                rows = result.rows() if result.has_rows() else []
+                rows = result.rows()
                 assert len(rows) == 1
                 
                 row = rows[0]
                 assert row['name'] == "John"
-                assert row['id_list'] is not None  # The list value
+                assert row['id1'] == 1
+                assert row['id2'] == 2
+                assert row['id3'] == 3
                 assert row['age'] == 25
-                
-        except Exception as e:
-            pytest.skip(f"Database not available: {e}")
 
+        except Exception as e:
+            pytest.fail(f"Database not available: {e}")
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -60,15 +60,6 @@ pip install fastmssql
 - Python 3.9 to 3.14
 - Microsoft SQL Server (any recent version)
 
-### From source (development)
-
-```bash
-git clone <your-repo-url>
-cd pymssql-rs
-./setup.sh
-```
-
-
 ## Quick start
 
 ### Basic async usage
@@ -242,21 +233,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
-
-### Connection strings
-
-```python
-# SQL Server Authentication
-conn_str = "Server=localhost;Database=MyDB;User Id=sa;Password=MyPassword"
-
-# With specific port
-conn_str = "Server=localhost,1433;Database=MyDB;User Id=myuser;Password=mypass"
-
-# Azure SQL Database (encryption recommended)
-conn_str = "Server=tcp:myserver.database.windows.net,1433;Database=MyDB;User Id=myuser;Password=mypass;Encrypt=true"
-```
-
 
 ### Connection pooling
 

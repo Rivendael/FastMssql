@@ -5,7 +5,6 @@ Tests various edge cases, error conditions, and boundary scenarios.
 """
 
 import pytest
-import sys
 import os
 
 # Add the parent directory to Python path for development
@@ -13,7 +12,7 @@ import os
 try:
     from fastmssql import Connection, Parameter, Parameters
 except ImportError:
-    pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 # Test configuration
 TEST_CONNECTION_STRING = os.getenv(
@@ -225,7 +224,7 @@ class TestParametersIntegrationEdgeCases:
                 assert rows[0]['user_input'] == malicious_input
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_with_special_characters(self):
@@ -256,7 +255,7 @@ class TestParametersIntegrationEdgeCases:
                     assert rows[0]['special_input'] == special_str
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_with_very_long_strings(self):
@@ -279,7 +278,7 @@ class TestParametersIntegrationEdgeCases:
                 assert rows[0]['string_start'] == "xxxxxxxxxx"
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_with_null_in_different_positions(self):
@@ -313,7 +312,7 @@ class TestParametersIntegrationEdgeCases:
                     assert row['col3'] == case[2]
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
     async def test_parameters_mismatch_count(self):
@@ -338,7 +337,7 @@ class TestParametersIntegrationEdgeCases:
                     pass
                 
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.fail(f"Database not available: {e}")
 
 
 if __name__ == "__main__":

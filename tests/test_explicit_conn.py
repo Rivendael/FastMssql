@@ -1,12 +1,10 @@
 import pytest
 import os
-import asyncio
 
 try:
-    import fastmssql
     from fastmssql import Connection
 except ImportError:
-    pytest.skip("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
+    pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
 # Test configuration - adjust as needed
 TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
@@ -17,7 +15,7 @@ TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
 async def test_connect_and_disconnect_basic():
     """Ensure that connect() establishes and disconnect() closes the connection."""
     if not TEST_CONNECTION_STRING:
-        pytest.skip("No test connection string set")
+        pytest.fail("No test connection string set")
 
     conn = Connection(TEST_CONNECTION_STRING)
 
@@ -40,7 +38,7 @@ async def test_connect_and_disconnect_basic():
 async def test_double_connect_and_disconnect():
     """Ensure multiple connect/disconnect calls behave correctly (idempotent)."""
     if not TEST_CONNECTION_STRING:
-        pytest.skip("No test connection string set")
+        pytest.fail("No test connection string set")
 
     conn = Connection(TEST_CONNECTION_STRING)
 
@@ -60,7 +58,7 @@ async def test_double_connect_and_disconnect():
 async def test_query_requires_connect():
     """Verify that queries fail if connect() is not called first."""
     if not TEST_CONNECTION_STRING:
-        pytest.skip("No test connection string set")
+        pytest.fail("No test connection string set")
 
     conn = Connection(TEST_CONNECTION_STRING)
 

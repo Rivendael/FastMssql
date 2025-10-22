@@ -56,16 +56,16 @@ impl Parameter {
     /// Returns true for lists, tuples, sets, etc., but false for strings and bytes
     fn is_expandable_iterable(obj: &Bound<PyAny>) -> PyResult<bool> {
         // Check specific types that should be expanded
-        if obj.downcast::<PyList>().is_ok() {
+        if obj.cast::<PyList>().is_ok() {
             return Ok(true);
         }
-        if obj.downcast::<PyTuple>().is_ok() {
+        if obj.cast::<PyTuple>().is_ok() {
             return Ok(true);
         }
-        if obj.downcast::<pyo3::types::PySet>().is_ok() {
+        if obj.cast::<pyo3::types::PySet>().is_ok() {
             return Ok(true);
         }
-        if obj.downcast::<pyo3::types::PyFrozenSet>().is_ok() {
+        if obj.cast::<pyo3::types::PyFrozenSet>().is_ok() {
             return Ok(true);
         }
         
