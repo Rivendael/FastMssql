@@ -1,6 +1,6 @@
 [package]
 name = "fastmssql_core"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 
 [lib]
@@ -31,8 +31,8 @@ pyo3 = { version = "0.27.1", features = ["extension-module"] }
 pyo3-async-runtimes = { version = "0.27.0", features = ["tokio", "tokio-runtime"] }
 tokio = { version = "1.48.0", features = ["full"] }
 tiberius = { version = "0.12.3", features = ["chrono", "rustls"], default-features = false }
-tokio-util = { version = "0.7.16", features = ["compat"] }
-bb8 = "0.9"
+tokio-util = { version = "0.7.17", features = ["compat"] }
+bb8 = "0.9.1"
 bb8-tiberius = "0.16"
 futures = "0.3.31"
 serde = { version = "1.0.228", features = ["derive"] }
