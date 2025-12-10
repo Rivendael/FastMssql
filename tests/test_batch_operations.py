@@ -631,3 +631,350 @@ class TestBatchIntegration:
                     
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
+
+# --- Setup Utility ---
+async def setup_test_table_and_data(conn, table_name="test_fetch_table", num_rows=5):
+    """Drops, creates, and populates a test table."""
+    await conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+    await conn.execute(f"""
+        CREATE TABLE {table_name} (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            name NVARCHAR(50)
+        )
+    """)
+    
+    # Create an INSERT statement with the specified number of rows
+    values = []
+    names = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack']
+    for i in range(num_rows):
+        values.append(f"('{names[i]}')")
+    
+    insert_query = f"INSERT INTO {table_name} (name) VALUES {', '.join(values)}"
+    await conn.execute(insert_query)
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fetchone_only():
+    """Test sequential fetchone calls and exhaustion of the result set."""
+    TABLE_NAME = "test_fetchone_table"
+    NUM_ROWS = 3 # Use a smaller, specific number of rows
+    
+    async with Connection(TEST_CONNECTION_STRING) as conn:
+        await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
+        QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
+        
+        result = await conn.query(QUERY)
+
+        # 1. Fetch the first row
+        row1 = result.fetchone()
+        assert row1 is not None
+        assert row1['name'] == 'Alice'
+
+        # 2. Fetch the second row
+        row2 = result.fetchone()
+        assert row2 is not None
+        assert row2['name'] == 'Bob'
+
+        # 3. Fetch the third (last) row
+        row3 = result.fetchone()
+        assert row3 is not None
+        assert row3['name'] == 'Charlie'
+
+        # 4. Attempt to fetch after all rows are consumed (should be None)
+        row_none_1 = result.fetchone()
+        assert row_none_1 is None
+
+        # 5. Repeated attempt to fetch after exhaustion
+        row_none_2 = result.fetchone()
+        assert row_none_2 is None
+        
+        # Clean up
+        await conn.execute(f"DROP TABLE {TABLE_NAME}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fetchmany_size_variations():
+    """Test fetchmany with sizes: < remaining, = remaining, > remaining, and zero rows."""
+    TABLE_NAME = "test_fetchmany_table"
+    NUM_ROWS = 7
+    
+    async with Connection(TEST_CONNECTION_STRING) as conn:
+        await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
+        QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
+        
+        result = await conn.query(QUERY)
+        # Total rows: 7
+
+        # 1. fetchmany(3): Less than remaining (7)
+        rows_3 = result.fetchmany(3) 
+        assert len(rows_3) == 3
+        assert rows_3[0]['name'] == 'Alice'
+        assert rows_3[2]['name'] == 'Charlie'
+        # Remaining: 4 rows ('Diana', 'Eve', 'Frank', 'Grace')
+
+        # 2. fetchmany(2): Progressing the cursor
+        rows_2 = result.fetchmany(2)
+        assert len(rows_2) == 2
+        assert rows_2[0]['name'] == 'Diana'
+        assert rows_2[1]['name'] == 'Eve'
+        # Remaining: 2 rows ('Frank', 'Grace')
+
+        # 3. fetchmany(5): Greater than remaining (2)
+        rows_greater = result.fetchmany(5)
+        assert len(rows_greater) == 2
+        assert rows_greater[0]['name'] == 'Frank'
+        assert rows_greater[1]['name'] == 'Grace'
+        # Remaining: 0 rows
+
+        # 4. fetchmany(1): After exhaustion (should be empty list)
+        rows_empty = result.fetchmany(1)
+        assert rows_empty == []
+
+        # 5. fetchmany(0): Should return an empty list immediately
+        rows_zero = result.fetchmany(0)
+        assert rows_zero == []
+        
+        # Clean up
+        await conn.execute(f"DROP TABLE {TABLE_NAME}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fetchall_and_exhaustion():
+    """Test fetchall, ensuring it retrieves all rows and clears the cursor."""
+    TABLE_NAME = "test_fetchall_table"
+    NUM_ROWS = 4
+    
+    async with Connection(TEST_CONNECTION_STRING) as conn:
+        await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
+        QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
+        
+        result = await conn.query(QUERY)
+
+        # 1. Test fetchall
+        all_rows = result.fetchall()
+        assert len(all_rows) == NUM_ROWS
+        assert all_rows[0]['name'] == 'Alice'
+        assert all_rows[NUM_ROWS - 1]['name'] == 'Diana'
+
+        # 2. Test fetchone after fetchall (Should return None)
+        row_none = result.fetchone()
+        assert row_none is None
+
+        # 3. Test fetchmany after fetchall (Should return empty list)
+        rows_empty = result.fetchmany(2)
+        assert rows_empty == []
+        
+        # Clean up
+        await conn.execute(f"DROP TABLE {TABLE_NAME}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fetching_edge_cases():
+    """Test behavior on an empty result set and mixed fetch operations."""
+    TABLE_NAME = "test_fetch_edge_table"
+    NUM_ROWS = 5
+    
+    async with Connection(TEST_CONNECTION_STRING) as conn:
+        await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
+        
+        # --- Case A: Empty Result Set ---
+        EMPTY_QUERY = f"SELECT id, name FROM {TABLE_NAME} WHERE id < 0" # Guaranteed zero rows
+        result_empty = await conn.query(EMPTY_QUERY)
+
+        # 1. fetchone on empty
+        assert result_empty.fetchone() is None
+        
+        # 2. fetchmany on empty
+        assert result_empty.fetchmany(10) == []
+
+        # 3. fetchall on empty
+        assert result_empty.fetchall() == [] # Note: Should still be empty even after fetchone/fetchmany
+
+        # --- Case B: Mixing fetch methods ---
+        MIX_QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
+        result_mix = await conn.query(MIX_QUERY)
+        
+        # 4. fetchone (Alice)
+        assert result_mix.fetchone()['name'] == 'Alice'
+        
+        # 5. fetchmany (Bob, Charlie)
+        rows_mix = result_mix.fetchmany(2)
+        assert len(rows_mix) == 2
+        assert rows_mix[0]['name'] == 'Bob'
+        
+        # 6. fetchall on remaining (Diana, Eve)
+        remaining_rows = result_mix.fetchall()
+        assert len(remaining_rows) == 2
+        assert remaining_rows[0]['name'] == 'Diana'
+        assert remaining_rows[1]['name'] == 'Eve'
+        
+        # Clean up
+        await conn.execute(f"DROP TABLE {TABLE_NAME}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fetchone_fetchmany_fetchall_comprehensive():
+    """Test fetchone, fetchmany, and fetchall methods for query results, including edge cases."""
+    TABLE_NAME = "test_fetch_methods_comprehensive"
+    try:
+        async with Connection(TEST_CONNECTION_STRING) as conn:
+            # --- Setup: Create Table and Insert Data ---
+            await conn.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
+            await conn.execute(f"""
+                CREATE TABLE {TABLE_NAME} (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    name NVARCHAR(50)
+                )
+            """)
+            
+            # Insert 5 rows of test data
+            await conn.execute(f"""
+                INSERT INTO {TABLE_NAME} (name) VALUES 
+                ('Alice'), ('Bob'), ('Charlie'), ('Diana'), ('Eve')
+            """)
+            
+            # Query setup for fetching tests
+            QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
+            
+            # --- Test fetchone, fetchmany, and subsequent fetch calls ---
+            
+            result = await conn.query(QUERY)
+            
+            # 1. Test fetchone 
+            row1 = result.fetchone()
+            assert row1 is not None
+            assert row1['name'] == 'Alice'
+
+            # 2. Test fetchmany with size less than remaining rows (size=2)
+            rows_2 = result.fetchmany(2)
+            assert len(rows_2) == 2
+            assert rows_2[0]['name'] == 'Bob' # The 2nd row
+            assert rows_2[1]['name'] == 'Charlie' # The 3rd row
+
+            # Remaining rows are 'Diana', 'Eve' (2 rows left)
+
+            # 3. Test fetchmany with size greater than remaining rows (size=5)
+            rows_remaining = result.fetchmany(5)
+            assert len(rows_remaining) == 2 # Should only return the 2 remaining rows
+            assert rows_remaining[0]['name'] == 'Diana'
+            assert rows_remaining[1]['name'] == 'Eve'
+
+            # 4. Test fetchone after all rows are consumed (Should return None)
+            row_none_after_all = result.fetchone()
+            assert row_none_after_all is None
+
+            # 5. Test fetchmany after all rows are consumed (Should return empty list)
+            rows_empty_after_all = result.fetchmany(10)
+            assert rows_empty_after_all == []
+
+            # --- Test fetchall ---
+
+            # 6. Test fetchall on a fresh query
+            result_full = await conn.query(QUERY)
+            all_rows = result_full.fetchall()
+            assert len(all_rows) == 5
+            assert all_rows[0]['name'] == 'Alice'
+            assert all_rows[4]['name'] == 'Eve' # Check the last row
+
+            # 7. Test fetchone/fetchmany after fetchall (Should be empty)
+            row_none_after_fetchall = result_full.fetchone()
+            assert row_none_after_fetchall is None
+            rows_empty_after_fetchall = result_full.fetchmany(1)
+            assert rows_empty_after_fetchall == []
+
+            # --- Test on an empty result set (No rows in table) ---
+
+            # 8. Setup: Query a table with no matching data
+            result_empty = await conn.query(f"SELECT id, name FROM {TABLE_NAME} WHERE 1=0") 
+            
+            # 9. Test fetchone on empty result
+            row_empty_1 = result_empty.fetchone()
+            assert row_empty_1 is None
+
+            # 10. Test fetchmany on empty result
+            rows_empty_2 = result_empty.fetchmany(5)
+            assert rows_empty_2 == []
+
+            # 11. Test fetchall on empty result
+            result_empty_2 = await conn.query(f"SELECT id, name FROM {TABLE_NAME} WHERE 1=0")
+            all_rows_empty = result_empty_2.fetchall()
+            assert all_rows_empty == []
+
+            # --- Clean up ---
+            await conn.execute(f"DROP TABLE {TABLE_NAME}")
+
+    except Exception as e:
+        pytest.fail(f"Database not available or test failed unexpectedly: {e}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_readme_fetch_sequence_verification(test_connection_string):
+    """
+    Verifies the sequential synchronous fetching behavior (fetchone, fetchmany, fetchall)
+    on the Result object returned by conn.query(), using the available
+    'test_connection_string' fixture to establish the connection.
+    """
+    TABLE_NAME = "readme_fetch_test_table"
+    
+    # Establish connection using the available fixture
+    async with Connection(test_connection_string) as conn:
+        
+        # Using a simple try/finally block for cleanup within the test scope
+        try:
+            # --- Data Setup (Simulating the README's bulk_insert) ---
+            await conn.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
+            await conn.execute(f"""
+                CREATE TABLE {TABLE_NAME} (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    name NVARCHAR(50),
+                    age INT
+                )
+            """)
+            columns = ["name", "age"]
+            data_rows = [
+                ["Alice Johnson", 28],
+                ["Bob Smith", 32],
+                ["Carol Davis", 25],
+                ["David Lee", 35],
+                ["Eva Green", 29]
+            ]
+            # Use the correct table name
+            await conn.bulk_insert(TABLE_NAME, columns, data_rows)
+
+            # Query setup: ORDER BY age DESC (Expected order: David, Bob, Eva, Alice, Carol)
+            QUERY = f"SELECT name, age FROM {TABLE_NAME} ORDER BY age DESC"
+            
+            # Execute query to get the Result object
+            result = await conn.query(QUERY)
+            
+            # --- 1. fetchone() ---
+            row1 = result.fetchone()
+            assert row1 is not None
+            assert row1['name'] == 'David Lee'
+            
+            # --- 2. fetchmany(2) ---
+            rows_batch = result.fetchmany(2)
+            assert len(rows_batch) == 2
+            assert rows_batch[0]['name'] == 'Bob Smith'
+            assert rows_batch[1]['name'] == 'Eva Green'
+            
+            # --- 3. fetchall() ---
+            remaining_rows = result.fetchall()
+            assert len(remaining_rows) == 2
+            assert remaining_rows[0]['name'] == 'Alice Johnson'
+            assert remaining_rows[1]['name'] == 'Carol Davis'
+            
+            # --- 4. Exhaustion Checks ---
+            assert result.fetchone() is None
+            assert result.fetchmany(10) == []
+
+            # --- 5. Verify execute_batch logic (simple check) ---
+            commands = [
+                (f"UPDATE {TABLE_NAME} SET age = age + 1 WHERE name = @P1", ["Alice Johnson"]),
+            ]
+            affected_counts = await conn.execute_batch(commands)
+            assert affected_counts[0] == 1
+                
+        finally:
+            # Clean up
+            await conn.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")

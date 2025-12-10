@@ -140,7 +140,7 @@ async def test_memory_leak_detection():
         # Force final garbage collection - be more aggressive
         for _ in range(5):  # More aggressive GC
             gc.collect()
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1.0)
         
         post_gc_memory = memory_tracker.measure("post_gc")
         
