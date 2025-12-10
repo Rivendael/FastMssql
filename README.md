@@ -197,32 +197,46 @@ For high-throughput scenarios, use batch methods to reduce network round-trips:
 import asyncio
 from fastmssql import Connection
 
-async def main():
+async def main_fetching():
+    # Replace with your actual connection string
     async with Connection("Server=.;Database=MyDB;User Id=sa;Password=StrongPwd;") as conn:
-        # Bulk insert for fast data loading
+        
+        # --- 1. Prepare Data for Demonstration ---
         columns = ["name", "email", "age"]
         data_rows = [
             ["Alice Johnson", "alice@example.com", 28],
             ["Bob Smith", "bob@example.com", 32],
-            ["Carol Davis", "carol@example.com", 25]
+            ["Carol Davis", "carol@example.com", 25],
+            ["David Lee", "david@example.com", 35],
+            ["Eva Green", "eva@example.com", 29]
         ]
+        await conn.bulk_insert("users", columns, data_rows)
+
+        # --- 2. Execute Query and Retrieve the Result Object ---
+        print("\n--- Result Object Fetching (fetchone, fetchmany, fetchall) ---")
         
-        rows_inserted = await conn.bulk_insert("users", columns, data_rows)
-        print(f"Bulk inserted {rows_inserted} rows")
+        # The Result object is returned after the awaitable query executes.
+        result = await conn.query("SELECT name, age FROM users ORDER BY age DESC")
         
-        # Batch queries for multiple SELECT operations
-        queries = [
-            ("SELECT COUNT(*) as total FROM users WHERE age > @P1", [25]),
-            ("SELECT AVG(age) as avg_age FROM users", None),
-            ("SELECT name FROM users WHERE email LIKE @P1", ["%@example.com"])
-        ]
+        # fetchone(): Retrieves the next single row synchronously.
+        oldest_user = result.fetchone() 
+        if oldest_user:
+            print(f"1. fetchone: Oldest user is {oldest_user['name']} (Age: {oldest_user['age']})")
         
-        results = await conn.query_batch(queries)
-        print(f"Total users over 25: {results[0].rows()[0]['total']}")
-        print(f"Average age: {results[1].rows()[0]['avg_age']:.1f}")
-        print(f"Example.com users: {len(results[2].rows())}")
+        # fetchmany(2): Retrieves the next set of rows synchronously.
+        next_two_users = result.fetchmany(2)
+        print(f"2. fetchmany: Retrieved {len(next_two_users)} users: {[r['name'] for r in next_two_users]}.")
         
-        # Batch commands for multiple operations
+        # fetchall(): Retrieves all remaining rows synchronously.
+        remaining_users = result.fetchall()
+        print(f"3. fetchall: Retrieved all {len(remaining_users)} remaining users: {[r['name'] for r in remaining_users]}.")
+        
+        # Exhaustion Check: Subsequent calls return None/[]
+        print(f"4. Exhaustion Check (fetchone): {result.fetchone()}")
+        print(f"5. Exhaustion Check (fetchmany): {result.fetchmany(1)}")
+
+        # --- 3. Batch Commands for multiple operations ---
+        print("\n--- Batch Commands (execute_batch) ---")
         commands = [
             ("UPDATE users SET last_login = GETDATE() WHERE name = @P1", ["Alice Johnson"]),
             ("INSERT INTO user_logs (action, user_name) VALUES (@P1, @P2)", ["login", "Alice Johnson"])
@@ -230,8 +244,8 @@ async def main():
         
         affected_counts = await conn.execute_batch(commands)
         print(f"Updated {affected_counts[0]} users, inserted {affected_counts[1]} logs")
-
-asyncio.run(main())
+        
+asyncio.run(main_fetching())
 ```
 
 ### Connection pooling

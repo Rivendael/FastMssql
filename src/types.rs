@@ -324,6 +324,7 @@ pub struct PyFastExecutionResult {
     affected_rows: Option<u64>,
     // Shared column info for all rows in this result set
     column_info: Option<Arc<ColumnInfo>>,
+    pub index: usize,
 }
 
 #[pymethods]
@@ -373,7 +374,61 @@ impl PyFastExecutionResult {
             rows: None,
             affected_rows: Some(count),
             column_info: None,
+            index: 0,
         }
+    }
+    /// Fetch the next row or None
+    pub fn fetchone(&mut self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        if let Some(rows) = &self.rows {
+            if self.index >= rows.len() {
+                return Ok(None);
+            }
+            let row = &rows[self.index];
+            self.index += 1;
+            Ok(Some(Py::new(py, PyFastRow {
+                values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
+                column_info: Arc::clone(&row.column_info),
+            })?.into()))
+        } else {
+            Ok(None)
+        }
+    }
+    
+
+    /// Fetch up to `size` rows (default 1)
+    pub fn fetchmany(&mut self, py: Python<'_>, size: Option<usize>) -> PyResult<Vec<Py<PyAny>>> {
+        let n = size.unwrap_or(1);
+        let mut out = Vec::with_capacity(n);
+        if let Some(rows) = &self.rows {
+            for _ in 0..n {
+                if self.index >= rows.len() {
+                    break;
+                }
+                let row = &rows[self.index];
+                self.index += 1;
+                out.push(Py::new(py, PyFastRow {
+                    values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
+                    column_info: Arc::clone(&row.column_info),
+                })?.into());
+            }
+        }
+        Ok(out)
+    }
+
+    /// Fetch all remaining rows
+    pub fn fetchall(&mut self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        let mut out = Vec::new();
+        if let Some(rows) = &self.rows {
+            while self.index < rows.len() {
+                let row = &rows[self.index];
+                self.index += 1;
+                out.push(Py::new(py, PyFastRow {
+                    values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
+                    column_info: Arc::clone(&row.column_info),
+                })?.into()); // <-- HERE
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -385,6 +440,7 @@ impl PyFastExecutionResult {
                 rows: Some(Vec::new()),
                 affected_rows: None,
                 column_info: None,
+                index: 0,
             });
         }
 
@@ -409,6 +465,7 @@ impl PyFastExecutionResult {
             rows: Some(fast_rows),
             affected_rows: None,
             column_info: Some(column_info),
+            index: 0,
         })
     }
     
@@ -418,6 +475,7 @@ impl PyFastExecutionResult {
             rows: None,
             affected_rows: None,
             column_info: None,
+            index: 0,
         }
     }
     
@@ -458,6 +516,7 @@ impl PyFastExecutionResult {
             rows: None,
             affected_rows: Some(count),
             column_info: None,
+            index: 0,
         }
     }
-}
+    }
