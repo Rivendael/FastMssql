@@ -1,14 +1,8 @@
-# Dual License
+FastMSSQL is available under GPL-3.0
 
-FastMSSQL is available under your choice of two licenses:
-
-## Option 1: GNU General Public License v3.0 (GPL-3.0)
+## GNU General Public License v3.0 (GPL-3.0)
 
 **Free for open source projects.** If you distribute your application, you must make your entire application open source under GPL-3.0.
-
-## Option 2: Commercial License
-
-**Paid license for proprietary applications.** Allows you to keep your application closed source. Contact riverb514@gmail.com for commercial licensing.
 
 ---
 
@@ -633,43 +627,3 @@ Program, unless a warranty or assumption of liability accompanies a
 copy of the Program in return for a fee.
 
 ## END OF TERMS AND CONDITIONS
-
----
-
-# Commercial License Terms
-
-For organizations that prefer not to open source their applications under GPL-3.0, a commercial license is available.
-
-## Commercial License Grant
-
-Subject to the terms below and payment of applicable license fees, Riveranda grants you a non-exclusive, non-transferable license to use, modify, and distribute FastMSSQL in proprietary applications.
-
-## Commercial License Terms
-
-1. **License Scope**: Use FastMSSQL in proprietary, closed-source applications
-2. **Distribution**: Distribute applications containing FastMSSQL without source code disclosure
-3. **Modifications**: Modify FastMSSQL for internal use without sharing changes
-4. **Term**: Perpetual license for specified version
-5. **Support**: Commercial support available separately
-
-## Commercial License Fees
-
-Contact riverb514@gmail.com for pricing information based on:
-- Organization size
-- Distribution scale
-- Support requirements
-
-## Copyright Notice
-
-Copyright (c) 2025 Riveranda
-
-## Licensing Notes
-
-This dual licensing applies to the core FastMSSQL library and all associated source code, except for the following:
-
-- **Examples Directory**: All files in the `examples/` directory are licensed under the MIT License. See `examples/LICENSE` for full terms.
-- **Benchmarks Directory**: All files in the `benchmarks/` directory are licensed under the MIT License. See `licenses/MIT_LICENSE.txt` for full terms.
-
-## Contact
-
-For commercial licensing inquiries, contact: riverb514@gmail.com

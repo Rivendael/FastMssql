@@ -1,13 +1,12 @@
 # FastMSSQL ⚡
 
 FastMSSQL is an async Python library for Microsoft SQL Server (MSSQL), built in Rust.
-Unlike pyodbc or pymssql, it uses a native SQL Server client—no ODBC required—simplifying installation on Windows, macOS, and Linux.
+Unlike standard libaries, it uses a native SQL Server client—no ODBC required—simplifying installation on Windows, macOS, and Linux.
 Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastmssql)](https://pypi.org/project/fastmssql/)
-[![Python 3.14 Experimental](https://img.shields.io/badge/python-3.14%20experimental-yellow)](https://github.com/Rivendael/fastmssql)
 
-[![License](https://img.shields.io/badge/license-GPL--3.0%20or%20Commercial-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0%20-green)](LICENSE)
 
 [![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/build.yml)
 
@@ -57,7 +56,7 @@ pip install fastmssql
 
 ### Prerequisites
 
-- Python 3.9 to 3.14
+- Python 3.10 to 3.14
 - Microsoft SQL Server (any recent version)
 
 ## Quick start
@@ -349,10 +348,9 @@ Contributions are welcome. Please open an issue or PR.
 
 ## License
 
-FastMSSQL is dual‑licensed:
+FastMSSQL is licensed under GPL-3.0:
 
 - GPL‑3.0 (for open source projects)
-- Commercial (for proprietary use). Contact: riverb514@gmail.com
 
 See the [LICENSE](LICENSE) file for details.
 

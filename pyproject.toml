@@ -4,12 +4,12 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.4.2"
+version = "0.4.3"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
-requires-python = ">=3.9"
-license = { text = "GPL-3.0-or-later OR Commercial" }
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
 authors = [
     { name = "Riveranda", email = "riverb514@gmail.com" },
 ]
@@ -22,7 +22,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
