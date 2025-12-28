@@ -6,7 +6,7 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![Python Versions](https://img.shields.io/pypi/pyversions/fastmssql)](https://pypi.org/project/fastmssql/)
 
-[![License](https://img.shields.io/badge/license-GPL--3.0%20-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT%20-green)](LICENSE)
 
 [![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/build.yml)
 
@@ -330,7 +330,7 @@ asyncio.run(main())
 ## Examples & benchmarks
 
 - Examples: `examples/comprehensive_example.py`
-- Benchmarks: `benchmarks/` (MIT licensed)
+- Benchmarks: `benchmarks/`
 
 
 ## Troubleshooting
@@ -348,16 +348,9 @@ Contributions are welcome. Please open an issue or PR.
 
 ## License
 
-FastMSSQL is licensed under GPL-3.0:
-
-- GPL‑3.0 (for open source projects)
+FastMSSQL is licensed under MIT:
 
 See the [LICENSE](LICENSE) file for details.
-
-### Examples and Benchmarks
-
-- `examples/` and `benchmarks/` are under the MIT License. See files in `licenses/`.
-
 
 ## Third‑party attributions
 
