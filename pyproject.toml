@@ -4,14 +4,14 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.4.3"
+version = "0.4.4"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [
-    { name = "Riveranda", email = "riverb514@gmail.com" },
+    { name = "Rivendael", email = "riverb514@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -30,6 +30,10 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+keywords = [
+    "mssql", "sqlserver", "sql-server", "database", "async", "asynchronous", "rust", "python", "driver", "client", "pooling", "high-performance", "bulk-insert", "batch", "tokio", "bb8", "pyO3", "cross-platform", "windows", "linux", "macos", "ssl", "tls", "connection-pool", "data-ingestion", "low-latency"
 ]
 
 [project.urls]
