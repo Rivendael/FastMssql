@@ -25,6 +25,7 @@ class TestSslConfigThreadSafety:
             try:
                 ssl_config = SslConfig(
                     encryption_level=EncryptionLevel.Required,
+                    trust_server_certificate=True,
                     server_name=f"server{thread_id}.com"
                 )
                 results.append((thread_id, ssl_config))
@@ -51,7 +52,7 @@ class TestSslConfigThreadSafety:
         """Test accessing SSL config properties concurrently."""
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
-            trust_server_certificate=False,
+            trust_server_certificate=True,
             enable_sni=True,
             server_name="test.server.com"
         )
@@ -71,7 +72,7 @@ class TestSslConfigThreadSafety:
                     
                     # Verify consistency
                     assert encryption == "Required"
-                    assert trust is False
+                    assert trust is True
                     assert sni is True
                     assert server == "test.server.com"
                     assert ca_path is None
@@ -104,6 +105,7 @@ class TestSslConfigMemoryManagement:
         for i in range(1000):
             ssl_config = SslConfig(
                 encryption_level=EncryptionLevel.Required,
+                trust_server_certificate=True,
                 server_name=f"server{i}.com"
             )
             # Config goes out of scope here
@@ -126,7 +128,7 @@ class TestSslConfigMemoryManagement:
         ]
         
         for server_name in large_server_names:
-            ssl_config = SslConfig(server_name=server_name)
+            ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name=server_name)
             assert ssl_config.server_name == server_name
     
     def test_ssl_config_rapid_creation_and_destruction(self):
@@ -143,14 +145,14 @@ class TestSslConfigExtremeInputs:
         """Test SSL config with null bytes in server name."""
         server_name_with_nulls = "server\x00name.com"
         
-        ssl_config = SslConfig(server_name=server_name_with_nulls)
+        ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name=server_name_with_nulls)
         assert ssl_config.server_name == server_name_with_nulls
     
     def test_ssl_config_with_control_characters(self):
         """Test SSL config with control characters in server name."""
         server_name_with_controls = "server\t\n\rname.com"
         
-        ssl_config = SslConfig(server_name=server_name_with_controls)
+        ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name=server_name_with_controls)
         assert ssl_config.server_name == server_name_with_controls
     
     def test_ssl_config_with_very_long_paths(self):
@@ -205,7 +207,7 @@ class TestSslConfigExtremeInputs:
         ]
         
         for name in numeric_names:
-            ssl_config = SslConfig(server_name=name)
+            ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name=name)
             assert ssl_config.server_name == name
     
     def test_ssl_config_with_special_characters_server_names(self):
@@ -220,7 +222,7 @@ class TestSslConfigExtremeInputs:
         ]
         
         for name in special_names:
-            ssl_config = SslConfig(server_name=name)
+            ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name=name)
             assert ssl_config.server_name == name
 
 
@@ -238,7 +240,7 @@ class TestSslConfigErrorRecovery:
                 pass  # Expected
         
         # Now create a valid config
-        ssl_config = SslConfig(encryption_level=EncryptionLevel.Required)
+        ssl_config = SslConfig(encryption_level=EncryptionLevel.Required, trust_server_certificate=True)
         assert str(ssl_config.encryption_level) == "Required"
 
     def test_ssl_config_with_intermittent_file_access(self):
@@ -394,14 +396,14 @@ class TestSslConfigCompatibility:
         
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
-            trust_server_certificate=False,
+            trust_server_certificate=True,
             enable_sni=True,
             server_name="test.com"
         )
         
         # Test that all basic operations work
         assert str(ssl_config.encryption_level) == "Required"
-        assert ssl_config.trust_server_certificate is False
+        assert ssl_config.trust_server_certificate is True
         assert ssl_config.enable_sni is True
         assert ssl_config.server_name == "test.com"
         
@@ -425,7 +427,7 @@ class TestSslConfigCompatibility:
         ]
         
         for name in unicode_names:
-            ssl_config = SslConfig(server_name=name)
+            ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name=name)
             assert ssl_config.server_name == name
     
     def test_ssl_config_cross_platform_paths(self):
@@ -461,18 +463,18 @@ class TestSslConfigBoundaryConditions:
     def test_ssl_config_empty_string_inputs(self):
         """Test SSL config with empty string inputs."""
         # Empty server name should be allowed
-        ssl_config = SslConfig(server_name="")
+        ssl_config = SslConfig(encryption_level=EncryptionLevel.Off, server_name="")
         assert ssl_config.server_name == ""
     
     def test_ssl_config_none_inputs(self):
         """Test SSL config with None inputs."""
         ssl_config = SslConfig(
-            encryption_level=None,  # Should use default
+            encryption_level=EncryptionLevel.Off,  # Use Off to avoid trust requirement
             server_name=None,
             ca_certificate_path=None
         )
 
-        assert str(ssl_config.encryption_level) == "Required"  # Default
+        assert str(ssl_config.encryption_level) == "Off"  # Set to Off
         assert ssl_config.server_name is None
         assert ssl_config.ca_certificate_path is None
     
@@ -487,6 +489,7 @@ class TestSslConfigBoundaryConditions:
         assert ssl_config1.enable_sni is True
         
         ssl_config2 = SslConfig(
+            encryption_level=EncryptionLevel.Off,  # Use Off to avoid trust requirement
             trust_server_certificate=False,
             enable_sni=False
         )

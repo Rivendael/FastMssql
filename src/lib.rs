@@ -7,13 +7,18 @@ use pyo3::prelude::*;
 
 mod connection;
 mod types;
-mod parameters;
+mod py_parameters;
 mod pool_config;
 mod ssl_config;
+mod pool_manager;
+mod parameter_conversion;
+mod batch;
+mod parameter_utils;
+mod type_mapping;
 
 pub use connection::PyConnection;
 pub use types::{PyFastRow, PyFastExecutionResult};
-pub use parameters::{Parameter, Parameters};
+pub use py_parameters::{Parameter, Parameters};
 pub use pool_config::PyPoolConfig;
 pub use ssl_config::{PySslConfig, EncryptionLevel};
 

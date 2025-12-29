@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyDict, PyTuple};
+use crate::type_mapping;
 
 #[pyclass]
 pub struct Parameter {
@@ -18,7 +19,7 @@ impl Parameter {
     pub fn new(value: Py<PyAny>, sql_type: Option<String>) -> Self {
         let is_expanded = Python::attach(|py| {
             let value_bound = value.bind(py);
-            Parameter::is_expandable_iterable(&value_bound).unwrap_or(false)
+            type_mapping::is_expandable_iterable(&value_bound).unwrap_or(false)
         });
         
         Parameter {
@@ -50,29 +51,7 @@ impl Parameter {
     }
 }
 
-impl Parameter {
-    /// Check if a Python object is an iterable that should be expanded
-    /// 
-    /// Returns true for lists, tuples, sets, etc., but false for strings and bytes
-    fn is_expandable_iterable(obj: &Bound<PyAny>) -> PyResult<bool> {
-        // Check specific types that should be expanded
-        if obj.cast::<PyList>().is_ok() {
-            return Ok(true);
-        }
-        if obj.cast::<PyTuple>().is_ok() {
-            return Ok(true);
-        }
-        if obj.cast::<pyo3::types::PySet>().is_ok() {
-            return Ok(true);
-        }
-        if obj.cast::<pyo3::types::PyFrozenSet>().is_ok() {
-            return Ok(true);
-        }
-        
-        // Don't expand strings, bytes, or scalar values
-        Ok(false)
-    }
-}
+impl Parameter {}
 
 #[pyclass]
 pub struct Parameters {

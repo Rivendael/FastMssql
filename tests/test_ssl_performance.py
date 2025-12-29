@@ -34,7 +34,7 @@ class TestSslConfigPerformance:
         for i in range(num_iterations):
             ssl_config = SslConfig(
                 encryption_level=EncryptionLevel.Required,
-                trust_server_certificate=False,
+                trust_server_certificate=True,
                 enable_sni=True,
                 server_name=f"server{i}.com"
             )
@@ -83,7 +83,7 @@ class TestSslConfigPerformance:
         """Benchmark SSL config property access time."""
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
-            trust_server_certificate=False,
+            trust_server_certificate=True,
             enable_sni=True,
             server_name="test.server.com"
         )
@@ -192,6 +192,7 @@ class TestSslConfigConcurrentPerformance:
             for i in range(configs_per_thread):
                 ssl_config = SslConfig(
                     encryption_level=EncryptionLevel.Required,
+                    trust_server_certificate=True,
                     server_name=f"server{thread_id}_{i}.com"
                 )
                 configs.append(ssl_config)
@@ -224,7 +225,7 @@ class TestSslConfigConcurrentPerformance:
         """Benchmark concurrent property access."""
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
-            trust_server_certificate=False,
+            trust_server_certificate=True,
             enable_sni=True,
             server_name="test.server.com"
         )
@@ -280,6 +281,7 @@ class TestSslConfigConcurrentPerformance:
                 else:
                     ssl_config = SslConfig(
                         encryption_level=EncryptionLevel.Required,
+                        trust_server_certificate=True,
                         server_name=f"server{thread_id}_{i}.com"
                     )
                 
@@ -333,6 +335,7 @@ class TestSslConfigConcurrentPerformance:
         for i in range(100):
             ssl_configs.append(SslConfig(
                 encryption_level=EncryptionLevel.Required,
+                trust_server_certificate=True,
                 server_name=f"server{i}.com"
             ))
             ssl_configs.append(SslConfig.development())
@@ -380,6 +383,7 @@ class TestSslConfigConcurrentPerformance:
                 for i in range(configs_per_thread):
                     ssl_config = SslConfig(
                         encryption_level=EncryptionLevel.Required,
+                        trust_server_certificate=True,
                         server_name=f"t{thread_id}_s{i}.com"
                     )
                     configs.append(ssl_config)

@@ -51,8 +51,9 @@ dev = [
 
 [tool.maturin]
 features = ["pyo3/abi3-py310"]
-module-name = "fastmssql.fastmssql"
+module-name = "fastmssql"
 python-source = "python"
+include = ["fastmssql.pyi"]
 
 
 [tool.pytest.ini_options]
