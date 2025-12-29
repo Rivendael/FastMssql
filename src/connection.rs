@@ -794,10 +794,18 @@ impl PyConnection {
 
             let mut total_affected = 0u64;
 
-            let max_rows_per_batch = 2100 / col_count;
-            let batch_size_limit = max_rows_per_batch.min(1000);
+            // Hard limit for SQL Server is 2100. We use 2000 to be safe.
+            let max_params_per_request = 2000;
+            let rows_per_batch = max_params_per_request / col_count;
 
-            for chunk in flat_data.chunks(batch_size_limit * col_count) {
+            // Ensure we handle the case where a single row has > 2000 columns (unlikely but safe)
+            let rows_per_batch = if rows_per_batch == 0 {
+                1
+            } else {
+                rows_per_batch
+            };
+
+            for chunk in flat_data.chunks(rows_per_batch * col_count) {
                 let row_count_in_batch = chunk.len() / col_count;
 
                 let mut sql = format!(
@@ -805,12 +813,14 @@ impl PyConnection {
                     table_name,
                     columns.join(", ")
                 );
-
                 let mut value_groups = Vec::with_capacity(row_count_in_batch);
+
                 for r in 0..row_count_in_batch {
-                    let placeholders: Vec<String> = (1..=col_count)
-                        .map(|c| format!("@P{}", (r * col_count) + c))
-                        .collect();
+                    let mut placeholders = Vec::with_capacity(col_count);
+                    for c in 1..=col_count {
+                        // This resets to @P1, @P2... for every chunk sent to the server
+                        placeholders.push(format!("@P{}", (r * col_count) + c));
+                    }
                     value_groups.push(format!("({})", placeholders.join(",")));
                 }
                 sql.push_str(&value_groups.join(","));
