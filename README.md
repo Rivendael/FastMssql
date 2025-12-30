@@ -286,23 +286,42 @@ Default pool (if omitted): `max_size=10`, `min_idle=2`.
 
 ### SSL/TLS
 
+For `Required` and `LoginOnly` encryption, you must specify how to validate the server certificate:
+
+**Option 1: Trust Server Certificate** (development/self-signed certs):
 ```python
 from fastmssql import SslConfig, EncryptionLevel, Connection
 
 ssl = SslConfig(
-    encryption_level=EncryptionLevel.REQUIRED,  # or "Required"
-    trust_server_certificate=False,
+    encryption_level=EncryptionLevel.Required,
+    trust_server_certificate=True
 )
 
 async with Connection(conn_str, ssl_config=ssl) as conn:
     ...
 ```
 
+**Option 2: Custom CA Certificate** (production):
+```python
+from fastmssql import SslConfig, EncryptionLevel, Connection
+
+ssl = SslConfig(
+    encryption_level=EncryptionLevel.Required,
+    ca_certificate_path="/path/to/ca-cert.pem"
+)
+
+async with Connection(conn_str, ssl_config=ssl) as conn:
+    ...
+```
+
+**Note**: `trust_server_certificate` and `ca_certificate_path` are mutually exclusive.
+
 Helpers:
 
 - `SslConfig.development()` – encrypt, trust all (dev only)
 - `SslConfig.with_ca_certificate(path)` – use custom CA
 - `SslConfig.login_only()` / `SslConfig.disabled()` – legacy modes
+- `SslConfig.disabled()` – no encryption (not recommended)
 
 
 ## Performance tips

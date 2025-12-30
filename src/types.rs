@@ -1,10 +1,10 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyDict, PyType};
 use pyo3::prelude::*;
-use tiberius::Row;
+use tiberius::{Row, ColumnType};
 use ahash::AHashMap as HashMap;
 use std::sync::Arc;
-use chrono::{Datelike, Timelike};
+use crate::type_mapping;
 /// Holds shared column information for a result set to reduce memory usage.
 /// This is shared across all `PyFastRow` instances in a result set.
 #[derive(Debug)]
@@ -13,6 +13,8 @@ pub struct ColumnInfo {
     pub names: Vec<String>,
     /// Map from column name to its index for fast lookups
     pub map: HashMap<String, usize>,
+    /// Cached column types (one per column) to avoid repeated lookups during value conversion
+    pub column_types: Vec<ColumnType>,
 }
 
 /// Memory-optimized to share column metadata across all rows in a result set.
@@ -27,10 +29,10 @@ pub struct PyFastRow {
 impl PyFastRow {
     /// Create a new PyFastRow from a Tiberius row and shared column info
     pub fn from_tiberius_row(row: Row, py: Python, column_info: Arc<ColumnInfo>) -> PyResult<Self> {
-        // Eagerly convert all values in column order
+        // Eagerly convert all values in column order using cached column types
         let mut values = Vec::with_capacity(column_info.names.len());
         for i in 0..column_info.names.len() {
-            let value = Self::extract_value_direct(&row, i, py)?;
+            let value = Self::extract_value_direct(&row, i, column_info.column_types[i], py)?;
             values.push(value);
         }
         
@@ -40,205 +42,11 @@ impl PyFastRow {
         })
     }
 
-    /// Convert value directly from Tiberius to Python
+    /// Convert value directly from Tiberius to Python using centralized type mapping
+    /// Uses cached column type to avoid repeated lookups
     #[inline]
-    fn extract_value_direct(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
-        use tiberius::ColumnType;
-        
-        let col_type = row.columns()[index].column_type();
-        
-        match col_type {
-            ColumnType::Int4 => {
-                match row.try_get::<i32, usize>(index) {
-                    Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::NVarchar => {
-                match row.try_get::<&str, usize>(index) {
-                    Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Bit | ColumnType::Bitn => {
-                match row.try_get::<bool, usize>(index) {
-                    Ok(Some(val)) => {
-                        let int_val = if val { 1i32 } else { 0i32 };
-                        Ok(int_val.into_pyobject(py)?.into_any().unbind())
-                    },
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Int8 => {
-                match row.try_get::<i64, usize>(index) {
-                    Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Float8 => {
-                match row.try_get::<f64, usize>(index) {
-                    Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Float4 => {
-                match row.try_get::<f32, usize>(index) {
-                    Ok(Some(val)) => Ok((val as f64).into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Money => {
-                if let Ok(Some(val)) = row.try_get::<f64, usize>(index) {
-                    Ok(val.into_pyobject(py)?.into_any().unbind())
-                } else if let Ok(Some(val)) = row.try_get::<i64, usize>(index) {
-                    let money_val = (val as f64) / 10000.0; // SQL Server MONEY has 4 decimal places
-                    Ok(money_val.into_pyobject(py)?.into_any().unbind())
-                } else {
-                    Ok(py.None())
-                }
-            }
-            ColumnType::Money4 => {
-                if let Ok(Some(val)) = row.try_get::<f32, usize>(index) {
-                    Ok((val as f64).into_pyobject(py)?.into_any().unbind())
-                } else if let Ok(Some(val)) = row.try_get::<i32, usize>(index) {
-                    let money_val = (val as f64) / 10000.0; // SQL Server SMALLMONEY has 4 decimal places
-                    Ok(money_val.into_pyobject(py)?.into_any().unbind())
-                } else {
-                    Ok(py.None())
-                }
-            }
-            ColumnType::Int1 => {
-                match row.try_get::<u8, usize>(index) {
-                    Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Int2 => {
-                match row.try_get::<i16, usize>(index) {
-                    Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::BigVarChar | ColumnType::NChar | ColumnType::BigChar => {
-                match row.try_get::<&str, usize>(index) {
-                    Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::BigBinary | ColumnType::BigVarBin | ColumnType::Image => {
-                match row.try_get::<&[u8], usize>(index) {
-                    Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Decimaln | ColumnType::Numericn => {
-                // Try numeric first, fallback to f64
-                if let Ok(Some(numeric)) = row.try_get::<tiberius::numeric::Numeric, usize>(index) {
-                    let float_val: f64 = numeric.into();
-                    Ok(float_val.into_pyobject(py)?.into_any().unbind())
-                } else {
-                    Ok(py.None())
-                }
-            }
-            ColumnType::Datetime | ColumnType::Datetimen | ColumnType::Datetime2 => {
-                match row.try_get::<chrono::NaiveDateTime, usize>(index) {
-                    Ok(Some(val)) => {
-                        // Create Python datetime directly without string intermediate
-                        let dt = pyo3::types::PyDateTime::new(
-                            py,
-                            val.year(),
-                            val.month() as u8,
-                            val.day() as u8,
-                            val.hour() as u8,
-                            val.minute() as u8,
-                            val.second() as u8,
-                            val.nanosecond() / 1000,  // Convert nanoseconds to microseconds
-                            None,
-                        )?;
-                        Ok(dt.into_any().unbind())
-                    },
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Daten => {
-                match row.try_get::<chrono::NaiveDate, usize>(index) {
-                    Ok(Some(val)) => {
-                        // Create Python date directly without string intermediate
-                        let date = pyo3::types::PyDate::new(
-                            py,
-                            val.year(),
-                            val.month() as u8,
-                            val.day() as u8,
-                        )?;
-                        Ok(date.into_any().unbind())
-                    },
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Timen => {
-                match row.try_get::<chrono::NaiveTime, usize>(index) {
-                    Ok(Some(val)) => {
-                        // Create Python time directly without string intermediate
-                        let time = pyo3::types::PyTime::new(
-                            py,
-                            val.hour() as u8,
-                            val.minute() as u8,
-                            val.second() as u8,
-                            val.nanosecond() / 1000,  // Convert nanoseconds to microseconds
-                            None,
-                        )?;
-                        Ok(time.into_any().unbind())
-                    },
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::DatetimeOffsetn => {
-                match row.try_get::<chrono::DateTime<chrono::Utc>, usize>(index) {
-                    Ok(Some(val)) => {
-                        // Create Python datetime directly without string intermediate
-                        let dt = pyo3::types::PyDateTime::new(
-                            py,
-                            val.year(),
-                            val.month() as u8,
-                            val.day() as u8,
-                            val.hour() as u8,
-                            val.minute() as u8,
-                            val.second() as u8,
-                            val.nanosecond() / 1000,  // Convert nanoseconds to microseconds
-                            None, // For now, skip timezone to avoid conversion overhead
-                        )?;
-                        Ok(dt.into_any().unbind())
-                    },
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Guid => {
-                match row.try_get::<uuid::Uuid, usize>(index) {
-                    Ok(Some(val)) => {
-                        // Use most efficient UUID string conversion
-                        let uuid_str = format!("{}", val);
-                        Ok(uuid_str.into_pyobject(py)?.into_any().unbind())
-                    },
-                    _ => Ok(py.None())
-                }
-            }
-            ColumnType::Xml => {
-                if let Ok(Some(xml_data)) = row.try_get::<&tiberius::xml::XmlData, usize>(index) {
-                    // Convert to string efficiently - XmlData likely implements Display
-                    let xml_str = xml_data.to_string();
-                    Ok(xml_str.into_pyobject(py)?.into_any().unbind())
-                } else {
-                    Ok(py.None())
-                }
-            }
-            // Fallback to string for unknown types
-            _ => {
-                match row.try_get::<&str, usize>(index) {
-                    Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-                    _ => Ok(py.None())
-                }
-            }
-        }
+    fn extract_value_direct(row: &Row, index: usize, col_type: ColumnType, py: Python) -> PyResult<Py<PyAny>> {
+        type_mapping::sql_to_python(row, index, col_type, py)
     }
 }
 
@@ -327,20 +135,56 @@ pub struct PyFastExecutionResult {
     pub index: usize,
 }
 
+impl PyFastExecutionResult {
+    /// Build column info from the first row (helper to avoid duplication)
+    /// Caches both column names and types for efficient value conversion
+    #[inline]
+    fn build_column_info(first_row: &Row) -> Arc<ColumnInfo> {
+        let mut names = Vec::with_capacity(first_row.columns().len());
+        let mut column_types = Vec::with_capacity(first_row.columns().len());
+        let mut map = HashMap::with_capacity(first_row.columns().len());
+        
+        for (i, col) in first_row.columns().iter().enumerate() {
+            let name = col.name().to_string();
+            map.insert(name.clone(), i);
+            names.push(name);
+            column_types.push(col.column_type());
+        }
+        
+        Arc::new(ColumnInfo { names, map, column_types })
+    }
+
+    /// Convert a PyFastRow to a Python object (helper to avoid duplication)
+    #[inline]
+    fn convert_row_to_py(&self, py: Python, row: &PyFastRow) -> PyResult<Py<PyAny>> {
+        let result = PyFastRow {
+            values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
+            column_info: Arc::clone(&row.column_info),
+        };
+        Py::new(py, result).map(|p| p.into())
+    }
+}
+
 #[pymethods]
 impl PyFastExecutionResult {
-    /// Get the returned rows (if any) - zero-copy reference access
+    /// Get the returned rows (if any) - optimized with pre-allocation and single pass
     pub fn rows(&self, py: Python) -> PyResult<Py<PyAny>> {
         match &self.rows {
             Some(rows) => {
-                let py_list = pyo3::types::PyList::empty(py);
+                // Pre-allocate list with exact size to avoid resizing
+                let mut row_list = Vec::with_capacity(rows.len());
+                
+                // Batch convert all rows
                 for row in rows {
                     let py_row = Py::new(py, PyFastRow {
                         values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
                         column_info: Arc::clone(&row.column_info),
                     })?;
-                    py_list.append(py_row)?;
+                    row_list.push(py_row.into_any());
                 }
+                
+                // Create list once with all items
+                let py_list = pyo3::types::PyList::new(py, row_list)?;
                 Ok(py_list.into())
             }
             None => Ok(py.None())
@@ -385,10 +229,7 @@ impl PyFastExecutionResult {
             }
             let row = &rows[self.index];
             self.index += 1;
-            Ok(Some(Py::new(py, PyFastRow {
-                values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-                column_info: Arc::clone(&row.column_info),
-            })?.into()))
+            Ok(Some(self.convert_row_to_py(py, row)?))
         } else {
             Ok(None)
         }
@@ -406,10 +247,7 @@ impl PyFastExecutionResult {
                 }
                 let row = &rows[self.index];
                 self.index += 1;
-                out.push(Py::new(py, PyFastRow {
-                    values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-                    column_info: Arc::clone(&row.column_info),
-                })?.into());
+                out.push(self.convert_row_to_py(py, row)?);
             }
         }
         Ok(out)
@@ -422,10 +260,7 @@ impl PyFastExecutionResult {
             while self.index < rows.len() {
                 let row = &rows[self.index];
                 self.index += 1;
-                out.push(Py::new(py, PyFastRow {
-                    values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-                    column_info: Arc::clone(&row.column_info),
-                })?.into()); // <-- HERE
+                out.push(self.convert_row_to_py(py, row)?);
             }
         }
         Ok(out)
@@ -445,16 +280,7 @@ impl PyFastExecutionResult {
         }
 
         let first_row = &tiberius_rows[0];
-        let mut names = Vec::with_capacity(first_row.columns().len());
-        let mut map = HashMap::with_capacity(first_row.columns().len());
-        
-        for (i, col) in first_row.columns().iter().enumerate() {
-            let name = col.name().to_string();
-            map.insert(name.clone(), i);
-            names.push(name);
-        }
-        
-        let column_info = Arc::new(ColumnInfo { names, map });
+        let column_info = Self::build_column_info(first_row);
 
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
         for row in tiberius_rows.into_iter() {
@@ -489,16 +315,7 @@ impl PyFastExecutionResult {
 
         // Create shared column info from the first row - optimized to avoid cloning
         let first_row = &tiberius_rows[0];
-        let mut names = Vec::with_capacity(first_row.columns().len());
-        let mut map = HashMap::with_capacity(first_row.columns().len());
-        
-        for (i, col) in first_row.columns().iter().enumerate() {
-            let name = col.name().to_string();
-            map.insert(name.clone(), i);
-            names.push(name);
-        }
-        
-        let column_info = Arc::new(ColumnInfo { names, map });
+        let column_info = Self::build_column_info(first_row);
 
         let mut fast_rows = Vec::with_capacity(tiberius_rows.len());
         for row in tiberius_rows.into_iter() {

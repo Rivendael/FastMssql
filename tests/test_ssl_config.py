@@ -10,13 +10,33 @@ from fastmssql import SslConfig, EncryptionLevel
 
 def test_ssl_config_creation():
     """Test basic SSL config creation."""
-    # Default configuration
-    ssl_config = SslConfig()
-    assert str(ssl_config.encryption_level) == "Required"
+    # When encryption is Off, trust settings can be None
+    ssl_config = SslConfig(encryption_level=EncryptionLevel.Off)
+    assert str(ssl_config.encryption_level) == "Off"
     assert ssl_config.trust_server_certificate == False
     assert ssl_config.ca_certificate_path is None
-    assert ssl_config.enable_sni == True
-    assert ssl_config.server_name is None
+
+
+def test_ssl_config_required_encryption_needs_trust():
+    """Test that Required encryption requires trust settings."""
+    # Should fail: Required encryption but no trust settings
+    with pytest.raises(ValueError, match="requires either trust_server_certificate"):
+        SslConfig(
+            encryption_level=EncryptionLevel.Required,
+            trust_server_certificate=False,
+            ca_certificate_path=None
+        )
+
+
+def test_ssl_config_login_only_encryption_needs_trust():
+    """Test that LoginOnly encryption requires trust settings."""
+    # Should fail: LoginOnly encryption but no trust settings
+    with pytest.raises(ValueError, match="requires either trust_server_certificate"):
+        SslConfig(
+            encryption_level=EncryptionLevel.LoginOnly,
+            trust_server_certificate=False,
+            ca_certificate_path=None
+        )
 
 
 def test_ssl_config_development():
@@ -43,14 +63,14 @@ def test_ssl_config_custom():
     """Test custom SSL configuration."""
     ssl_config = SslConfig(
         encryption_level=EncryptionLevel.Required,
-        trust_server_certificate=False,
+        trust_server_certificate=True,
         ca_certificate_path=None,
         enable_sni=True,
         server_name="custom.server.com"
     )
     
     assert str(ssl_config.encryption_level) == "Required"
-    assert ssl_config.trust_server_certificate == False
+    assert ssl_config.trust_server_certificate == True
     assert ssl_config.ca_certificate_path is None
     assert ssl_config.enable_sni == True
     assert ssl_config.server_name == "custom.server.com"
@@ -87,10 +107,10 @@ def test_ssl_config_nonexistent_ca_certificate():
 
 def test_ssl_config_repr():
     """Test SSL config string representation."""
-    ssl_config = SslConfig()
+    ssl_config = SslConfig(encryption_level=EncryptionLevel.Off)
     repr_str = repr(ssl_config)
     assert "SslConfig" in repr_str
-    assert "Required" in repr_str
+    assert "Off" in repr_str
 
 
 if __name__ == "__main__":
@@ -100,6 +120,12 @@ if __name__ == "__main__":
     try:
         test_ssl_config_creation()
         print("✅ test_ssl_config_creation passed")
+        
+        test_ssl_config_required_encryption_needs_trust()
+        print("✅ test_ssl_config_required_encryption_needs_trust passed")
+        
+        test_ssl_config_login_only_encryption_needs_trust()
+        print("✅ test_ssl_config_login_only_encryption_needs_trust passed")
         
         test_ssl_config_development()
         print("✅ test_ssl_config_development passed")
