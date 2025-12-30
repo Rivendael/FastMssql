@@ -267,11 +267,11 @@ config = PoolConfig(
 Presets:
 
 ```python
-high  = PoolConfig.high_throughput()         # ~ max_size=50,  min_idle=15
+one.  = PoolConfig.one()                     # ~ max_size=1, min_idle=1
 low   = PoolConfig.low_resource()            # ~ max_size=3,   min_idle=1
 dev   = PoolConfig.development()             # ~ max_size=5,   min_idle=1
-maxp  = PoolConfig.maximum_performance()     # ~ max_size=100, min_idle=30
-ultra = PoolConfig.ultra_high_concurrency()  # ~ max_size=200, min_idle=50
+high  = PoolConfig.high_throughput()         # ~ max_size=50,  min_idle=15
+maxp  = PoolConfig.performance()             # ~ max_size=100, min_idle=30
 ```
 
 Apply to a connection:

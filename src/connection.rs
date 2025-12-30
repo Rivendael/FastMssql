@@ -172,25 +172,18 @@ impl PyConnection {
         query: String,
         parameters: Option<&Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        // OPTIMIZATION: Do ALL Python type checking/conversion synchronously while we have the GIL
-        // This moves GIL contention out of the async hot path entirely
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
 
-        // PERFORMANCE CRITICAL: Move Arc values directly without intermediate clones
-        // Arc::clone() is cheap, but the move statement doesn't clone - it transfers ownership
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
 
-        // Return the coroutine - now with ZERO GIL usage in async execution
         future_into_py(py, async move {
-            // PERFORMANCE CRITICAL: Optimized pool access with auto-initialization
             let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
 
             let execution_result =
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
 
-            // Convert results efficiently - acquire GIL only once per result set
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let fast_result = PyFastExecutionResult::with_rows(execution_result, py)?;
                 let py_result = Py::new(py, fast_result)?;
@@ -208,25 +201,18 @@ impl PyConnection {
         query: String,
         parameters: Option<&Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        // OPTIMIZATION: Do ALL Python type checking/conversion synchronously while we have the GIL
-        // This moves GIL contention out of the async hot path entirely
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
 
-        // PERFORMANCE CRITICAL: Move Arc values directly without intermediate clones
-        // Arc::clone() is cheap, but the move statement doesn't clone - it transfers ownership
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
 
-        // Return the coroutine - now with ZERO GIL usage in async execution
         future_into_py(py, async move {
-            // PERFORMANCE CRITICAL: Optimized pool access with auto-initialization
             let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
 
             let affected_count =
                 Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
 
-            // Convert results efficiently - acquire GIL only once per result set
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Ok(affected_count.into_pyobject(py)?.into_any().unbind())
             })
@@ -269,23 +255,20 @@ impl PyConnection {
     /// Enter context manager (async version)
     pub fn __aenter__<'p>(slf: &'p Bound<Self>, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let borrowed = slf.borrow();
-        // PERFORMANCE CRITICAL: Move Arc values directly without intermediate clones
         let pool = Arc::clone(&borrowed.pool);
         let config = Arc::clone(&borrowed.config);
         let pool_config = borrowed.pool_config.clone();
 
         future_into_py(py, async move {
-            // Check if already connected
             let is_connected = {
                 let pool_guard = pool.lock();
                 pool_guard.is_some()
-            }; // Lock released here
+            };
             
             if is_connected {
                 return Ok(());
             }
 
-            // Use the helper to ensure pool is initialized
             let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
             Ok(())
         })
@@ -302,11 +285,8 @@ impl PyConnection {
         let pool = self.pool.clone();
 
         future_into_py(py, async move {
-            // Properly close the pool when exiting the context manager
             let mut pool_guard = pool.lock();
             if let Some(pool_ref) = pool_guard.take() {
-                // Explicitly close all connections in the pool
-                // The pool will be dropped here, which should clean up all connections
                 drop(pool_ref);
             }
             Ok(())
@@ -315,23 +295,20 @@ impl PyConnection {
 
     /// Explicitly establish a connection (initialize the pool if not already connected)
     pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        // PERFORMANCE CRITICAL: Move Arc values directly without intermediate clones
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
 
         future_into_py(py, async move {
-            // Check if already connected
             let is_connected = {
                 let pool_guard = pool.lock();
                 pool_guard.is_some()
-            }; // Lock released here
+            };
             
             if is_connected {
-                return Ok(true); // Already connected
+                return Ok(true);
             }
 
-            // Use the helper to ensure pool is initialized
             let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
             Ok(true)
         })
@@ -344,17 +321,14 @@ impl PyConnection {
         future_into_py(py, async move {
             let mut pool_guard = pool.lock();
             if let Some(pool_ref) = pool_guard.take() {
-                // Dropping the pool here will close all connections
                 drop(pool_ref);
                 Ok(true)
             } else {
-                Ok(false) // Already disconnected
+                Ok(false)
             }
         })
     }
 
-    /// Execute multiple queries in a single batch operation for maximum performance
-    /// This method optimizes network round-trips by sending all queries together
     #[pyo3(signature = (queries))]
     pub fn query_batch<'p>(
         &self,

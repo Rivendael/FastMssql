@@ -36,30 +36,30 @@ class PoolConfig:
         idle_timeout_secs: Optional[int] = None,
         connection_timeout_secs: int = 30,
     ) -> None: ...
+
+    @staticmethod
+    def one() -> PoolConfig:
+        """Pre-configured pool for single-connection scenarios (max_size=1, min_idle=1)."""
+        ...
     
     @staticmethod
     def high_throughput() -> PoolConfig:
-        """Pre-configured pool for high-throughput scenarios (max_size=20, min_idle=5)."""
+        """Pre-configured pool for high-throughput scenarios (max_size=50, min_idle=15)."""
         ...
     
     @staticmethod
     def low_resource() -> PoolConfig:
-        """Pre-configured pool for resource-constrained environments (max_size=5, min_idle=1)."""
+        """Pre-configured pool for resource-constrained environments (max_size=3, min_idle=1)."""
         ...
     
     @staticmethod
     def development() -> PoolConfig:
-        """Pre-configured pool for development (max_size=10, min_idle=2)."""
+        """Pre-configured pool for development (max_size=5, min_idle=1)."""
         ...
     
     @staticmethod
-    def maximum_performance() -> PoolConfig:
-        """Pre-configured pool for maximum performance (max_size=50, min_idle=10)."""
-        ...
-    
-    @staticmethod
-    def ultra_high_concurrency() -> PoolConfig:
-        """Pre-configured pool for ultra-high concurrency scenarios (max_size=100, min_idle=20)."""
+    def performance() -> PoolConfig:
+        """Pre-configured pool for maximum performance (max_size=100, min_idle=30)."""
         ...
 
 class EncryptionLevel:
