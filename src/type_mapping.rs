@@ -3,7 +3,6 @@ use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PySet, PyFrozenSet};
 use tiberius::{Row, ColumnType};
 use chrono::{Datelike, Timelike};
 
-// OPTIMIZATION: Type handler functions to allow better inlining and branch prediction
 #[inline(always)]
 fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i32, usize>(index) {
@@ -227,8 +226,6 @@ fn handle_fallback(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 
 /// Convert a SQL Server column value from Tiberius to Python
 /// 
-/// Optimized dispatch table approach to reduce branch misprediction overhead.
-/// Each type is handled by a specialized inline function.
 pub fn sql_to_python(row: &Row, index: usize, col_type: ColumnType, py: Python) -> PyResult<Py<PyAny>> {
     // Dispatch to specialized handlers - better branch prediction than giant match
     match col_type {

@@ -25,28 +25,20 @@ pub async fn establish_pool(config: &Config, pool_config: &PyPoolConfig) -> PyRe
 
 /// Ensures the connection pool is initialized, either by reusing an existing one
 /// or creating a new one if needed.
-/// 
-/// Uses parking_lot::Mutex for efficient synchronization.
-/// Since initialization is rare, we drop the lock before async operations.
 pub async fn ensure_pool_initialized(
     pool: Arc<Mutex<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: &PyPoolConfig,
 ) -> PyResult<ConnectionPool> {
-    // Fast path: check if already initialized (no async needed, no lock held across await)
     {
         let pool_guard = pool.lock();
         if let Some(ref p) = *pool_guard {
-            // bb8::Pool is Arc-based, cloning is cheap, but we return the reference directly
             return Ok(p.clone());
         }
-    } // Lock released here
+    }
     
-    // Slow path: initialize pool if not already done
-    // We perform initialization without holding the lock
     let new_pool = establish_pool(&config, pool_config).await?;
     
-    // Now lock and store the result
     let mut pool_guard = pool.lock();
     // Double-check: another thread might have initialized while we were setting up
     if let Some(ref p) = *pool_guard {

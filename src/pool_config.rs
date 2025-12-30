@@ -15,7 +15,7 @@ pub struct PyPoolConfig {
 #[pymethods]
 impl PyPoolConfig {
     #[new]
-    #[pyo3(signature = (max_size = 10, min_idle = Some(2), max_lifetime_secs = None, idle_timeout_secs = None, connection_timeout_secs = Some(30)))]
+    #[pyo3(signature = (max_size = 10, min_idle = Some(1), max_lifetime_secs = None, idle_timeout_secs = None, connection_timeout_secs = Some(30)))]
     pub fn new(
         max_size: u32,
         min_idle: Option<u32>,
@@ -121,10 +121,22 @@ impl PyPoolConfig {
     #[staticmethod]
     pub fn high_throughput() -> Self {
         PyPoolConfig {
-            max_size: 50,           // Increased from 25
-            min_idle: Some(15),     // Fixed: was 35 > max_size!
-            max_lifetime: Some(std::time::Duration::from_secs(1800)), // 30 minutes
-            idle_timeout: Some(std::time::Duration::from_secs(600)), // 10 minutes
+            max_size: 50,
+            min_idle: Some(15),
+            max_lifetime: Some(std::time::Duration::from_secs(1800)),
+            idle_timeout: Some(std::time::Duration::from_secs(600)),
+            connection_timeout: Some(std::time::Duration::from_secs(30)),
+        }
+    }
+
+    /// Create a default configuration for single-connection scenarios
+    #[staticmethod]
+    pub fn one() -> Self {
+        PyPoolConfig {
+            max_size: 1,
+            min_idle: Some(1),
+            max_lifetime: Some(std::time::Duration::from_secs(1800)),
+            idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),
         }
     }
@@ -135,8 +147,8 @@ impl PyPoolConfig {
         PyPoolConfig {
             max_size: 3,
             min_idle: Some(1),
-            max_lifetime: Some(std::time::Duration::from_secs(900)), // 15 minutes
-            idle_timeout: Some(std::time::Duration::from_secs(300)), // 5 minutes
+            max_lifetime: Some(std::time::Duration::from_secs(900)),
+            idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(15)),
         }
     }
@@ -147,21 +159,21 @@ impl PyPoolConfig {
         PyPoolConfig {
             max_size: 5,
             min_idle: Some(1),
-            max_lifetime: Some(std::time::Duration::from_secs(600)), // 10 minutes
-            idle_timeout: Some(std::time::Duration::from_secs(180)), // 3 minutes
+            max_lifetime: Some(std::time::Duration::from_secs(600)),
+            idle_timeout: Some(std::time::Duration::from_secs(180)),
             connection_timeout: Some(std::time::Duration::from_secs(10)),
         }
     }
     
-    /// Create a configuration optimized for maximum performance (17000+ RPS)
+    /// Create a configuration optimized for maximum performance
     #[staticmethod]
-    pub fn maximum_performance() -> Self {
+    pub fn performance() -> Self {
         PyPoolConfig {
-            max_size: 100,          // Increased for ultra-high throughput
-            min_idle: Some(30),     // Keep more connections warm
-            max_lifetime: Some(std::time::Duration::from_secs(7200)), // 2 hours
-            idle_timeout: Some(std::time::Duration::from_secs(1800)), // 30 minutes
-            connection_timeout: Some(std::time::Duration::from_secs(10)), // Faster timeout
+            max_size: 100,
+            min_idle: Some(30),
+            max_lifetime: Some(std::time::Duration::from_secs(7200)),
+            idle_timeout: Some(std::time::Duration::from_secs(1800)),
+            connection_timeout: Some(std::time::Duration::from_secs(10)),
         }
     }
     
@@ -169,23 +181,11 @@ impl PyPoolConfig {
     #[staticmethod]
     pub fn load_test_worker() -> Self {
         PyPoolConfig {
-            max_size: 12,           // Slightly larger per worker
-            min_idle: Some(4),      // More warm connections
-            max_lifetime: Some(std::time::Duration::from_secs(3600)), // 1 hour
-            idle_timeout: Some(std::time::Duration::from_secs(600)), // 10 minutes
-            connection_timeout: Some(std::time::Duration::from_secs(5)), // Very fast timeout
-        }
-    }
-    
-    /// Create a configuration for ultra-high-concurrency scenarios
-    #[staticmethod]
-    pub fn ultra_high_concurrency() -> Self {
-        PyPoolConfig {
-            max_size: 200,          // Very high for extreme loads
-            min_idle: Some(50),     // Many warm connections
-            max_lifetime: Some(std::time::Duration::from_secs(3600)), // 1 hour
-            idle_timeout: Some(std::time::Duration::from_secs(900)), // 15 minutes
-            connection_timeout: Some(std::time::Duration::from_secs(15)),
+            max_size: 12,
+            min_idle: Some(4),
+            max_lifetime: Some(std::time::Duration::from_secs(3600)),
+            idle_timeout: Some(std::time::Duration::from_secs(600)),
+            connection_timeout: Some(std::time::Duration::from_secs(5)),
         }
     }
     
@@ -204,10 +204,10 @@ impl PyPoolConfig {
 impl Default for PyPoolConfig {
     fn default() -> Self {
         PyPoolConfig {
-            max_size: 10,  // Reduced from 75 for better test stability
-            min_idle: Some(2),  // Reduced from 25
-            max_lifetime: Some(std::time::Duration::from_secs(1800)), // 30 minutes
-            idle_timeout: Some(std::time::Duration::from_secs(300)), // 5 minutes (reduced from 10)
+            max_size: 10,
+            min_idle: Some(2),
+            max_lifetime: Some(std::time::Duration::from_secs(1800)),
+            idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),
         }
     }
