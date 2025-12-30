@@ -13,7 +13,6 @@ mod ssl_config;
 mod pool_manager;
 mod parameter_conversion;
 mod batch;
-mod parameter_utils;
 mod type_mapping;
 
 pub use connection::PyConnection;
