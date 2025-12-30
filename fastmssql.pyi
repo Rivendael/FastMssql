@@ -86,7 +86,7 @@ class SslConfig:
 
     def __init__(
         self,
-        encryption_level: str = "Disabled",
+        encryption_level: str = "Required",
         trust_server_certificate: bool = False,
         ca_certificate_path: Optional[str] = None,
     ) -> None: ...
