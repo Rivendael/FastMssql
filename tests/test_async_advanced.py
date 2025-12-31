@@ -25,6 +25,7 @@ except ImportError:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.timeout(10)
 async def test_async_truly_non_blocking(test_config: Config):
     """Test that async operations are truly non-blocking."""
     try:
@@ -294,6 +295,7 @@ async def test_concurrent_transaction_handling(test_config: Config):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.timeout(10)
 async def test_async_connection_limit_behavior(test_config: Config):
     """Test behavior when approaching connection limits."""
     try:
@@ -425,6 +427,7 @@ async def test_async_error_propagation_and_cleanup(test_config: Config):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.timeout(10)
 async def test_async_query_cancellation(test_config: Config):
     """Test that long-running async queries can be properly cancelled."""
     try:
@@ -665,6 +668,7 @@ async def test_connection_pool_statistics_and_configuration(test_config: Config)
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.timeout(5)
 async def test_connection_pool_reuse_efficiency(test_config: Config):
     """Test that connection pool efficiently reuses connections."""
     try:

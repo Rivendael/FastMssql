@@ -690,6 +690,7 @@ async def test_connection_with_explicit_port(test_config: Config):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)
 async def test_connection_with_invalid_port(test_config: Config):
     """Test connection with invalid/wrong port parameter fails appropriately."""
     # Create connection with wrong port using individual parameters
@@ -766,6 +767,7 @@ async def test_connection_with_application_name_and_port(test_config: Config):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)
 async def test_connection_with_instance_name(test_config: Config):
     """Test connection with instance_name parameter (if available on test server)."""
     try:
@@ -802,6 +804,7 @@ async def test_connection_with_instance_name(test_config: Config):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)
 async def test_connection_with_instance_and_application_name(test_config: Config):
     """Test connection with both instance_name and application_name parameters."""
     try:

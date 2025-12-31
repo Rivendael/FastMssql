@@ -56,6 +56,7 @@ class MemoryTracker:
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@pytest.mark.timeout(20)
 async def test_memory_leak_detection(test_config: Config):
     """Test for memory leaks in async operations."""
     try:
@@ -163,6 +164,7 @@ async def test_memory_leak_detection(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@ pytest.mark.timeout(20)
 async def test_connection_exhaustion_recovery(test_config: Config):
     """Test behavior when approaching connection limits and recovery."""
     try:
@@ -248,6 +250,7 @@ async def test_connection_exhaustion_recovery(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@ pytest.mark.timeout(10)
 async def test_rapid_connect_disconnect_stress(test_config: Config):
     """Stress test rapid connection creation and destruction."""
     try:
@@ -493,6 +496,7 @@ async def test_concurrent_query_stress(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@pytest.mark.timeout(5)
 async def test_large_result_set_stress(test_config: Config):
     """Stress test handling large result sets and memory."""
     try:
@@ -735,6 +739,7 @@ async def test_batch_operation_stress(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@pytest.mark.timeout(5)
 async def test_connection_pool_saturation(test_config: Config):
     """Test connection pool under saturation and recovery."""
     try:
@@ -836,6 +841,7 @@ async def test_connection_pool_saturation(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@pytest.mark.timeout(5)
 async def test_query_variety_stress(test_config: Config):
     """Stress test with varied query types and complexities."""
     try:
@@ -1066,6 +1072,7 @@ async def test_transaction_stress(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@pytest.mark.timeout(5)
 async def test_parameter_type_conversion_stress(test_config: Config):
     """Stress test aggressive parameter type conversions with edge cases."""
     try:
@@ -1310,6 +1317,7 @@ async def test_error_recovery_stress(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@pytest.mark.timeout(5)
 async def test_idle_connection_cleanup_stress(test_config: Config):
     """Stress test pool behavior with idle connections and reuse."""
     try:

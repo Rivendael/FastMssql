@@ -21,3 +21,7 @@ def test_config():
     """Get the test configuration object."""
     return Config()
 
+def pytest_configure(config):
+    """Configure pytest settings globally."""
+    config.option.timeout = 1
+

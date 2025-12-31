@@ -412,6 +412,7 @@ async def test_long_running_query(test_config: Config):
 @pytest.mark.stress
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.timeout(5)
 async def test_stress_mixed_operations(test_config: Config):
     """Stress test with mixed read/write operations."""
     try:
