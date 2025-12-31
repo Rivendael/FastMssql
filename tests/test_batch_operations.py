@@ -15,26 +15,23 @@ import pytest
 import time
 from datetime import datetime, timedelta
 import random
-import os
+
+from conftest import Config
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("FastMSSQL wrapper not available", allow_module_level=True)
+    pytest.fail("FastMSSQL wrapper not available")
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 
 class TestBatchQueries:
     """Test batch query execution functionality."""
     
     @pytest.mark.asyncio
-    async def test_basic_batch_queries(self):
+    async def test_basic_batch_queries(self, test_config: Config):
         """Test basic batch query execution."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Define batch queries
                 queries = [
                     ("SELECT 1 as test_value", None),
@@ -65,10 +62,10 @@ class TestBatchQueries:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_batch_queries_with_parameters(self):
+    async def test_batch_queries_with_parameters(self, test_config: Config):
         """Test batch queries with various parameter types."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 now = datetime.now()
                 
                 queries = [
@@ -103,10 +100,10 @@ class TestBatchQueries:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_empty_batch_queries(self):
+    async def test_empty_batch_queries(self, test_config: Config):
         """Test batch execution with empty query list."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 results = await conn.query_batch([])
                 assert len(results) == 0
                 
@@ -114,10 +111,10 @@ class TestBatchQueries:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_batch_query_error_handling(self):
+    async def test_batch_query_error_handling(self, test_config: Config):
         """Test error handling in batch queries."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Include an invalid query in the batch
                 queries = [
                     ("SELECT 1 as valid", None),
@@ -136,10 +133,10 @@ class TestBatchCommands:
     """Test batch command execution functionality."""
     
     @pytest.mark.asyncio
-    async def test_basic_batch_commands(self):
+    async def test_basic_batch_commands(self, test_config: Config):
         """Test basic batch command execution."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create test table
                 await conn.execute("DROP TABLE IF EXISTS batch_test")
                 await conn.execute("""
@@ -183,10 +180,10 @@ class TestBatchCommands:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_batch_commands_mixed_operations(self):
+    async def test_batch_commands_mixed_operations(self, test_config: Config):
         """Test batch commands with mixed operation types."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create test tables
                 await conn.execute("DROP TABLE IF EXISTS batch_test1")
                 await conn.execute("DROP TABLE IF EXISTS batch_test2")
@@ -232,10 +229,10 @@ class TestBulkInsert:
     """Test bulk insert functionality."""
     
     @pytest.mark.asyncio
-    async def test_basic_bulk_insert(self):
+    async def test_basic_bulk_insert(self, test_config: Config):
         """Test basic bulk insert operation."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create test table
                 await conn.execute("DROP TABLE IF EXISTS bulk_test")
                 await conn.execute("""
@@ -285,10 +282,10 @@ class TestBulkInsert:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_large_bulk_insert(self):
+    async def test_large_bulk_insert(self, test_config: Config):
         """Test bulk insert with larger dataset."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create test table
                 await conn.execute("DROP TABLE IF EXISTS bulk_large_test")
                 await conn.execute("""
@@ -334,10 +331,10 @@ class TestBulkInsert:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_bulk_insert_error_handling(self):
+    async def test_bulk_insert_error_handling(self, test_config: Config):
         """Test error handling in bulk insert operations."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Test with non-existent table
                 columns = ["name", "value"]
                 data_rows = [["test", 123]]
@@ -370,10 +367,10 @@ class TestBatchPerformance:
     """Test performance characteristics of batch operations."""
     
     @pytest.mark.asyncio
-    async def test_batch_vs_individual_queries(self):
+    async def test_batch_vs_individual_queries(self, test_config: Config):
         """Compare performance of batch vs individual queries."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Number of queries to test
                 num_queries = 10
                 
@@ -418,10 +415,10 @@ class TestBatchPerformance:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_batch_vs_individual_commands(self):
+    async def test_batch_vs_individual_commands(self, test_config: Config):
         """Compare performance of batch vs individual commands."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create test table
                 await conn.execute("DROP TABLE IF EXISTS perf_test")
                 await conn.execute("""
@@ -478,10 +475,10 @@ class TestBatchEdgeCases:
     """Test edge cases and error conditions for batch operations."""
     
     @pytest.mark.asyncio
-    async def test_batch_with_invalid_parameters(self):
+    async def test_batch_with_invalid_parameters(self, test_config: Config):
         """Test batch operations with invalid parameter formats."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Test invalid query format
                 with pytest.raises(ValueError):
                     await conn.query_batch([
@@ -498,10 +495,10 @@ class TestBatchEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_bulk_insert_edge_cases(self):
+    async def test_bulk_insert_edge_cases(self, test_config: Config):
         """Test bulk insert edge cases."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create test table
                 await conn.execute("DROP TABLE IF EXISTS edge_test")
                 await conn.execute("""
@@ -544,10 +541,10 @@ class TestBatchIntegration:
     """Integration tests for batch operations in real-world scenarios."""
     
     @pytest.mark.asyncio
-    async def test_etl_pipeline_simulation(self):
+    async def test_etl_pipeline_simulation(self, test_config: Config):
         """Simulate an ETL pipeline using batch operations."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Setup: Create source and target tables
                 await conn.execute("DROP TABLE IF EXISTS etl_source")
                 await conn.execute("DROP TABLE IF EXISTS etl_target")
@@ -654,12 +651,12 @@ async def setup_test_table_and_data(conn, table_name="test_fetch_table", num_row
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_fetchone_only():
+async def test_fetchone_only(test_config: Config):
     """Test sequential fetchone calls and exhaustion of the result set."""
     TABLE_NAME = "test_fetchone_table"
     NUM_ROWS = 3 # Use a smaller, specific number of rows
     
-    async with Connection(TEST_CONNECTION_STRING) as conn:
+    async with Connection(test_config.connection_string) as conn:
         await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
         QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
         
@@ -693,12 +690,12 @@ async def test_fetchone_only():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_fetchmany_size_variations():
+async def test_fetchmany_size_variations(test_config: Config):
     """Test fetchmany with sizes: < remaining, = remaining, > remaining, and zero rows."""
     TABLE_NAME = "test_fetchmany_table"
     NUM_ROWS = 7
     
-    async with Connection(TEST_CONNECTION_STRING) as conn:
+    async with Connection(test_config.connection_string) as conn:
         await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
         QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
         
@@ -739,12 +736,12 @@ async def test_fetchmany_size_variations():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_fetchall_and_exhaustion():
+async def test_fetchall_and_exhaustion(test_config: Config):
     """Test fetchall, ensuring it retrieves all rows and clears the cursor."""
     TABLE_NAME = "test_fetchall_table"
     NUM_ROWS = 4
     
-    async with Connection(TEST_CONNECTION_STRING) as conn:
+    async with Connection(test_config.connection_string) as conn:
         await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
         QUERY = f"SELECT id, name FROM {TABLE_NAME} ORDER BY id"
         
@@ -769,12 +766,12 @@ async def test_fetchall_and_exhaustion():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_fetching_edge_cases():
+async def test_fetching_edge_cases(test_config: Config):
     """Test behavior on an empty result set and mixed fetch operations."""
     TABLE_NAME = "test_fetch_edge_table"
     NUM_ROWS = 5
     
-    async with Connection(TEST_CONNECTION_STRING) as conn:
+    async with Connection(test_config.connection_string) as conn:
         await setup_test_table_and_data(conn, TABLE_NAME, NUM_ROWS)
         
         # --- Case A: Empty Result Set ---
@@ -813,11 +810,11 @@ async def test_fetching_edge_cases():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_fetchone_fetchmany_fetchall_comprehensive():
+async def test_fetchone_fetchmany_fetchall_comprehensive(test_config: Config):
     """Test fetchone, fetchmany, and fetchall methods for query results, including edge cases."""
     TABLE_NAME = "test_fetch_methods_comprehensive"
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # --- Setup: Create Table and Insert Data ---
             await conn.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
             await conn.execute(f"""
@@ -908,16 +905,16 @@ async def test_fetchone_fetchmany_fetchall_comprehensive():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_readme_fetch_sequence_verification(test_connection_string):
+async def test_readme_fetch_sequence_verification(test_config: Config):
     """
     Verifies the sequential synchronous fetching behavior (fetchone, fetchmany, fetchall)
     on the Result object returned by conn.query(), using the available
-    'test_connection_string' fixture to establish the connection.
+    'test_config' fixture to establish the connection.
     """
     TABLE_NAME = "readme_fetch_test_table"
     
     # Establish connection using the available fixture
-    async with Connection(test_connection_string) as conn:
+    async with Connection(test_config.connection_string) as conn:
         
         # Using a simple try/finally block for cleanup within the test scope
         try:

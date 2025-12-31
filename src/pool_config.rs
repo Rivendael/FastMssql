@@ -10,18 +10,22 @@ pub struct PyPoolConfig {
     pub max_lifetime: Option<std::time::Duration>,
     pub idle_timeout: Option<std::time::Duration>,
     pub connection_timeout: Option<std::time::Duration>,
+    pub test_on_check_out: Option<bool>,
+    pub retry_connection: Option<bool>
 }
 
 #[pymethods]
 impl PyPoolConfig {
     #[new]
-    #[pyo3(signature = (max_size = 10, min_idle = Some(1), max_lifetime_secs = None, idle_timeout_secs = None, connection_timeout_secs = Some(30)))]
+    #[pyo3(signature = (max_size = 10, min_idle = Some(1), max_lifetime_secs = None, idle_timeout_secs = None, connection_timeout_secs = Some(30), test_on_check_out = None, retry_connection = None))]
     pub fn new(
         max_size: u32,
         min_idle: Option<u32>,
         max_lifetime_secs: Option<u64>,
         idle_timeout_secs: Option<u64>,
         connection_timeout_secs: Option<u64>,
+        test_on_check_out: Option<bool>,
+        retry_connection: Option<bool>
     ) -> PyResult<Self> {
         if max_size == 0 {
             return Err(PyValueError::new_err("max_size must be greater than 0"));
@@ -39,6 +43,8 @@ impl PyPoolConfig {
             max_lifetime: max_lifetime_secs.map(std::time::Duration::from_secs),
             idle_timeout: idle_timeout_secs.map(std::time::Duration::from_secs),
             connection_timeout: connection_timeout_secs.map(std::time::Duration::from_secs),
+            test_on_check_out,
+            retry_connection,
         })
     }
     
@@ -116,6 +122,18 @@ impl PyPoolConfig {
     pub fn set_connection_timeout_secs(&mut self, value: Option<u64>) {
         self.connection_timeout = value.map(std::time::Duration::from_secs);
     }
+
+    /// Get whether to test connections on check out
+    #[getter]
+    pub fn test_on_check_out(&self) -> Option<bool> {
+        self.test_on_check_out
+    }
+
+    /// Get whether to retry failed connections
+    #[getter]
+    pub fn retry_connection(&self) -> Option<bool> {
+        self.retry_connection
+    }
     
     /// Create a default configuration for high-throughput scenarios
     #[staticmethod]
@@ -126,6 +144,8 @@ impl PyPoolConfig {
             max_lifetime: Some(std::time::Duration::from_secs(1800)),
             idle_timeout: Some(std::time::Duration::from_secs(600)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),
+            test_on_check_out: None,
+            retry_connection: None
         }
     }
 
@@ -138,6 +158,8 @@ impl PyPoolConfig {
             max_lifetime: Some(std::time::Duration::from_secs(1800)),
             idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),
+            test_on_check_out: None,
+            retry_connection: None
         }
     }
     
@@ -150,6 +172,8 @@ impl PyPoolConfig {
             max_lifetime: Some(std::time::Duration::from_secs(900)),
             idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(15)),
+            test_on_check_out: None,
+            retry_connection: None
         }
     }
     
@@ -162,6 +186,8 @@ impl PyPoolConfig {
             max_lifetime: Some(std::time::Duration::from_secs(600)),
             idle_timeout: Some(std::time::Duration::from_secs(180)),
             connection_timeout: Some(std::time::Duration::from_secs(10)),
+            test_on_check_out: None,
+            retry_connection: None
         }
     }
     
@@ -174,29 +200,21 @@ impl PyPoolConfig {
             max_lifetime: Some(std::time::Duration::from_secs(7200)),
             idle_timeout: Some(std::time::Duration::from_secs(1800)),
             connection_timeout: Some(std::time::Duration::from_secs(10)),
-        }
-    }
-    
-    /// Create a configuration optimized for multi-worker load testing
-    #[staticmethod]
-    pub fn load_test_worker() -> Self {
-        PyPoolConfig {
-            max_size: 12,
-            min_idle: Some(4),
-            max_lifetime: Some(std::time::Duration::from_secs(3600)),
-            idle_timeout: Some(std::time::Duration::from_secs(600)),
-            connection_timeout: Some(std::time::Duration::from_secs(5)),
+            test_on_check_out: None,
+            retry_connection: None
         }
     }
     
     fn __repr__(&self) -> String {
         format!(
-            "PoolConfig(max_size={}, min_idle={:?}, max_lifetime_secs={:?}, idle_timeout_secs={:?}, connection_timeout_secs={:?})",
+            "PoolConfig(max_size={}, min_idle={:?}, max_lifetime_secs={:?}, idle_timeout_secs={:?}, connection_timeout_secs={:?}, test_on_check_out={:?}, retry_connection={:?})",
             self.max_size,
             self.min_idle,
             self.max_lifetime_secs(),
             self.idle_timeout_secs(),
-            self.connection_timeout_secs()
+            self.connection_timeout_secs(),
+            self.test_on_check_out,
+            self.retry_connection
         )
     }
 }
@@ -209,6 +227,8 @@ impl Default for PyPoolConfig {
             max_lifetime: Some(std::time::Duration::from_secs(1800)),
             idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),
+            test_on_check_out: None,
+            retry_connection: None
         }
     }
 }

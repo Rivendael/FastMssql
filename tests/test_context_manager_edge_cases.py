@@ -7,23 +7,20 @@ including nested contexts, exception handling, and resource cleanup.
 
 import pytest
 import asyncio
-import os
+
+from conftest import Config
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
-
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_basic():
+async def test_context_manager_basic(test_config: Config):
     """Test basic async context manager usage."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as value")
             assert result.has_rows()
             assert result.rows()[0]['value'] == 1
@@ -33,10 +30,10 @@ async def test_context_manager_basic():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_multiple_operations():
+async def test_context_manager_multiple_operations(test_config: Config):
     """Test multiple queries within same context."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # First query
             result1 = await conn.query("SELECT 1 as val")
             assert result1.rows()[0]['val'] == 1
@@ -54,11 +51,11 @@ async def test_context_manager_multiple_operations():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_exception_in_block():
+async def test_context_manager_exception_in_block(test_config: Config):
     """Test that exceptions within context are propagated."""
     try:
         with pytest.raises(Exception):
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 await conn.query("SELECT 1")
                 raise ValueError("Test exception")
     except Exception as e:
@@ -67,10 +64,10 @@ async def test_context_manager_exception_in_block():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_sql_error():
+async def test_context_manager_sql_error(test_config: Config):
     """Test that SQL errors are handled within context."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Valid query before error
             result = await conn.query("SELECT 1 as val")
             assert result.rows()[0]['val'] == 1
@@ -88,10 +85,10 @@ async def test_context_manager_sql_error():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_exit_cleanup():
+async def test_context_manager_exit_cleanup(test_config: Config):
     """Test that context manager properly cleans up resources."""
     try:
-        conn = Connection(TEST_CONNECTION_STRING)
+        conn = Connection(test_config.connection_string)
         
         # Before context
         assert not await conn.is_connected()
@@ -112,10 +109,10 @@ async def test_context_manager_exit_cleanup():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_sequential_contexts():
+async def test_multiple_sequential_contexts(test_config: Config):
     """Test using connection in multiple sequential context managers."""
     try:
-        conn = Connection(TEST_CONNECTION_STRING)
+        conn = Connection(test_config.connection_string)
         
         # First context
         async with conn:
@@ -137,7 +134,7 @@ async def test_multiple_sequential_contexts():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_concurrent_context_managers():
+async def test_concurrent_context_managers(test_config: Config):
     """Test multiple concurrent connections with context managers."""
     try:
         async def run_query(conn_str, query_val):
@@ -147,9 +144,9 @@ async def test_concurrent_context_managers():
         
         # Run multiple queries concurrently
         results = await asyncio.gather(
-            run_query(TEST_CONNECTION_STRING, 1),
-            run_query(TEST_CONNECTION_STRING, 2),
-            run_query(TEST_CONNECTION_STRING, 3),
+            run_query(test_config.connection_string, 1),
+            run_query(test_config.connection_string, 2),
+            run_query(test_config.connection_string, 3),
         )
         
         assert results == [1, 2, 3]
@@ -159,10 +156,10 @@ async def test_concurrent_context_managers():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_nested_context_managers_same_connection():
+async def test_nested_context_managers_same_connection(test_config: Config):
     """Test nested context managers with the same connection object."""
     try:
-        conn = Connection(TEST_CONNECTION_STRING)
+        conn = Connection(test_config.connection_string)
         
         async with conn:
             result1 = await conn.query("SELECT 1 as val")
@@ -183,10 +180,10 @@ async def test_nested_context_managers_same_connection():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_with_execute():
+async def test_context_manager_with_execute(test_config: Config):
     """Test context manager with execute (non-SELECT) operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##test_ctx', 'U') IS NOT NULL
@@ -222,10 +219,10 @@ async def test_context_manager_with_execute():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_long_operation():
+async def test_context_manager_long_operation(test_config: Config):
     """Test context manager with longer operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Simulate a longer operation
             result = await conn.query("""
                 SELECT 1 as val
@@ -248,10 +245,10 @@ async def test_context_manager_long_operation():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_pool_stats():
+async def test_context_manager_pool_stats(test_config: Config):
     """Test accessing pool stats within context manager."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Get pool stats
             stats = await conn.pool_stats()
             assert stats is not None
@@ -267,10 +264,10 @@ async def test_context_manager_pool_stats():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_is_connected():
+async def test_context_manager_is_connected(test_config: Config):
     """Test is_connected() method within context manager."""
     try:
-        conn = Connection(TEST_CONNECTION_STRING)
+        conn = Connection(test_config.connection_string)
         
         # Before context
         is_connected = await conn.is_connected()
@@ -287,10 +284,10 @@ async def test_context_manager_is_connected():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_reentry_behavior():
+async def test_context_manager_reentry_behavior(test_config: Config):
     """Test behavior when re-entering context after exception."""
     try:
-        conn = Connection(TEST_CONNECTION_STRING)
+        conn = Connection(test_config.connection_string)
         
         # First context with error
         try:
@@ -309,10 +306,10 @@ async def test_context_manager_reentry_behavior():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_with_batch_operations():
+async def test_context_manager_with_batch_operations(test_config: Config):
     """Test context manager with batch operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_test', 'U') IS NOT NULL

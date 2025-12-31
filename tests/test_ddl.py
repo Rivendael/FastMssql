@@ -5,23 +5,20 @@ This module tests CREATE, ALTER, DROP operations for various database objects.
 """
 
 import pytest
-import os
+
+from conftest import Config
 
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_table():
+async def test_create_drop_table(test_config: Config):
     """Test creating and dropping tables."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             await conn.execute("DROP TABLE IF EXISTS test_ddl_table")
             # Create table
             create_sql = """
@@ -61,10 +58,10 @@ async def test_create_drop_table():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_alter_table():
+async def test_alter_table(test_config: Config):
     """Test altering table structure."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             await conn.execute("DROP TABLE IF EXISTS test_alter_table")
             # Create initial table
             await conn.execute("""
@@ -101,10 +98,10 @@ async def test_alter_table():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_index():
+async def test_create_drop_index(test_config: Config):
     """Test creating and dropping indexes."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             try:
                 await conn.execute("DROP TABLE IF EXISTS test_index_table")
@@ -165,10 +162,10 @@ async def test_create_drop_index():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_view():
+async def test_create_drop_view(test_config: Config):
     """Test creating and dropping views."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test if views are supported by trying to create a simple one
             try:
                 await conn.execute("CREATE VIEW test_feature_check AS SELECT 1 as test_col")
@@ -234,10 +231,10 @@ async def test_create_drop_view():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_procedure():
+async def test_create_drop_procedure(test_config: Config):
     """Test creating and dropping stored procedures."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test if procedures are supported by trying to create a simple one
             try:
                 await conn.execute("CREATE PROCEDURE test_feature_check AS BEGIN SELECT 1 END")
@@ -293,10 +290,10 @@ async def test_create_drop_procedure():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_function():
+async def test_create_drop_function(test_config: Config):
     """Test creating and dropping user-defined functions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test if functions are supported by trying to create a simple one
             try:
                 await conn.execute("CREATE FUNCTION test_feature_check() RETURNS INT AS BEGIN RETURN 1 END")
@@ -341,10 +338,10 @@ async def test_create_drop_function():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_constraints():
-    """Test creating and dropping constraints."""
+async def test_constraints(test_config: Config):
+    """Test creating tables with various constraints."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create table with constraints
             await conn.execute("""
                 CREATE TABLE test_constraints (
@@ -393,10 +390,11 @@ async def test_constraints():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_ddl_operations():
+@pytest.mark.asyncio
+async def test_async_ddl_operations(test_config: Config):
     """Test DDL operations with async connections."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             await conn.execute("DROP TABLE IF EXISTS test_async_ddl")
             await conn.execute("""
                 CREATE TABLE test_async_ddl (
@@ -424,10 +422,10 @@ async def test_async_ddl_operations():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_schema_operations():
+async def test_schema_operations(test_config: Config):
     """Test schema creation and management."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test if schemas are supported by trying to create a simple one
             try:
                 await conn.execute("CREATE SCHEMA test_feature_check")

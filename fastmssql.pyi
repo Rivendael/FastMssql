@@ -10,6 +10,13 @@ High-performance Rust-backed Python driver for SQL Server with:
 """
 
 from typing import Any, List, Dict, Optional, Tuple, Coroutine
+try:
+    from enum import StrEnum
+except ImportError:
+    # Python 3.10 compatibility: StrEnum was added in Python 3.11
+    from enum import Enum
+    class StrEnum(str, Enum):
+        pass
 
 class PoolConfig:
     """
@@ -21,12 +28,17 @@ class PoolConfig:
         max_lifetime_secs: Maximum lifetime of a connection in seconds (default: None = unlimited)
         idle_timeout_secs: Timeout for idle connections in seconds (default: None = no timeout)
         connection_timeout_secs: Timeout for acquiring a connection in seconds (default: 30)
+        test_on_check_out: Whether to test connections when checking out (default: None)
+        retry_connection: Whether to retry connection attempts (default: None)
     """
+
     max_size: int
-    min_idle: int
+    min_idle: Optional[int]
     max_lifetime_secs: Optional[int]
     idle_timeout_secs: Optional[int]
-    connection_timeout_secs: int
+    connection_timeout_secs: Optional[int]
+    test_on_check_out: Optional[bool]
+    retry_connection: Optional[bool]
 
     def __init__(
         self,
@@ -35,6 +47,8 @@ class PoolConfig:
         max_lifetime_secs: Optional[int] = None,
         idle_timeout_secs: Optional[int] = None,
         connection_timeout_secs: int = 30,
+        test_on_check_out: Optional[bool] = None,
+        retry_connection: Optional[bool] = None,
     ) -> None: ...
 
     @staticmethod
@@ -62,7 +76,7 @@ class PoolConfig:
         """Pre-configured pool for maximum performance (max_size=100, min_idle=30)."""
         ...
 
-class EncryptionLevel:
+class EncryptionLevel(StrEnum):
     """SQL Server encryption level constants."""
     Disabled: str
     """No encryption."""
@@ -70,6 +84,13 @@ class EncryptionLevel:
     """Encrypt only during login."""
     Required: str
     """Full encryption required."""
+
+class ApplicationIntent(StrEnum):
+    """SQL Server application intent constants."""
+    READ_ONLY: str
+    """Read-only workload."""
+    READ_WRITE: str
+    """Read-write workload."""
 
 class SslConfig:
     """
@@ -79,16 +100,22 @@ class SslConfig:
         encryption_level: Level of encryption (Disabled, LoginOnly, or Required)
         trust_server_certificate: Whether to trust the server certificate without validation
         ca_certificate_path: Path to CA certificate file for certificate validation
+        enable_sni: Enable Server Name Indication (SNI) for TLS handshake (default: True)
+        server_name: Custom server name for certificate validation (optional)
     """
     encryption_level: str
     trust_server_certificate: bool
     ca_certificate_path: Optional[str]
-
+    enable_sni: bool
+    server_name: Optional[str]
+    
     def __init__(
         self,
         encryption_level: str = "Required",
         trust_server_certificate: bool = False,
         ca_certificate_path: Optional[str] = None,
+        enable_sni: bool = True,
+        server_name: Optional[str] = None,
     ) -> None: ...
     
     @staticmethod
@@ -187,12 +214,112 @@ class FastExecutionResult:
         ...
 
 class Parameter:
-    """Parameter object for SQL queries. Use in parameter lists for parameterized queries."""
-    pass
+    """
+    Parameter object for SQL queries with optional type hints.
+    
+    Use in parameter lists for parameterized queries. Parameters can specify explicit SQL types
+    for automatic conversion and validation.
+    
+    Attributes:
+        value: The parameter value (any Python type that can be converted to SQL)
+        sql_type: Optional SQL Server type name (e.g., 'INT', 'VARCHAR', 'DATETIME2')
+        is_expanded: Whether this parameter is an iterable for IN clause expansion
+    """
+    
+    value: Any
+    sql_type: Optional[str]
+    is_expanded: bool
+    
+    def __init__(
+        self,
+        value: Any,
+        sql_type: Optional[str] = None,
+    ) -> None:
+        """
+        Create a new parameter with optional type specification.
+        
+        Args:
+            value: The parameter value
+            sql_type: Optional SQL Server type name for explicit type conversion
+        """
+        ...
 
 class Parameters:
-    """Collection of parameters for SQL queries."""
-    pass
+    """
+    Collection of parameters for SQL queries with positional and named support.
+    
+    Supports both positional parameters (@P1, @P2, etc.) and named parameters (@name, @id, etc.).
+    Can be constructed with positional and keyword arguments, with optional type specifications.
+    
+    Attributes:
+        *args: List of Parameter objects in positional order
+        **kwargs: Dictionary of named Parameter objects
+    """
+    
+    positional: List[Parameter]
+    named: Dict[str, Parameter]
+    
+    def __init__(
+        self,
+        *args: Any | Parameter,
+        **kwargs: Any | Parameter,
+    ) -> None:
+        """
+        Create a new Parameters collection.
+        
+        Args:
+            *args: Positional parameters (raw values or Parameter objects)
+            **kwargs: Named parameters (raw values or Parameter objects with keys as names)
+        """
+        ...
+    
+    def add(
+        self,
+        value: Any,
+        sql_type: Optional[str] = None,
+    ) -> Parameters:
+        """
+        Add a positional parameter and return self for chaining.
+        
+        Args:
+            value: The parameter value
+            sql_type: Optional SQL Server type name
+            
+        Returns:
+            Self for method chaining
+        """
+        ...
+    
+    def set(
+        self,
+        key: str,
+        value: Any,
+        sql_type: Optional[str] = None,
+    ) -> Parameters:
+        """
+        Add or update a named parameter and return self for chaining.
+        
+        Args:
+            key: Parameter name
+            value: The parameter value
+            sql_type: Optional SQL Server type name
+            
+        Returns:
+            Self for method chaining
+        """
+        ...
+    
+    def to_list(self) -> List[Any]:
+        """Convert positional parameters to a list of values."""
+        ...
+    
+    def __len__(self) -> int:
+        """Get total number of parameters (positional + named)."""
+        ...
+    
+    def __repr__(self) -> str:
+        """Get string representation of parameters."""
+        ...
 
 class Connection:
     """
@@ -226,7 +353,10 @@ class Connection:
         password: Optional[str] = None,
         pool_config: Optional[PoolConfig] = None,
         ssl_config: Optional[SslConfig] = None,
-        trusted_connection: Optional[bool] = None,
+        application_intent: Optional[ApplicationIntent | str] = None,
+        port: Optional[int] = None,
+        instance_name: Optional[str] = None,
+        application_name: Optional[str] = None,
     ) -> None:
         """
         Initialize a new SQL Server connection.
@@ -235,11 +365,14 @@ class Connection:
             connection_string: Complete ADO.NET-style connection string (takes precedence)
             server: SQL Server hostname or IP address
             database: Database name
-            username: Username for SQL authentication
+            username: Username for SQL authentication (required when using individual parameters)
             password: Password for SQL authentication
             pool_config: Connection pool configuration
             ssl_config: SSL/TLS configuration
-            trusted_connection: Use Windows authentication (if supported)
+            application_intent: Sets ApplicationIntent to "ReadOnly" or "ReadWrite" (default: ReadWrite)
+            port: TCP port number (default: 1433)
+            instance_name: Named instance of SQL Server
+            application_name: Application name for SQL Server connection
         """
         ...
     

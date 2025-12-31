@@ -9,32 +9,22 @@ import os
 import pytest
 import pytest_asyncio
 
+from conftest import Config
+
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
-
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-
-
-@pytest_asyncio.fixture
-async def db_connection():
-    """Fixture providing a database connection."""
-    if not TEST_CONNECTION_STRING:
-        pytest.skip("FASTMSSQL_TEST_CONNECTION_STRING not set")
-    
-    async with Connection(TEST_CONNECTION_STRING) as conn:
-        yield conn
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_numeric_types(db_connection):
+async def test_numeric_types(test_config: Config):
     """Test all numeric SQL Server data types."""
-    result = await db_connection.query("""
-        SELECT 
-            CAST(127 AS TINYINT) as tinyint_val,
-            CAST(32767 AS SMALLINT) as smallint_val,
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(127 AS TINYINT) as tinyint_val,
+                CAST(32767 AS SMALLINT) as smallint_val,
             CAST(2147483647 AS INT) as int_val,
             CAST(9223372036854775807 AS BIGINT) as bigint_val,
             CAST(3.14159265359 AS FLOAT) as float_val,
@@ -85,19 +75,20 @@ async def test_numeric_types(db_connection):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_string_types(db_connection):
+async def test_string_types(test_config: Config):
     """Test all string SQL Server data types."""
-    result = await db_connection.query("""
-        SELECT 
-            CAST('Hello' AS CHAR(10)) as char_val,
-            CAST('World' AS VARCHAR(50)) as varchar_val,
-            CAST('Test' AS VARCHAR(MAX)) as varchar_max_val,
-            CAST('Unicode' AS NCHAR(10)) as nchar_val,
-            CAST('String' AS NVARCHAR(50)) as nvarchar_val,
-            CAST('Max Unicode' AS NVARCHAR(MAX)) as nvarchar_max_val,
-            CAST('Text data' AS TEXT) as text_val,
-            CAST('NText data' AS NTEXT) as ntext_val
-    """)
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST('Hello' AS CHAR(10)) as char_val,
+                CAST('World' AS VARCHAR(50)) as varchar_val,
+                CAST('Test' AS VARCHAR(MAX)) as varchar_max_val,
+                CAST('Unicode' AS NCHAR(10)) as nchar_val,
+                CAST('String' AS NVARCHAR(50)) as nvarchar_val,
+                CAST('Max Unicode' AS NVARCHAR(MAX)) as nvarchar_max_val,
+                CAST('Text data' AS TEXT) as text_val,
+                CAST('NText data' AS NTEXT) as ntext_val
+        """)
     
     assert result.has_rows()
     rows = result.rows()
@@ -115,17 +106,18 @@ async def test_string_types(db_connection):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_datetime_types(db_connection):
+async def test_datetime_types(test_config: Config):
     """Test all date/time SQL Server data types."""
-    result = await db_connection.query("""
-        SELECT 
-            CAST('2023-12-25' AS DATE) as date_val,
-            CAST('14:30:45' AS TIME) as time_val,
-            CAST('2023-12-25 14:30:45.123' AS DATETIME) as datetime_val,
-            CAST('2023-12-25 14:30:45.1234567' AS DATETIME2) as datetime2_val,
-            CAST('2023-12-25 14:30:45.123 +05:30' AS DATETIMEOFFSET) as datetimeoffset_val,
-            CAST('1900-01-01 14:30:45' AS SMALLDATETIME) as smalldatetime_val
-    """)
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST('2023-12-25' AS DATE) as date_val,
+                CAST('14:30:45' AS TIME) as time_val,
+                CAST('2023-12-25 14:30:45.123' AS DATETIME) as datetime_val,
+                CAST('2023-12-25 14:30:45.1234567' AS DATETIME2) as datetime2_val,
+                CAST('2023-12-25 14:30:45.123 +05:30' AS DATETIMEOFFSET) as datetimeoffset_val,
+                CAST('1900-01-01 14:30:45' AS SMALLDATETIME) as smalldatetime_val
+            """)
     
     assert result.has_rows()
     rows = result.rows()
@@ -142,15 +134,16 @@ async def test_datetime_types(db_connection):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_binary_types(db_connection):
+async def test_binary_types(test_config: Config):
     """Test binary SQL Server data types."""
-    result = await db_connection.query("""
-        SELECT 
-            CAST(0x48656C6C6F AS BINARY(10)) as binary_val,
-            CAST(0x576F726C64 AS VARBINARY(50)) as varbinary_val,
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(0x48656C6C6F AS BINARY(10)) as binary_val,
+                CAST(0x576F726C64 AS VARBINARY(50)) as varbinary_val,
             CAST(0x54657374 AS VARBINARY(MAX)) as varbinary_max_val,
             CAST('Binary data' AS IMAGE) as image_val
-    """)
+        """)
     
     assert result.has_rows()
     rows = result.rows()
@@ -165,17 +158,18 @@ async def test_binary_types(db_connection):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_special_types(db_connection):
+async def test_special_types(test_config: Config):
     """Test special SQL Server data types."""
-    result = await db_connection.query("""
-        SELECT 
-            CAST(1 AS BIT) as bit_true,
-            CAST(0 AS BIT) as bit_false,
-            CAST(NULL AS BIT) as bit_null,
-            NEWID() as uniqueidentifier_val,
-            CAST('<xml>test</xml>' AS XML) as xml_val,
-            CAST('{"key": "value"}' AS NVARCHAR(MAX)) as json_like_val
-    """)
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(1 AS BIT) as bit_true,
+                CAST(0 AS BIT) as bit_false,
+                CAST(NULL AS BIT) as bit_null,
+                NEWID() as uniqueidentifier_val,
+                CAST('<xml>test</xml>' AS XML) as xml_val,
+                CAST('{"key": "value"}' AS NVARCHAR(MAX)) as json_like_val
+            """)
     
     assert result.has_rows()
     rows = result.rows()
@@ -191,17 +185,18 @@ async def test_special_types(db_connection):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_null_values(db_connection):
+async def test_null_values(test_config: Config):
     """Test NULL handling across different data types."""
-    result = await db_connection.query("""
-        SELECT 
-            CAST(NULL AS INT) as null_int,
-            CAST(NULL AS VARCHAR(50)) as null_varchar,
-            CAST(NULL AS DATETIME) as null_datetime,
-            CAST(NULL AS FLOAT) as null_float,
-            CAST(NULL AS BIT) as null_bit,
-            CAST(NULL AS UNIQUEIDENTIFIER) as null_guid
-    """)
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(NULL AS INT) as null_int,
+                CAST(NULL AS VARCHAR(50)) as null_varchar,
+                CAST(NULL AS DATETIME) as null_datetime,
+                CAST(NULL AS FLOAT) as null_float,
+                CAST(NULL AS BIT) as null_bit,
+                CAST(NULL AS UNIQUEIDENTIFIER) as null_guid
+            """)
     
     assert result.has_rows()
     rows = result.rows()
@@ -217,18 +212,20 @@ async def test_null_values(db_connection):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_large_values(db_connection):
+async def test_large_values(test_config: Config):
     """Test handling of large values."""
     # Test large string
     large_string = 'A' * 8000  # 8KB string
-    result = await db_connection.query(f"SELECT '{large_string}' as large_string")
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query(f"SELECT '{large_string}' as large_string")
     assert result.has_rows()
     rows = result.rows()
     assert len(rows) == 1
     assert rows[0]['large_string'] == large_string
     
     # Test very large number
-    result = await db_connection.query("SELECT CAST(9223372036854775806 AS BIGINT) as large_bigint")
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("SELECT CAST(9223372036854775806 AS BIGINT) as large_bigint")
     assert result.has_rows()
     rows = result.rows()
     assert len(rows) == 1
@@ -236,12 +233,13 @@ async def test_large_values(db_connection):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_data_types(db_connection):
+async def test_async_data_types(test_config: Config):
     """Test data types with async operations."""
     # Note: Async operations are currently experiencing issues with certain data types
     # This test is temporarily simplified to avoid hangs in the async implementation
-    result = await db_connection.query("""
-        SELECT 
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
             42 as int_val,
             'async_string' as str_val,
             CAST(1 AS BIT) as bool_val,

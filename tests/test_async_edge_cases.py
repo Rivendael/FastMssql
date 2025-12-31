@@ -14,20 +14,13 @@ import asyncio
 import time
 import pytest
 from typing import List, Dict, Any
-import os
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
+from conftest import Config
 
 try:
     from fastmssql import Connection
-    MSSQL_AVAILABLE = True
 except ImportError:
-    MSSQL_AVAILABLE = False
-    mssql = None
-    Connection = None
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
 
 class ConnectionTracker:
@@ -65,8 +58,7 @@ class ConnectionTracker:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_context_manager_exception_handling():
+async def test_async_context_manager_exception_handling(test_config: Config):
     """Test async context manager behavior when exceptions occur."""
     tracker = ConnectionTracker()
     
@@ -75,7 +67,7 @@ async def test_async_context_manager_exception_handling():
         connection_id = f"conn_{test_id}"
         
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 await tracker.log_event('opened', connection_id)
                 
                 # Execute a successful query first
@@ -143,8 +135,7 @@ async def test_async_context_manager_exception_handling():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_nested_async_context_managers():
+async def test_nested_async_context_managers(test_config: Config):
     """Test nested async context managers and their interaction."""
     operation_log = []
     
@@ -153,7 +144,7 @@ async def test_nested_async_context_managers():
         worker_log = []
         
         # Outer context manager
-        async with Connection(TEST_CONNECTION_STRING) as outer_conn:
+        async with Connection(test_config.connection_string) as outer_conn:
             worker_log.append(f"Worker {worker_id}: Outer connection opened")
             
             # Execute query in outer connection
@@ -161,7 +152,7 @@ async def test_nested_async_context_managers():
             worker_log.append(f"Worker {worker_id}: Outer query executed")
             
             # Inner context manager (different connection)
-            async with Connection(TEST_CONNECTION_STRING) as inner_conn:
+            async with Connection(test_config.connection_string) as inner_conn:
                 worker_log.append(f"Worker {worker_id}: Inner connection opened")
                 
                 # Execute query in inner connection
@@ -226,12 +217,12 @@ async def test_nested_async_context_managers():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_timeout_and_cancellation():
+@pytest.mark.timeout(10)
+async def test_async_timeout_and_cancellation(test_config: Config):
     """Test timeout behavior and task cancellation with async connections."""
     async def long_running_operation(operation_id: int, duration: int):
         """Operation that runs for a specified duration."""
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Use SQL Server's WAITFOR DELAY to simulate long operation
             result = await conn.execute(f"""
                 WAITFOR DELAY '00:00:{duration:02d}';
@@ -339,8 +330,8 @@ async def test_async_timeout_and_cancellation():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_connection_resource_cleanup():
+@pytest.mark.timeout(10)
+async def test_async_connection_resource_cleanup(test_config: Config):
     """Test that async connections properly clean up resources."""
     try:
         # Track connection lifecycle through operations rather than weak references
@@ -351,7 +342,7 @@ async def test_async_connection_resource_cleanup():
             operation_log = []
             
             try:
-                async with Connection(TEST_CONNECTION_STRING) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     operation_log.append(f"Connection {conn_id}: Opened")
                     
                     # Perform some operations to verify connection works
@@ -464,8 +455,8 @@ async def test_async_connection_resource_cleanup():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_context_manager_with_background_tasks():
+@pytest.mark.timeout(10)
+async def test_async_context_manager_with_background_tasks(test_config: Config):
     """Test async context managers with background tasks and complex workflows."""
     try:
         background_tasks = []
@@ -476,7 +467,7 @@ async def test_async_context_manager_with_background_tasks():
             
             for i in range(iterations):
                 try:
-                    async with Connection(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(test_config.connection_string) as conn:
                         result = await conn.query(f"""
                             SELECT 
                                 {task_id} as task_id,
@@ -503,7 +494,7 @@ async def test_async_context_manager_with_background_tasks():
             main_results = []
             
             for main_op in range(5):
-                async with Connection(TEST_CONNECTION_STRING) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     result = await conn.query(f"""
                         SELECT 
                             {main_op} as main_operation,

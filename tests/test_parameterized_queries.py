@@ -1,33 +1,23 @@
-#!/usr/bin/env python3
 """
 Test parameterized queries functionality
 """
 
 import pytest
-import asyncio
-import os
 
-# Add the python module to the path
+from conftest import Config
 
 try:
     from fastmssql import Connection
-    MSSQL_AVAILABLE = True
 except ImportError:
-    MSSQL_AVAILABLE = False
-    Connection = None
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
-# Test configuration - adjust as needed
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_simple_parameterized_query():
+async def test_simple_parameterized_query(test_config: Config):
     """Test executing a simple parameterized query."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query(
                 "SELECT @P1 + @P2 as sum_result", 
                 [10, 5]
@@ -43,11 +33,10 @@ async def test_simple_parameterized_query():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_parameter_types():
+async def test_parameter_types(test_config: Config):
     """Test different parameter types."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     @P1 as string_param,
@@ -79,11 +68,10 @@ async def test_parameter_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_string_sql_injection_protection():
+async def test_string_sql_injection_protection(test_config: Config):
     """Test that parameterized queries protect against SQL injection."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # This should be safe from SQL injection
             malicious_input = "'; DROP TABLE users; --"
             
@@ -98,34 +86,3 @@ async def test_string_sql_injection_protection():
             assert rows[0]['safe_string'] == malicious_input
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
-
-if __name__ == "__main__":
-    # Run a simple smoke test
-    async def smoke_test():
-        print("Running parameterized queries smoke test...")
-        
-        if not MSSQL_AVAILABLE:
-            print("fastmssql not available - skipping smoke test")
-            return
-        
-        try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
-                # Test simple parameterized query
-                result = await conn.execute(
-                    "SELECT @P1 + @P2 as sum_result",
-                    [10, 5]
-                )
-                
-                if result.has_rows():
-                    row = result.rows()[0]
-                    print(f"Database test result: {row['sum_result']}")
-                    print("Database connection and parameterized queries: ✓")
-                else:
-                    print("Database connection successful but no rows returned")
-                    
-        except Exception as e:
-            print(f"Database connection test skipped (no database available): {e}")
-        
-        print("Smoke test completed successfully!")
-    
-    asyncio.run(smoke_test())
