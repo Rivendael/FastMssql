@@ -379,6 +379,7 @@ async def test_rapid_connect_disconnect_stress(test_config: Config):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
+@ pytest.mark.timeout(10)
 async def test_concurrent_query_stress(test_config: Config):
     """Stress test with high-volume concurrent queries."""
     try:
