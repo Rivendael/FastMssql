@@ -73,7 +73,7 @@ jobs:
           for i in {1..60}; do
             echo "Attempt $i/60..."
             if nc -z localhost 1433; then
-              if sqlcmd -S localhost -U SA -P 'YourStrong!Passw0rd' -Q "SELECT 1" -C 2>/dev/null; then
+              if sqlcmd -S localhost -U SA -P 'YourStrong@Password' -Q "SELECT 1" -C 2>/dev/null; then
                 echo "SQL Server is ready!"
                 break
               fi
