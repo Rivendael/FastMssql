@@ -5,19 +5,13 @@ Tests various edge cases, error conditions, and boundary scenarios.
 """
 
 import pytest
-import os
 
-# Add the parent directory to Python path for development
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection, Parameter, Parameters
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
-
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 
 class TestParameterEdgeCases:
     """Test edge cases for Parameter class."""
@@ -203,10 +197,10 @@ class TestParametersIntegrationEdgeCases:
     """Integration tests for edge cases with database."""
     
     @pytest.mark.asyncio
-    async def test_parameters_with_sql_injection_attempt(self):
+    async def test_parameters_with_sql_injection_attempt(self, test_config: TestConfig):
         """Test that parameters properly prevent SQL injection."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Attempt SQL injection through parameter
                 malicious_input = "'; DROP TABLE users; --"
                 
@@ -227,10 +221,10 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_special_characters(self):
+    async def test_parameters_with_special_characters(self, test_config: TestConfig):
         """Test parameters with special SQL characters."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 special_strings = [
                     "contains'apostrophe",
                     'contains"quote',
@@ -258,10 +252,10 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_very_long_strings(self):
+    async def test_parameters_with_very_long_strings(self, test_config: TestConfig):
         """Test parameters with very long strings."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create a very long string (but not too long to cause issues)
                 long_string = "x" * 4000  # 4KB string
                 
@@ -281,10 +275,10 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_null_in_different_positions(self):
+    async def test_parameters_with_null_in_different_positions(self, test_config: TestConfig):
         """Test NULL parameters in various positions."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Test NULL in different positions
                 test_cases = [
                     (None, "second", "third"),
@@ -315,10 +309,10 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_mismatch_count(self):
+    async def test_parameters_mismatch_count(self, test_config: TestConfig):
         """Test error handling when parameter count doesn't match placeholders."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Too few parameters
                 with pytest.raises(Exception):
                     params = Parameters(42)  # Only 1 parameter

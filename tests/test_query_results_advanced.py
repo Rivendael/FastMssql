@@ -6,23 +6,21 @@ special column names, result set variations, and complex data retrieval patterns
 """
 
 import pytest
-import os
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_empty_result_set():
+async def test_empty_result_set(test_config: TestConfig):
     """Test handling of empty result sets."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT * FROM (SELECT 1 as val WHERE 0=1) as empty")
             
             assert not result.has_rows()
@@ -34,10 +32,10 @@ async def test_empty_result_set():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_single_row_result():
+async def test_single_row_result(test_config: TestConfig):
     """Test result set with single row."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 42 as answer")
             
             assert result.has_rows()
@@ -50,10 +48,10 @@ async def test_single_row_result():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_large_result_set():
+async def test_large_result_set(test_config: TestConfig):
     """Test handling of result sets with many rows."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create a result with 100 rows
             result = await conn.query("""
                 WITH Numbers AS (
@@ -79,10 +77,10 @@ async def test_large_result_set():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_single_column_result():
+async def test_single_column_result(test_config: TestConfig):
     """Test result set with single column."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as value")
             
             assert result.has_rows()
@@ -96,10 +94,10 @@ async def test_single_column_result():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_many_columns_result():
+async def test_many_columns_result(test_config: TestConfig):
     """Test result set with many columns."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     1 as col1, 2 as col2, 3 as col3, 4 as col4, 5 as col5,
@@ -120,10 +118,10 @@ async def test_many_columns_result():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_column_alias_names():
+async def test_column_alias_names(test_config: TestConfig):
     """Test columns with custom aliases."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     1 as 'Custom Alias',
@@ -149,10 +147,10 @@ async def test_column_alias_names():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_column_reserved_words():
+async def test_column_reserved_words(test_config: TestConfig):
     """Test columns named with reserved SQL words."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     1 as [select],
@@ -177,10 +175,10 @@ async def test_column_reserved_words():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_column_with_spaces():
+async def test_column_with_spaces(test_config: TestConfig):
     """Test columns with spaces in names."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     1 as [First Name],
@@ -201,10 +199,10 @@ async def test_column_with_spaces():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_duplicate_column_names():
+async def test_result_duplicate_column_names(test_config: TestConfig):
     """Test handling of duplicate column names in result set."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 1 as value, 2 as value
             """)
@@ -226,10 +224,10 @@ async def test_result_duplicate_column_names():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_all_null_values():
+async def test_result_all_null_values(test_config: TestConfig):
     """Test result set where all values are NULL."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     CAST(NULL AS INT) as col1,
@@ -250,10 +248,10 @@ async def test_result_all_null_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_mixed_null_and_values():
+async def test_result_mixed_null_and_values(test_config: TestConfig):
     """Test result set with mix of NULL and actual values."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 1 as col1, NULL as col2, 'test' as col3, NULL as col4, 42 as col5
             """)
@@ -272,10 +270,10 @@ async def test_result_mixed_null_and_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_column_ordering():
+async def test_result_column_ordering(test_config: TestConfig):
     """Test that column ordering is preserved in results."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 'z' as z_col, 'a' as a_col, 'm' as m_col
             """)
@@ -293,10 +291,10 @@ async def test_result_column_ordering():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_with_computed_columns():
+async def test_result_with_computed_columns(test_config: TestConfig):
     """Test results with computed/calculated columns."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     5 as num1,
@@ -323,10 +321,10 @@ async def test_result_with_computed_columns():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_with_case_expression():
+async def test_result_with_case_expression(test_config: TestConfig):
     """Test results from CASE expressions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     CASE WHEN 1 = 1 THEN 'true_case' ELSE 'false_case' END as case_result,
@@ -348,10 +346,10 @@ async def test_result_with_case_expression():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_special_numeric_values():
+async def test_result_special_numeric_values(test_config: TestConfig):
     """Test result set with special numeric values."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     0 as zero,
@@ -372,10 +370,10 @@ async def test_result_special_numeric_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_string_concatenation():
+async def test_result_string_concatenation(test_config: TestConfig):
     """Test results from string concatenation."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     'Hello' + ' ' + 'World' as concat_result,
@@ -398,10 +396,10 @@ async def test_result_string_concatenation():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_multiple_result_sets():
+async def test_result_multiple_result_sets(test_config: TestConfig):
     """Test executing query that might return multiple result sets."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Single query, single result set
             result = await conn.query("""
                 SELECT 1 as first_set
@@ -417,10 +415,10 @@ async def test_result_multiple_result_sets():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_with_subqueries():
+async def test_result_with_subqueries(test_config: TestConfig):
     """Test results from queries with subqueries."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT
                     (SELECT COUNT(*) FROM (SELECT 1 as col UNION ALL SELECT 2) t) as count_result,
@@ -441,10 +439,10 @@ async def test_result_with_subqueries():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_distinct_values():
+async def test_result_distinct_values(test_config: TestConfig):
     """Test DISTINCT in result set."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT DISTINCT num FROM (
                     SELECT 1 as num
@@ -467,10 +465,10 @@ async def test_result_distinct_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_result_sorted_order():
+async def test_result_sorted_order(test_config: TestConfig):
     """Test ORDER BY in result set."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT num FROM (
                     SELECT 3 as num

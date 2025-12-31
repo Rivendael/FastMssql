@@ -6,23 +6,21 @@ with various edge cases, transaction handling, and error scenarios.
 """
 
 import pytest
-import os
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_basic():
+async def test_execute_batch_basic(test_config: TestConfig):
     """Test basic batch execution with INSERT statements."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_basic', 'U') IS NOT NULL
@@ -57,10 +55,10 @@ async def test_execute_batch_basic():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_empty():
+async def test_execute_batch_empty(test_config: TestConfig):
     """Test batch execution with empty batch list."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Empty batch
             batch_items = []
             
@@ -77,10 +75,10 @@ async def test_execute_batch_empty():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_single_item():
+async def test_execute_batch_single_item(test_config: TestConfig):
     """Test batch execution with single item."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_single', 'U') IS NOT NULL
@@ -109,10 +107,10 @@ async def test_execute_batch_single_item():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_large_batch():
+async def test_execute_batch_large_batch(test_config: TestConfig):
     """Test batch execution with many items."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_large', 'U') IS NOT NULL
@@ -146,10 +144,10 @@ async def test_execute_batch_large_batch():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_mixed_operations():
+async def test_execute_batch_mixed_operations(test_config: TestConfig):
     """Test batch with mixed INSERT, UPDATE, DELETE operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table with initial data
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_mixed', 'U') IS NOT NULL
@@ -187,10 +185,10 @@ async def test_execute_batch_mixed_operations():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_duplicate_key_error():
-    """Test batch behavior with duplicate key violation."""
+async def test_execute_batch_duplicate_key_error(test_config: TestConfig):
+    """Test batch execution with duplicate key error."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_dup', 'U') IS NOT NULL
@@ -224,10 +222,10 @@ async def test_execute_batch_duplicate_key_error():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_no_parameters():
+async def test_execute_batch_no_parameters(test_config: TestConfig):
     """Test batch with items that have no parameters."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_noparams', 'U') IS NOT NULL
@@ -260,10 +258,10 @@ async def test_execute_batch_no_parameters():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_basic():
-    """Test bulk insert operation."""
+async def test_bulk_insert_basic(test_config: TestConfig):
+    """Test basic bulk insert operation."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##bulk_basic', 'U') IS NOT NULL
@@ -296,10 +294,10 @@ async def test_bulk_insert_basic():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_many_rows():
+async def test_bulk_insert_many_rows(test_config: TestConfig):
     """Test bulk insert with many rows."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##bulk_many', 'U') IS NOT NULL
@@ -335,10 +333,10 @@ async def test_bulk_insert_many_rows():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_different_types():
+async def test_bulk_insert_different_types(test_config: TestConfig):
     """Test bulk insert with different data types."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table with multiple types
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##bulk_types', 'U') IS NOT NULL
@@ -378,10 +376,10 @@ async def test_bulk_insert_different_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_batch_basic():
+async def test_query_batch_basic(test_config: TestConfig):
     """Test batch query execution."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table with test data
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_query', 'U') IS NOT NULL
@@ -425,10 +423,10 @@ async def test_query_batch_basic():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_batch_empty_results():
-    """Test batch queries with empty results."""
+async def test_query_batch_empty_results(test_config: TestConfig):
+    """Test batch query with empty results."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_empty', 'U') IS NOT NULL
@@ -464,10 +462,10 @@ async def test_query_batch_empty_results():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_transaction_rollback():
+async def test_execute_batch_transaction_rollback(test_config: TestConfig):
     """Test that batch is transactional and rolls back on error."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_rollback', 'U') IS NOT NULL
@@ -505,10 +503,10 @@ async def test_execute_batch_transaction_rollback():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_return_values():
+async def test_execute_batch_return_values(test_config: TestConfig):
     """Test that execute_batch returns correct affected row counts."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##batch_returns', 'U') IS NOT NULL

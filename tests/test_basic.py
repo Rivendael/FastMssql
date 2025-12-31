@@ -5,8 +5,9 @@ Run with: python -m pytest tests/
 """
 
 import pytest
-import os
 import asyncio
+
+from conftest import TestConfig
 
 try:
     import fastmssql
@@ -14,54 +15,33 @@ try:
 except ImportError:
     pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
-# Test configuration - adjust as needed
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
-
-async def test_error_handling():
-    """Test that errors are handled properly."""
-    try:
-        conn = Connection("Invalid connection string")
-        async with conn:
-            await conn.query("SELECT 1")
-    except Exception:
-        pass
-    
-    try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
-            with pytest.raises(Exception):
-                await conn.execute("SELECT * FROM non_existent_table_12345")
-    except Exception as e:
-        pytest.fail(f"Database not available for error testing: {e}")
-
 def test_version():
     """Test that we can get the library version."""
     version = fastmssql.version()
     assert isinstance(version, str)
     assert len(version) > 0
 
-def test_connection_creation():
+def test_connection_creation(test_config: TestConfig):
     """Test that we can create a connection object."""
-    conn = Connection(TEST_CONNECTION_STRING)
+    conn = Connection(test_config.connection_string)
     assert conn is not None
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_basic_connection():
+async def test_basic_connection(test_config: TestConfig):
     """Test basic database connectivity."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             assert await conn.is_connected()
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_simple_query():
+async def test_simple_query(test_config: TestConfig):
     """Test executing a simple query."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as test_value")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
@@ -72,10 +52,10 @@ async def test_simple_query():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_queries():
+async def test_multiple_queries(test_config: TestConfig):
     """Test executing multiple queries on the same connection."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # First query
             result1 = await conn.query("SELECT 'first' as query_name")
             rows1 = result1.rows()
@@ -92,10 +72,10 @@ async def test_multiple_queries():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_data_types():
+async def test_data_types(test_config: TestConfig):
     """Test various SQL Server data types."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     42 as int_val,
@@ -119,11 +99,11 @@ async def test_data_types():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_convenience_functions():
+async def test_convenience_functions(test_config: TestConfig):
     """Test Connection class convenience (now async-only)."""
     try:
         # Test direct execution using async Connection
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 'convenience' as test")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
@@ -138,7 +118,7 @@ async def test_convenience_functions():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_error_handling():
+async def test_error_handling(test_config: TestConfig):
     """Test that errors are handled properly."""
     # Test invalid connection string
     try:
@@ -151,7 +131,7 @@ async def test_error_handling():
     
     # Test invalid query (requires database connection)
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             with pytest.raises(Exception):
                 await conn.execute("SELECT * FROM non_existent_table_12345")
     except Exception as e:
@@ -160,27 +140,27 @@ async def test_error_handling():
 # Async Tests
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_connection_creation():
+async def test_async_connection_creation(test_config: TestConfig):
     """Test that we can create an async connection object."""
-    conn = Connection(TEST_CONNECTION_STRING)
+    conn = Connection(test_config.connection_string)
     assert conn is not None
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_basic_connection():
+async def test_async_basic_connection(test_config: TestConfig):
     """Test basic async database connectivity."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             assert await conn.is_connected()
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_simple_query():
+async def test_async_simple_query(test_config: TestConfig):
     """Test executing a simple query asynchronously."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as test_value")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
@@ -190,10 +170,10 @@ async def test_async_simple_query():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_multiple_queries():
+async def test_async_multiple_queries(test_config: TestConfig):
     """Test executing multiple queries asynchronously on the same connection."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # First query
             result1 = await conn.query("SELECT 'first' as query_name")
             rows1 = result1.rows()
@@ -210,10 +190,10 @@ async def test_async_multiple_queries():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_data_types():
+async def test_async_data_types(test_config: TestConfig):
     """Test various SQL Server data types with async operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("""
                 SELECT 
                     42 as int_val,
@@ -237,10 +217,10 @@ async def test_async_data_types():
 
 @pytest.mark.asyncio
 @pytest.mark.integration 
-async def test_async_execute_non_query():
+async def test_async_execute_non_query(test_config: TestConfig):
     """Test executing non-query operations asynchronously."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test a simple UPDATE operation that doesn't rely on temporary tables
             # First, create and populate a test table, then verify the operation worked
             setup_and_test_sql = """
@@ -277,10 +257,10 @@ async def test_async_execute_non_query():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_execute_scalar():
+async def test_async_execute_scalar(test_config: TestConfig):
     """Test executing scalar queries asynchronously."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test scalar with number
             result = await conn.query("SELECT 42 as scalar_value")
             rows = result.rows() if result.has_rows() else []
@@ -300,11 +280,11 @@ async def test_async_execute_scalar():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_convenience_functions():
+async def test_async_convenience_functions(test_config: TestConfig):
     """Test async connection class directly."""
     try:
         # Test direct async execution using Connection class
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 'convenience_async' as test")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
@@ -319,10 +299,10 @@ async def test_async_convenience_functions():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_error_handling():
+async def test_async_error_handling(test_config: TestConfig):
     """Test that async errors are handled properly."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             with pytest.raises(Exception):
                 await conn.execute("SELECT * FROM non_existent_table_async_12345")
     except Exception as e:
@@ -330,10 +310,10 @@ async def test_async_error_handling():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_simple_parameterized_query():
+async def test_simple_parameterized_query(test_config: TestConfig):
     """Test basic parameterized queries with list parameters."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query(
                 "SELECT @P1 as param1, @P2 as param2, @P3 as param3",
                 [42, "test", True]
@@ -351,12 +331,12 @@ async def test_simple_parameterized_query():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_parameters_object_basic():
+async def test_parameters_object_basic(test_config: TestConfig):
     """Test using Parameters object instead of simple list."""
     try:
         from fastmssql import Parameters
         
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             params = Parameters(100, "Parameters Object", 3.14)
             
             result = await conn.query(
@@ -376,12 +356,12 @@ async def test_parameters_object_basic():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_parameters_method_chaining():
+async def test_parameters_method_chaining(test_config: TestConfig):
     """Test Parameters object with method chaining."""
     try:
         from fastmssql import Parameters
         
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             params = (Parameters()
                      .add(200)
                      .add("Chained"))
@@ -402,10 +382,10 @@ async def test_parameters_method_chaining():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_concurrent_queries():
+async def test_async_concurrent_queries(test_config: TestConfig):
     """Test executing multiple async queries concurrently."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create coroutines for concurrent execution
             query1 = conn.query("SELECT 1 as value, 'query1' as name")
             query2 = conn.query("SELECT 2 as value, 'query2' as name")

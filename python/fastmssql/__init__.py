@@ -16,7 +16,11 @@ from .fastmssql import (
     EncryptionLevel,
     version,
 )
+from enum import StrEnum
 
+class ApplicationIntent(StrEnum):
+    READ_ONLY = "ReadOnly"
+    READ_WRITE = "ReadWrite"
 
 class Connection:
     """Thin wrapper to fix async context manager behavior."""

@@ -7,19 +7,13 @@ overhead compared to using simple lists.
 
 import pytest
 import time
-import os
 
-# Add the parent directory to Python path for development
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection, Parameters
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
-
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 
 @pytest.mark.integration
 @pytest.mark.performance
@@ -76,10 +70,10 @@ class TestParametersPerformance:
             pytest.fail(f"Performance test failed: {e}")
     
     @pytest.mark.asyncio
-    async def test_list_vs_parameters_query_performance(self):
+    async def test_list_vs_parameters_query_performance(self, test_config: TestConfig):
         """Compare query performance between lists and Parameters objects."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Test with simple lists
                 list_start = time.time()
                 
@@ -121,10 +115,10 @@ class TestParametersPerformance:
             pytest.fail(f"Database not available for performance test: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameter_reuse_performance(self):
+    async def test_parameter_reuse_performance(self, test_config: TestConfig):
         """Test performance of reusing Parameters objects."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create Parameters object once
                 params = Parameters(42, "Reused", 3.14159)
                 
@@ -182,7 +176,3 @@ class TestParametersMemory:
         # Clean up
         del params_list
         gc.collect()
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-m", "performance"])

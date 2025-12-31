@@ -17,13 +17,13 @@ import gc
 import psutil
 import os
 
+from conftest import TestConfig
+
 try:
     from fastmssql import Connection, PoolConfig
-    MSSQL_AVAILABLE = True
+
 except ImportError:
-    MSSQL_AVAILABLE = False
-    mssql = None
-    Connection = None
+    raise pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 
 class MemoryTracker:
@@ -56,8 +56,7 @@ class MemoryTracker:
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_memory_leak_detection(test_connection_string):
+async def test_memory_leak_detection(test_config: TestConfig):
     """Test for memory leaks in async operations."""
     try:
         memory_tracker = MemoryTracker()
@@ -71,7 +70,7 @@ async def test_memory_leak_detection(test_connection_string):
             pool_config = PoolConfig(max_size=10, min_idle=2)
             
             try:
-                async with Connection(test_connection_string, pool_config) as conn:
+                async with Connection(test_config.connection_string, pool_config) as conn:
                     connections_created = 1
                     
                     # Perform fewer operations to reduce memory pressure
@@ -164,8 +163,7 @@ async def test_memory_leak_detection(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_connection_exhaustion_recovery(test_connection_string):
+async def test_connection_exhaustion_recovery(test_config: TestConfig):
     """Test behavior when approaching connection limits and recovery."""
     try:
         # This test attempts to exhaust connections and verify proper recovery
@@ -175,7 +173,7 @@ async def test_connection_exhaustion_recovery(test_connection_string):
         async def create_and_hold_connection(conn_id: int, hold_time: float):
             """Create a connection and hold it for specified time."""
             try:
-                async with Connection(test_connection_string) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     # Verify connection is working
                     result = await conn.query(f"SELECT {conn_id} as conn_id, @@SPID as spid")
                     spid = result.rows()[0]['spid'] if result and result.has_rows() else None
@@ -250,8 +248,7 @@ async def test_connection_exhaustion_recovery(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_rapid_connect_disconnect_stress(test_connection_string):
+async def test_rapid_connect_disconnect_stress(test_config: TestConfig):
     """Stress test rapid connection creation and destruction."""
     try:
         operations_log = []
@@ -267,7 +264,7 @@ async def test_rapid_connect_disconnect_stress(test_connection_string):
             pool_config = PoolConfig(max_size=50, min_idle=10)
             
             try:
-                async with Connection(test_connection_string, pool_config) as conn:
+                async with Connection(test_config.connection_string, pool_config) as conn:
                     for i in range(iterations):
                         operation_start = time.time()
                         try:
@@ -379,8 +376,7 @@ async def test_rapid_connect_disconnect_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_concurrent_query_stress(test_connection_string):
+async def test_concurrent_query_stress(test_config: TestConfig):
     """Stress test with high-volume concurrent queries."""
     try:
         pool_config = PoolConfig(max_size=50, min_idle=10)
@@ -394,7 +390,7 @@ async def test_concurrent_query_stress(test_connection_string):
             nonlocal error_count
             local_results = []
             
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(query_count):
                     start_time = time.time()
                     try:
@@ -497,8 +493,7 @@ async def test_concurrent_query_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_large_result_set_stress(test_connection_string):
+async def test_large_result_set_stress(test_config: TestConfig):
     """Stress test handling large result sets and memory."""
     try:
         pool_config = PoolConfig(max_size=20, min_idle=5)
@@ -506,7 +501,7 @@ async def test_large_result_set_stress(test_connection_string):
         async def fetch_large_result_set(set_id: int, row_count: int):
             """Fetch a large result set."""
             try:
-                async with Connection(test_connection_string, pool_config) as conn:
+                async with Connection(test_config.connection_string, pool_config) as conn:
                     # Generate large result set using SQL
                     query = f"""
                     SELECT TOP {row_count}
@@ -613,8 +608,7 @@ async def test_large_result_set_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_batch_operation_stress(test_connection_string):
+async def test_batch_operation_stress(test_config: TestConfig):
     """Stress test batch insert/update operations."""
     try:
         from fastmssql import Parameters
@@ -624,7 +618,7 @@ async def test_batch_operation_stress(test_connection_string):
         async def batch_operation_worker(worker_id: int, batch_size: int, num_batches: int):
             """Worker that performs batch operations."""
             try:
-                async with Connection(test_connection_string, pool_config) as conn:
+                async with Connection(test_config.connection_string, pool_config) as conn:
                     # Create temp table for testing
                     await conn.query(f"""
                         IF OBJECT_ID('tempdb..#batch_test_{worker_id}', 'U') IS NOT NULL
@@ -741,8 +735,7 @@ async def test_batch_operation_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_connection_pool_saturation(test_connection_string):
+async def test_connection_pool_saturation(test_config: TestConfig):
     """Test connection pool under saturation and recovery."""
     try:
         pool_config = PoolConfig(max_size=20, min_idle=5)
@@ -750,7 +743,7 @@ async def test_connection_pool_saturation(test_connection_string):
         async def long_running_operation(op_id: int, duration: float):
             """Perform a long-running operation to saturate the pool."""
             try:
-                async with Connection(test_connection_string, pool_config) as conn:
+                async with Connection(test_config.connection_string, pool_config) as conn:
                     start_time = time.time()
                     
                     # Start a long operation
@@ -805,7 +798,7 @@ async def test_connection_pool_saturation(test_connection_string):
         async def quick_operation(op_id: int):
             """Quick operation to test pool responsiveness."""
             try:
-                async with Connection(test_connection_string, pool_config) as conn:
+                async with Connection(test_config.connection_string, pool_config) as conn:
                     start_time = time.time()
                     await conn.query(f"SELECT {op_id} as id, GETDATE() as ts")
                     duration = time.time() - start_time
@@ -843,8 +836,7 @@ async def test_connection_pool_saturation(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_query_variety_stress(test_connection_string):
+async def test_query_variety_stress(test_config: TestConfig):
     """Stress test with varied query types and complexities."""
     try:
         pool_config = PoolConfig(max_size=40, min_idle=10)
@@ -853,7 +845,7 @@ async def test_query_variety_stress(test_connection_string):
             """Execute queries with various parameter types."""
             local_results = []
             
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(query_count):
                     try:
                         # Test various parameter combinations with direct SQL
@@ -943,8 +935,7 @@ async def test_query_variety_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_transaction_stress(test_connection_string):
+async def test_transaction_stress(test_config: TestConfig):
     """Stress test transaction handling with commits and rollbacks."""
     try:
         pool_config = PoolConfig(max_size=25, min_idle=6)
@@ -960,7 +951,7 @@ async def test_transaction_stress(test_connection_string):
             # to avoid temp table scope issues across pooled connections
             transactions = {}
             
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 # Verify connection is working
                 try:
                     await conn.query("SELECT 1 as test")
@@ -1075,8 +1066,7 @@ async def test_transaction_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_parameter_type_conversion_stress(test_connection_string):
+async def test_parameter_type_conversion_stress(test_config: TestConfig):
     """Stress test aggressive parameter type conversions with edge cases."""
     try:
         pool_config = PoolConfig(max_size=30, min_idle=8)
@@ -1085,7 +1075,7 @@ async def test_parameter_type_conversion_stress(test_connection_string):
             """Worker that tests various parameter type conversions."""
             local_results = []
             
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(test_count):
                     try:
                         # Test different data types
@@ -1187,8 +1177,7 @@ async def test_parameter_type_conversion_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_error_recovery_stress(test_connection_string):
+async def test_error_recovery_stress(test_config: TestConfig):
     """Stress test recovery from various error conditions."""
     try:
         pool_config = PoolConfig(max_size=25, min_idle=6)
@@ -1198,7 +1187,7 @@ async def test_error_recovery_stress(test_connection_string):
             local_results = []
             recovery_count = 0
             
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(iterations):
                     # Cycle through different error scenarios
                     error_type = i % 5
@@ -1321,8 +1310,7 @@ async def test_error_recovery_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_idle_connection_cleanup_stress(test_connection_string):
+async def test_idle_connection_cleanup_stress(test_config: TestConfig):
     """Stress test pool behavior with idle connections and reuse."""
     try:
         pool_config = PoolConfig(max_size=15, min_idle=3)
@@ -1332,7 +1320,7 @@ async def test_idle_connection_cleanup_stress(test_connection_string):
             local_results = []
             
             # Burst phase: rapid operations
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(20):
                     try:
                         result = await conn.query(f"SELECT {worker_id} as w, {i} as burst")
@@ -1353,7 +1341,7 @@ async def test_idle_connection_cleanup_stress(test_connection_string):
             await asyncio.sleep(idle_duration)
             
             # Reuse phase: reclaim connection from pool
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(10):
                     try:
                         result = await conn.query(f"SELECT {worker_id} as w, {i} as reuse")
@@ -1418,8 +1406,7 @@ async def test_idle_connection_cleanup_stress(test_connection_string):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_connection_timeout_stress(test_connection_string):
+async def test_connection_timeout_stress(test_config: TestConfig):
     """Stress test connection timeout and slow operation handling."""
     try:
         pool_config = PoolConfig(max_size=20, min_idle=5)
@@ -1428,7 +1415,7 @@ async def test_connection_timeout_stress(test_connection_string):
             """Worker with mixed duration queries."""
             local_results = []
             
-            async with Connection(test_connection_string, pool_config) as conn:
+            async with Connection(test_config.connection_string, pool_config) as conn:
                 for i in range(num_queries):
                     try:
                         # Vary the operation duration

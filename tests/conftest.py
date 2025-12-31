@@ -2,11 +2,22 @@ import os
 import pytest
 from dotenv import load_dotenv
 
+load_dotenv()
+
+class TestConfig:
+    """Configuration object for all test database connections."""
+    def __init__(self):
+        self.connection_string: str = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
+        self.username: str = os.getenv("FAST_MSSQL_TEST_DB_USER", "SA")
+        self.password: str = os.getenv("FAST_MSSQL_TEST_DB_PASSWORD", "YourStrong@Password")
+        self.server: str = os.getenv("FAST_MSSQL_TEST_SERVER", "localhost")
+        self.port: int = int(os.getenv("FAST_MSSQL_TEST_PORT", "1433"))
+        self.database: str = os.getenv("FAST_MSSQL_TEST_DATABASE")
+    def asdict(self):
+        return vars(self)
+
 @pytest.fixture(scope="session")
-def test_connection_string():
-    # Load environment variables from .env file
-    load_dotenv()
-    value = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-    if value is None:
-        pytest.fail("FASTMSSQL_TEST_CONNECTION_STRING not set in environment or .env file")
-    return value
+def test_config():
+    """Get the test configuration object."""
+    return TestConfig()
+

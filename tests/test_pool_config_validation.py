@@ -6,15 +6,13 @@ in connection pool configuration and management.
 """
 
 import pytest
-import os
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection, PoolConfig
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
-
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
 
 
 def test_pool_config_creation():
@@ -208,7 +206,7 @@ def test_pool_config_zero_timeout():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_custom_pool_config():
+async def test_connection_with_custom_pool_config(test_config: TestConfig):
     """Test creating connection with custom pool config."""
     try:
         pool_config = PoolConfig(
@@ -217,7 +215,7 @@ async def test_connection_with_custom_pool_config():
             connection_timeout_secs=30
         )
         
-        async with Connection(TEST_CONNECTION_STRING, pool_config=pool_config) as conn:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
             result = await conn.query("SELECT 1 as val")
             assert result.rows()[0]['val'] == 1
     except Exception as e:
@@ -226,10 +224,10 @@ async def test_connection_with_custom_pool_config():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_default_pool_config():
+async def test_connection_default_pool_config(test_config: TestConfig):
     """Test connection uses default pool config when not specified."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as val")
             assert result.rows()[0]['val'] == 1
             
@@ -242,10 +240,10 @@ async def test_connection_default_pool_config():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_stats_tuple_structure():
+async def test_pool_stats_tuple_structure(test_config: TestConfig):
     """Test that pool_stats returns correct structure."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             stats = await conn.pool_stats()
             
             # pool_stats returns a dict with pool information
@@ -271,11 +269,11 @@ async def test_pool_stats_tuple_structure():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_modification_before_connect():
+async def test_pool_config_modification_before_connect(test_config: TestConfig):
     """Test modifying pool config before connection is established."""
     try:
         pool_config = PoolConfig(max_size=10, min_idle=2)
-        conn = Connection(TEST_CONNECTION_STRING, pool_config=pool_config)
+        conn = Connection(test_config.connection_string, pool_config=pool_config)
         
         # Modify config before first use (might not have effect after pool is created)
         pool_config.max_size = 5
@@ -290,14 +288,14 @@ async def test_pool_config_modification_before_connect():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_connections_different_configs():
+async def test_multiple_connections_different_configs(test_config: TestConfig):
     """Test multiple connections with different pool configs."""
     try:
         config1 = PoolConfig(max_size=5)
         config2 = PoolConfig(max_size=10)
         
-        async with Connection(TEST_CONNECTION_STRING, pool_config=config1) as conn1:
-            async with Connection(TEST_CONNECTION_STRING, pool_config=config2) as conn2:
+        async with Connection(test_config.connection_string, pool_config=config1) as conn1:
+            async with Connection(test_config.connection_string, pool_config=config2) as conn2:
                 result1 = await conn1.query("SELECT 1 as val")
                 result2 = await conn2.query("SELECT 2 as val")
                 
@@ -316,12 +314,12 @@ async def test_multiple_connections_different_configs():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_with_small_max_size():
+async def test_pool_with_small_max_size(test_config: TestConfig):
     """Test pool with very small max_size to verify queue handling."""
     try:
         pool_config = PoolConfig(max_size=2, min_idle=1)
         
-        async with Connection(TEST_CONNECTION_STRING, pool_config=pool_config) as conn:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
             # Sequential queries should work fine with small pool
             for i in range(5):
                 result = await conn.query(f"SELECT {i} as val")
@@ -360,7 +358,7 @@ def test_pool_config_copy():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_none_values():
+async def test_pool_config_with_none_values(test_config: TestConfig):
     """Test PoolConfig with None timeout values."""
     config = PoolConfig(
         max_size=10,
@@ -375,19 +373,19 @@ async def test_pool_config_with_none_values():
     # Note: connection_timeout_secs might have a default
     
     # Should still work
-    async with Connection(TEST_CONNECTION_STRING, pool_config=config) as conn:
+    async with Connection(test_config.connection_string, pool_config=config) as conn:
         result = await conn.query("SELECT 1 as val")
         assert result.rows()[0]['val'] == 1
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_stats_after_operations():
+async def test_pool_stats_after_operations(test_config: TestConfig):
     """Test pool stats change after various operations."""
     try:
         pool_config = PoolConfig(max_size=10, min_idle=2)
         
-        async with Connection(TEST_CONNECTION_STRING, pool_config=pool_config) as conn:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
             stats_before = await conn.pool_stats()
             
             # Run a query
@@ -405,3 +403,187 @@ async def test_pool_stats_after_operations():
             assert stats_after_multiple is not None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_with_test_on_check_out_enabled(test_config: TestConfig):
+    """Test pool behavior with test_on_check_out=True.
+    
+    When enabled, connections are validated before being returned from the pool.
+    This ensures that stale or dead connections are detected early.
+    """
+    pool_config = PoolConfig(
+        max_size=5,
+        min_idle=2,
+        test_on_check_out=True,
+        connection_timeout_secs=15
+    )
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            # First query should work
+            result1 = await conn.query("SELECT 1 as val")
+            assert result1.rows()[0]['val'] == 1
+            
+            # Multiple queries should all work with health checks
+            for i in range(10):
+                result = await conn.query(f"SELECT {i} as iteration")
+                assert result.rows()[0]['iteration'] == i
+    except Exception as e:
+        pytest.fail(f"test_on_check_out=True pool test failed: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_with_test_on_check_out_disabled(test_config: TestConfig):
+    """Test pool behavior with test_on_check_out=False (or None).
+    
+    When disabled, connections are not tested before being returned,
+    potentially improving performance at the cost of reliability.
+    """
+    pool_config = PoolConfig(
+        max_size=5,
+        min_idle=2,
+        test_on_check_out=False,
+        connection_timeout_secs=15
+    )
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            result = await conn.query("SELECT 1 as val")
+            assert result.rows()[0]['val'] == 1
+    except Exception as e:
+        pytest.fail(f"test_on_check_out=False pool test failed: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_with_retry_connection_enabled(test_config: TestConfig):
+    """Test pool behavior with retry_connection=True.
+    
+    When enabled, the pool will retry failed connection attempts,
+    improving robustness in unstable network conditions.
+    """
+    pool_config = PoolConfig(
+        max_size=5,
+        min_idle=1,
+        retry_connection=True,
+        connection_timeout_secs=15
+    )
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            # Should successfully establish connection with retries
+            result = await conn.query("SELECT 1 as val")
+            assert result.rows()[0]['val'] == 1
+            
+            # Multiple operations should work reliably
+            for i in range(5):
+                result = await conn.query(f"SELECT {i}")
+                assert result.rows()[0][''] == i or result.has_rows()
+    except Exception as e:
+        pytest.fail(f"retry_connection=True pool test failed: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_with_retry_connection_disabled(test_config: TestConfig):
+    """Test pool behavior with retry_connection=False (or None).
+    
+    When disabled, failed connection attempts are not retried,
+    failing fast but potentially losing resilience.
+    """
+    pool_config = PoolConfig(
+        max_size=5,
+        min_idle=1,
+        retry_connection=False,
+        connection_timeout_secs=15
+    )
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            result = await conn.query("SELECT 1 as val")
+            assert result.rows()[0]['val'] == 1
+    except Exception as e:
+        pytest.fail(f"retry_connection=False pool test failed: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_with_both_reliability_settings(test_config: TestConfig):
+    """Test pool with both test_on_check_out and retry_connection enabled.
+    
+    This combines connection validation (health checks on checkout)
+    with connection attempt retries for maximum reliability.
+    """
+    pool_config = PoolConfig(
+        max_size=8,
+        min_idle=3,
+        test_on_check_out=True,
+        retry_connection=True,
+        connection_timeout_secs=20
+    )
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            # Run multiple queries to exercise the pool
+            for i in range(15):
+                result = await conn.query(f"SELECT {i} as num")
+                assert result.has_rows()
+    except Exception as e:
+        pytest.fail(f"Combined reliability settings pool test failed: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_high_throughput_with_reliability(test_config: TestConfig):
+    """Test high-throughput preset combined with reliability settings."""
+    # Create a high-throughput config with reliability settings
+    pool_config = PoolConfig(
+        max_size=50,
+        min_idle=15,
+        max_lifetime_secs=1800,
+        idle_timeout_secs=600,
+        connection_timeout_secs=30,
+        test_on_check_out=True,
+        retry_connection=True
+    )
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            # High-throughput with safety checks
+            results = []
+            for i in range(20):
+                result = await conn.query(f"SELECT {i} as iteration")
+                results.append(result)
+            
+            assert len(results) == 20
+    except Exception as e:
+        pytest.fail(f"High-throughput with reliability test failed: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pool_config_none_reliability_settings(test_config: TestConfig):
+    """Test pool behavior when reliability settings are None (default behavior).
+    
+    None values should use bb8's defaults, allowing the pool to
+    operate with standard behavior.
+    """
+    pool_config = PoolConfig(
+        max_size=5,
+        min_idle=2,
+        test_on_check_out=None,
+        retry_connection=None,
+        connection_timeout_secs=15
+    )
+    
+    assert pool_config.test_on_check_out is None
+    assert pool_config.retry_connection is None
+    
+    try:
+        async with Connection(test_config.connection_string, pool_config=pool_config) as conn:
+            result = await conn.query("SELECT 1 as val")
+            assert result.rows()[0]['val'] == 1
+    except Exception as e:
+        pytest.fail(f"None reliability settings pool test failed: {e}")

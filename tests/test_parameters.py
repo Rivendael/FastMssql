@@ -6,19 +6,13 @@ with optional type hints and method chaining.
 """
 
 import pytest
-import os
 
-# Add the parent directory to Python path for development
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection, Parameter, Parameters
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
-
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 
 class TestParameter:
     """Test the Parameter class functionality."""
@@ -351,10 +345,10 @@ class TestParametersIntegration:
     """Integration tests with actual database connection."""
     
     @pytest.mark.asyncio
-    async def test_simple_list_parameters(self):
+    async def test_simple_list_parameters(self, test_config: TestConfig):
         """Test using simple list parameters (backward compatibility)."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT @P1 as num, @P2 as text", 
                     [42, "Hello"]
@@ -372,10 +366,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_object_basic(self):
+    async def test_parameters_object_basic(self, test_config: TestConfig):
         """Test using Parameters object with basic values."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 params = Parameters(100, "Test Product", 29.99)
                 
                 result = await conn.query(
@@ -396,10 +390,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_method_chaining_integration(self):
+    async def test_parameters_method_chaining_integration(self, test_config: TestConfig):
         """Test using Parameters with method chaining."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 params = (Parameters()
                          .add(123, "INT")
                          .add("Chained Test", "NVARCHAR")
@@ -423,10 +417,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_nulls(self):
+    async def test_parameters_with_nulls(self, test_config: TestConfig):
         """Test using Parameters with NULL values."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 params = Parameters(1, None, "Not Null")
                 
                 result = await conn.query(
@@ -447,10 +441,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_various_types(self):
+    async def test_parameters_various_types(self, test_config: TestConfig):
         """Test Parameters with various data types."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 params = Parameters(
                     42,           # int
                     3.14159,      # float  
@@ -483,10 +477,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_no_parameters(self):
+    async def test_no_parameters(self, test_config: TestConfig):
         """Test execute with no parameters."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query("SELECT 'No params' as message")
                 
                 assert result.has_rows()
@@ -498,10 +492,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_empty_parameters_object(self):
+    async def test_empty_parameters_object(self, test_config: TestConfig):
         """Test execute with empty Parameters object."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 params = Parameters()
                 result = await conn.query("SELECT 'Empty params' as message", params)
                 
@@ -514,10 +508,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameter_reuse(self):
+    async def test_parameter_reuse(self, test_config: TestConfig):
         """Test reusing Parameters objects across multiple queries."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Create reusable parameters
                 params = Parameters(42, "Reused")
                 
@@ -552,10 +546,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_automatic_in_clause_expansion(self):
+    async def test_automatic_in_clause_expansion(self, test_config: TestConfig):
         """Test automatic IN clause expansion with real database."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Test simple list - should automatically expand for IN clause
                 ids = [1, 2, 3]
                 params = Parameters(ids)
@@ -581,10 +575,10 @@ class TestParametersIntegration:
             pytest.fail(f"Database not available: {e}")
 
     @pytest.mark.asyncio
-    async def test_mixed_parameters_with_iterables(self):
+    async def test_mixed_parameters_with_iterables(self, test_config: TestConfig):
         """Test mixed regular and iterable parameters."""
         try:
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 params = Parameters(
                     "John",        # @P1
                     [1, 2, 3],     # expands to @P2, @P3, @P4

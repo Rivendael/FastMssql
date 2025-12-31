@@ -6,37 +6,22 @@ and failure scenarios to ensure robust error handling.
 """
 
 import pytest
-import os
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 INVALID_CONNECTION_STRING = "Server=invalid_server;Database=invalid_db;User=invalid;Password=invalid"
-
-# @pytest.mark.asyncio
-# async def test_invalid_connection_string():
-#     """Test error handling for invalid connection strings."""
-#     # Completely malformed connection string
-#     with pytest.raises(Exception):
-#         async with Connection("This is not a valid connection string") as conn:
-#             pass
-#     # Valid format but invalid server
-#     with pytest.raises(Exception):
-#         async with Connection(INVALID_CONNECTION_STRING) as conn:
-#             pass
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_sql_syntax_errors():
+async def test_sql_syntax_errors(test_config: TestConfig):
     """Test handling of SQL syntax errors."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Invalid SQL syntax
             with pytest.raises(Exception):
                 await conn.execute("INVALID SQL STATEMENT")
@@ -57,10 +42,10 @@ async def test_sql_syntax_errors():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_constraint_violations():
+async def test_constraint_violations(test_config: TestConfig):
     """Test handling of database constraint violations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_constraints_error")
             
@@ -123,10 +108,10 @@ async def test_constraint_violations():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_data_type_conversion_errors():
+async def test_data_type_conversion_errors(test_config: TestConfig):
     """Test data type conversion errors."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test invalid date formats
             with pytest.raises(Exception):
                 await conn.execute("SELECT CAST('invalid-date' AS DATETIME)")
@@ -159,12 +144,12 @@ async def test_data_type_conversion_errors():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_interruption():
+async def test_connection_interruption(test_config: TestConfig):
     """Test behavior when connection has issues."""
     try:
         # Test multiple connections work independently
-        async with Connection(TEST_CONNECTION_STRING) as conn1:
-            async with Connection(TEST_CONNECTION_STRING) as conn2:
+        async with Connection(test_config.connection_string) as conn1:
+            async with Connection(test_config.connection_string) as conn2:
                 # Verify both work
                 result1 = await conn1.query("SELECT 1 as test")
                 assert result1 and result1.rows()
@@ -179,10 +164,10 @@ async def test_connection_interruption():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_null_and_empty_values():
+async def test_null_and_empty_values(test_config: TestConfig):
     """Test handling of NULL and empty values."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_null_empty")
             
@@ -237,10 +222,10 @@ async def test_null_and_empty_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_special_characters():
+async def test_special_characters(test_config: TestConfig):
     """Test handling of special characters in data."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_special_chars")
             
@@ -293,10 +278,10 @@ async def test_special_characters():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_boundary_values():
+async def test_boundary_values(test_config: TestConfig):
     """Test boundary values for different data types."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test numeric boundaries
             result = await conn.query("""
                 SELECT 
@@ -329,10 +314,10 @@ async def test_boundary_values():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_error_handling():
+async def test_async_error_handling(test_config: TestConfig):
     """Test error handling in async operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test async syntax error
             with pytest.raises(Exception):
                 await conn.execute("INVALID ASYNC SQL")
@@ -368,10 +353,10 @@ async def test_async_error_handling():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_empty_result_sets():
+async def test_empty_result_sets(test_config: TestConfig):
     """Test handling of empty result sets."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Query that returns no rows
             result = await conn.query("SELECT 1 as test WHERE 1 = 0")
             assert not result.has_rows() and len(result.rows()) == 0
@@ -388,10 +373,10 @@ async def test_empty_result_sets():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_result_sets():
+async def test_multiple_result_sets(test_config: TestConfig):
     """Test queries that return multiple result sets using batch statements."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Test with multiple SELECT statements in a single batch
             # This should work across different SQL Server editions
             try:

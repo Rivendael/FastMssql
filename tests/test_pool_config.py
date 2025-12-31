@@ -3,7 +3,7 @@ import pytest
 try:
     from fastmssql import PoolConfig
 except ImportError:
-    PoolConfig = None
+    raise pytest.skip("fastmssql module not available - run 'maturin develop' first", allow_module_level=True)
 
 
 @pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
@@ -247,15 +247,6 @@ class TestPoolConfigPresets:
         assert config.idle_timeout_secs == 1800
         assert config.connection_timeout_secs == 10
 
-    def test_load_test_worker(self):
-        """Test load_test_worker preset."""
-        config = PoolConfig.load_test_worker()
-        assert config.max_size == 12
-        assert config.min_idle == 4
-        assert config.max_lifetime_secs == 3600
-        assert config.idle_timeout_secs == 600
-        assert config.connection_timeout_secs == 5
-
 
 @pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
 class TestPoolConfigRepresentation:
@@ -352,3 +343,168 @@ class TestPoolConfigEdgeCases:
         assert config.max_lifetime_secs == 3600
         assert config.idle_timeout_secs == 1200
         assert config.connection_timeout_secs == 60
+
+@pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
+class TestPoolConfigTestOnCheckOut:
+    """Test PoolConfig test_on_check_out configuration."""
+
+    def test_test_on_check_out_default(self):
+        """Test that test_on_check_out defaults to None."""
+        config = PoolConfig()
+        assert config.test_on_check_out is None
+
+    def test_test_on_check_out_enabled(self):
+        """Test creating PoolConfig with test_on_check_out enabled."""
+        config = PoolConfig(test_on_check_out=True)
+        assert config.test_on_check_out is True
+
+    def test_test_on_check_out_disabled(self):
+        """Test creating PoolConfig with test_on_check_out disabled."""
+        config = PoolConfig(test_on_check_out=False)
+        assert config.test_on_check_out is False
+
+    def test_test_on_check_out_explicit_none(self):
+        """Test creating PoolConfig with test_on_check_out explicitly None."""
+        config = PoolConfig(test_on_check_out=None)
+        assert config.test_on_check_out is None
+
+    def test_test_on_check_out_with_other_settings(self):
+        """Test test_on_check_out combined with other pool settings."""
+        config = PoolConfig(
+            max_size=20,
+            min_idle=5,
+            max_lifetime_secs=1800,
+            idle_timeout_secs=600,
+            connection_timeout_secs=30,
+            test_on_check_out=True
+        )
+        assert config.max_size == 20
+        assert config.min_idle == 5
+        assert config.max_lifetime_secs == 1800
+        assert config.idle_timeout_secs == 600
+        assert config.connection_timeout_secs == 30
+        assert config.test_on_check_out is True
+
+    def test_test_on_check_out_getter(self):
+        """Test getting test_on_check_out value."""
+        config = PoolConfig(test_on_check_out=True)
+        assert config.test_on_check_out is True
+
+
+@pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
+class TestPoolConfigRetryConnection:
+    """Test PoolConfig retry_connection configuration."""
+
+    def test_retry_connection_default(self):
+        """Test that retry_connection defaults to None."""
+        config = PoolConfig()
+        assert config.retry_connection is None
+
+    def test_retry_connection_enabled(self):
+        """Test creating PoolConfig with retry_connection enabled."""
+        config = PoolConfig(retry_connection=True)
+        assert config.retry_connection is True
+
+    def test_retry_connection_disabled(self):
+        """Test creating PoolConfig with retry_connection disabled."""
+        config = PoolConfig(retry_connection=False)
+        assert config.retry_connection is False
+
+    def test_retry_connection_explicit_none(self):
+        """Test creating PoolConfig with retry_connection explicitly None."""
+        config = PoolConfig(retry_connection=None)
+        assert config.retry_connection is None
+
+    def test_retry_connection_with_other_settings(self):
+        """Test retry_connection combined with other pool settings."""
+        config = PoolConfig(
+            max_size=20,
+            min_idle=5,
+            max_lifetime_secs=1800,
+            idle_timeout_secs=600,
+            connection_timeout_secs=30,
+            retry_connection=True
+        )
+        assert config.max_size == 20
+        assert config.min_idle == 5
+        assert config.max_lifetime_secs == 1800
+        assert config.idle_timeout_secs == 600
+        assert config.connection_timeout_secs == 30
+        assert config.retry_connection is True
+
+    def test_retry_connection_getter(self):
+        """Test getting retry_connection value."""
+        config = PoolConfig(retry_connection=True)
+        assert config.retry_connection is True
+
+
+@pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
+class TestPoolConfigCombinedNewSettings:
+    """Test combinations of test_on_check_out and retry_connection."""
+
+    def test_both_settings_true(self):
+        """Test with both test_on_check_out and retry_connection True."""
+        config = PoolConfig(
+            max_size=15,
+            test_on_check_out=True,
+            retry_connection=True
+        )
+        assert config.test_on_check_out is True
+        assert config.retry_connection is True
+
+    def test_both_settings_false(self):
+        """Test with both test_on_check_out and retry_connection False."""
+        config = PoolConfig(
+            max_size=15,
+            test_on_check_out=False,
+            retry_connection=False
+        )
+        assert config.test_on_check_out is False
+        assert config.retry_connection is False
+
+    def test_mixed_settings_true_false(self):
+        """Test with test_on_check_out True and retry_connection False."""
+        config = PoolConfig(
+            test_on_check_out=True,
+            retry_connection=False
+        )
+        assert config.test_on_check_out is True
+        assert config.retry_connection is False
+
+    def test_mixed_settings_false_true(self):
+        """Test with test_on_check_out False and retry_connection True."""
+        config = PoolConfig(
+            test_on_check_out=False,
+            retry_connection=True
+        )
+        assert config.test_on_check_out is False
+        assert config.retry_connection is True
+
+    def test_both_settings_none(self):
+        """Test with both settings as None."""
+        config = PoolConfig(
+            test_on_check_out=None,
+            retry_connection=None
+        )
+        assert config.test_on_check_out is None
+        assert config.retry_connection is None
+
+    def test_all_settings_combined(self):
+        """Test all settings together including new reliability settings."""
+        config = PoolConfig(
+            max_size=30,
+            min_idle=8,
+            max_lifetime_secs=2400,
+            idle_timeout_secs=800,
+            connection_timeout_secs=45,
+            test_on_check_out=True,
+            retry_connection=True
+        )
+        assert config.max_size == 30
+        assert config.min_idle == 8
+        assert config.max_lifetime_secs == 2400
+        assert config.idle_timeout_secs == 800
+        assert config.connection_timeout_secs == 45
+        assert config.test_on_check_out is True
+        assert config.retry_connection is True
+

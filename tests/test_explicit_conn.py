@@ -1,23 +1,18 @@
 import pytest
-import os
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
-# Test configuration - adjust as needed
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connect_and_disconnect_basic():
+async def test_connect_and_disconnect_basic(test_config: TestConfig):
     """Ensure that connect() establishes and disconnect() closes the connection."""
-    if not TEST_CONNECTION_STRING:
-        pytest.fail("No test connection string set")
-
-    conn = Connection(TEST_CONNECTION_STRING)
+    conn = Connection(test_config.connection_string)
 
     # Initially not connected
     assert not await conn.is_connected()
@@ -35,12 +30,9 @@ async def test_connect_and_disconnect_basic():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_double_connect_and_disconnect():
+async def test_double_connect_and_disconnect(test_config: TestConfig):
     """Ensure multiple connect/disconnect calls behave correctly (idempotent)."""
-    if not TEST_CONNECTION_STRING:
-        pytest.fail("No test connection string set")
-
-    conn = Connection(TEST_CONNECTION_STRING)
+    conn = Connection(test_config.connection_string)
 
     # Connect twice
     assert await conn.connect() is True
@@ -55,12 +47,9 @@ async def test_double_connect_and_disconnect():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_requires_connect():
+async def test_query_requires_connect(test_config: TestConfig):
     """Verify that queries fail if connect() is not called first."""
-    if not TEST_CONNECTION_STRING:
-        pytest.fail("No test connection string set")
-
-    conn = Connection(TEST_CONNECTION_STRING)
+    conn = Connection(test_config.connection_string)
 
     # Without connecting, threadpool should be automatically created
     result = await conn.query("SELECT 1")

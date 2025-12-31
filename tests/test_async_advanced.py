@@ -15,30 +15,22 @@ import asyncio
 import time
 import pytest
 import random
-import os
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
+from conftest import TestConfig
+
 try:
     from fastmssql import Connection, PoolConfig
-    MSSQL_AVAILABLE = True
 except ImportError:
-    MSSQL_AVAILABLE = False
-    Connection = None
-    PoolConfig = None
-
+    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_truly_non_blocking():
+async def test_async_truly_non_blocking(test_config: TestConfig):
     """Test that async operations are truly non-blocking."""
     try:
         async def long_running_query(delay_seconds: int, query_id: int):
             """Execute a query that takes a specific amount of time."""
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # WAITFOR DELAY makes SQL Server wait for specified time
                 result = await conn.query(f"""
                     WAITFOR DELAY '00:00:0{delay_seconds}';
@@ -81,8 +73,7 @@ async def test_async_truly_non_blocking():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_connection_pool_race_conditions():
+async def test_connection_pool_race_conditions(test_config: TestConfig  ):
     """Test for race conditions in connection pooling/management."""
     try:
         connection_events = []
@@ -97,7 +88,7 @@ async def test_connection_pool_race_conditions():
                     if i == 0:  # Only on first iteration
                         await asyncio.sleep(worker_id * 0.02)  # Stagger worker starts
                     
-                    async with Connection(TEST_CONNECTION_STRING) as conn:
+                    async with Connection(test_config.connection_string) as conn:
                         # Log connection event (no lock needed - per worker)
                         worker_events.append({
                             'worker_id': worker_id,
@@ -207,15 +198,14 @@ async def test_connection_pool_race_conditions():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_concurrent_transaction_handling():
+async def test_concurrent_transaction_handling(test_config: TestConfig):
     """Test concurrent transactions for proper isolation and deadlock prevention."""
     try:
         async def concurrent_transaction_worker(worker_id: int, operations: int):
             """Worker that performs concurrent read-only operations."""
             results = []
             
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 for op in range(operations):
                     try:
                         # Test concurrent read operations using system tables
@@ -304,14 +294,13 @@ async def test_concurrent_transaction_handling():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_connection_limit_behavior():
+async def test_async_connection_limit_behavior(test_config: TestConfig):
     """Test behavior when approaching connection limits."""
     try:
         async def hold_connection(connection_id: int, hold_time: float):
             """Hold a connection open for a specified time."""
             try:
-                async with Connection(TEST_CONNECTION_STRING) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     # Execute a query to ensure connection is active
                     result = await conn.query(f"SELECT {connection_id} as conn_id")
                     assert result.has_rows() and result.rows()[0]['conn_id'] == connection_id
@@ -368,8 +357,7 @@ async def test_async_connection_limit_behavior():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_error_propagation_and_cleanup():
+async def test_async_error_propagation_and_cleanup(test_config: TestConfig):
     """Test that errors in async operations are properly propagated and resources cleaned up."""
     try:
         cleanup_events = []
@@ -377,7 +365,7 @@ async def test_async_error_propagation_and_cleanup():
         async def failing_operation(operation_id: int, should_fail: bool):
             """Operation that may fail to test error handling."""
             try:
-                async with Connection(TEST_CONNECTION_STRING) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     cleanup_events.append(f"Connection {operation_id} opened")
                     
                     if should_fail:
@@ -437,13 +425,12 @@ async def test_async_error_propagation_and_cleanup():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_query_cancellation():
+async def test_async_query_cancellation(test_config: TestConfig):
     """Test that long-running async queries can be properly cancelled."""
     try:
         async def long_running_query():
             """Execute a very long-running query."""
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Query that would take 30 seconds if not cancelled
                 result = await conn.query("""
                     WAITFOR DELAY '00:00:30';
@@ -476,8 +463,7 @@ async def test_async_query_cancellation():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_async_connection_state_consistency():
+async def test_async_connection_state_consistency(test_config: TestConfig):
     """Test that connection state remains consistent under concurrent access."""
     try:
         async def connection_state_worker(worker_id: int):
@@ -485,7 +471,7 @@ async def test_async_connection_state_consistency():
             worker_results = []
             
             try:
-                async with Connection(TEST_CONNECTION_STRING) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     # Perform fewer operations to reduce connection pressure
                     for op in range(3):  # Reduced from 5 to make test faster and more stable
                         try:
@@ -612,8 +598,7 @@ async def test_async_connection_state_consistency():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_connection_pool_statistics_and_configuration():
+async def test_connection_pool_statistics_and_configuration(test_config: TestConfig):
     """Test connection pool statistics and custom configuration."""
     try:
         # Test with custom pool configuration
@@ -625,7 +610,7 @@ async def test_connection_pool_statistics_and_configuration():
             connection_timeout_secs=10
         )
         
-        async with Connection(TEST_CONNECTION_STRING, pool_config) as conn:
+        async with Connection(test_config.connection_string, pool_config) as conn:
             # Test pool statistics (if available)
             try:
                 initial_stats = await conn.pool_stats()
@@ -662,7 +647,7 @@ async def test_connection_pool_statistics_and_configuration():
         ]
         
         for config_name, config in configs_to_test:
-            async with Connection(TEST_CONNECTION_STRING, config) as conn:
+            async with Connection(test_config.connection_string, config) as conn:
                 result = await conn.query(f"SELECT '{config_name}' as config_type")
                 assert result.has_rows() and result.rows()[0]['config_type'] == config_name
 
@@ -680,8 +665,7 @@ async def test_connection_pool_statistics_and_configuration():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skipif(not MSSQL_AVAILABLE, reason="fastmssql not available")
-async def test_connection_pool_reuse_efficiency():
+async def test_connection_pool_reuse_efficiency(test_config: TestConfig):
     """Test that connection pool efficiently reuses connections."""
     try:
         connection_ids_seen = set()
@@ -690,7 +674,7 @@ async def test_connection_pool_reuse_efficiency():
         async def test_single_operation(operation_id: int):
             """Execute a single operation using separate connections."""
             try:
-                async with Connection(TEST_CONNECTION_STRING) as conn:
+                async with Connection(test_config.connection_string) as conn:
                     # Get the SQL Server connection ID (SPID)
                     result = await conn.query("SELECT @@SPID as connection_id")
                     if not result.has_rows():
@@ -742,8 +726,3 @@ async def test_connection_pool_reuse_efficiency():
         
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
-
-
-if __name__ == "__main__":
-    # Run tests directly
-    pytest.main([__file__, "-v"])

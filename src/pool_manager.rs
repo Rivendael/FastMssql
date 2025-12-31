@@ -17,6 +17,8 @@ pub async fn establish_pool(config: &Config, pool_config: &PyPoolConfig) -> PyRe
     if let Some(lt) = pool_config.max_lifetime { builder = builder.max_lifetime(Some(lt)); }
     if let Some(to) = pool_config.idle_timeout { builder = builder.idle_timeout(Some(to)); }
     if let Some(ct) = pool_config.connection_timeout { builder = builder.connection_timeout(ct); }
+    if let Some(test) = pool_config.test_on_check_out { builder = builder.test_on_check_out(test); }
+    if let Some(retry) = pool_config.retry_connection { builder = builder.retry_connection(retry); }
 
     builder.build(manager).await.map_err(|e| {
         PyRuntimeError::new_err(format!("Failed to create connection pool: {}", e))

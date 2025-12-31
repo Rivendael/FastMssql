@@ -8,8 +8,8 @@ Run with: python -m pytest tests/test_stored_procedures.py -v
 """
 
 import pytest
-import pytest_asyncio
-import os
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
@@ -22,10 +22,10 @@ class TestStoredProcedureBasics:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_exec_with_select_statement(self, test_connection_string):
+    async def test_exec_with_select_statement(self, test_config: TestConfig):
         """Test EXEC pattern with SELECT."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query("EXEC sp_executesql N'SELECT 1 as value, ''success'' as status'")
                 assert result is not None
         except Exception as e:
@@ -33,10 +33,10 @@ class TestStoredProcedureBasics:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_parameterized_exec(self, test_connection_string):
+    async def test_parameterized_exec(self, test_config: TestConfig):
         """Test parameterized EXEC with parameters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT @P1 as name, @P2 as age, @P3 as salary",
                     ["Alice", 30, 75000.00]
@@ -52,10 +52,10 @@ class TestStoredProcedureBasics:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_conditional_exec(self, test_connection_string):
+    async def test_conditional_exec(self, test_config: TestConfig):
         """Test conditional EXEC pattern."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT CASE WHEN @P1 > @P2 THEN 'Greater' ELSE 'Less or Equal' END as comparison",
                     [42, 30]
@@ -73,10 +73,10 @@ class TestParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_arithmetic_operations(self, test_connection_string):
+    async def test_arithmetic_operations(self, test_config: TestConfig):
         """Test parameterized queries with arithmetic."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Addition
                 result = await conn.query("SELECT @P1 + @P2 as result", [10, 5])
                 assert result.has_rows()
@@ -94,10 +94,10 @@ class TestParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_string_concatenation(self, test_connection_string):
+    async def test_string_concatenation(self, test_config: TestConfig):
         """Test parameterized queries with string concatenation."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT @P1 + ' ' + @P2 as full_name",
                     ["John", "Doe"]
@@ -110,10 +110,10 @@ class TestParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_case_expressions(self, test_connection_string):
+    async def test_case_expressions(self, test_config: TestConfig):
         """Test parameterized queries with CASE expressions."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     """SELECT 
                         CASE 
@@ -136,10 +136,10 @@ class TestConditionalLogic:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_if_else_logic(self, test_connection_string):
+    async def test_if_else_logic(self, test_config: TestConfig):
         """Test conditional logic in parameterized queries."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT IIF(@P1 > @P2, 'Greater', 'Less or Equal') as comparison",
                     [10, 5]
@@ -153,10 +153,10 @@ class TestConditionalLogic:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_coalesce_null_handling(self, test_connection_string):
+    async def test_coalesce_null_handling(self, test_config: TestConfig):
         """Test COALESCE with NULL parameters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT COALESCE(CAST(@P1 AS NVARCHAR(100)), CAST(@P2 AS NVARCHAR(100)), 'default') as value",
                     [None, "provided"]
@@ -173,10 +173,10 @@ class TestComplexParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_multiple_conditions(self, test_connection_string):
+    async def test_multiple_conditions(self, test_config: TestConfig):
         """Test queries with multiple parameter conditions."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT CASE WHEN @P1 > 0 AND @P2 < 100 THEN 'valid' ELSE 'invalid' END as status",
                     [50, 75]
@@ -189,10 +189,10 @@ class TestComplexParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_date_operations(self, test_connection_string):
+    async def test_date_operations(self, test_config: TestConfig):
         """Test parameterized queries with date operations."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT DATEDIFF(day, @P1, @P2) as days_diff",
                     ["2023-01-01", "2023-01-10"]
@@ -205,10 +205,10 @@ class TestComplexParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_aggregate_with_case(self, test_connection_string):
+    async def test_aggregate_with_case(self, test_config: TestConfig):
         """Test aggregate functions with CASE expressions."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     """SELECT 
                         CASE WHEN @P1 > @P2 THEN @P1 ELSE @P2 END as max_value,
@@ -229,10 +229,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_null_parameters(self, test_connection_string):
+    async def test_null_parameters(self, test_config: TestConfig):
         """Test queries with NULL parameters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT @P1 as nullable_value",
                     [None]
@@ -245,10 +245,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_special_characters(self, test_connection_string):
+    async def test_special_characters(self, test_config: TestConfig):
         """Test parameters with special characters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 special_name = "O'Reilly & Associates <test>"
                 
                 result = await conn.query(
@@ -263,10 +263,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_unicode_parameters(self, test_connection_string):
+    async def test_unicode_parameters(self, test_config: TestConfig):
         """Test parameters with Unicode characters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 unicode_names = ["José García", "李明", "Müller Köhler"]
                 
                 for name in unicode_names:
@@ -278,10 +278,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_empty_string(self, test_connection_string):
+    async def test_empty_string(self, test_config: TestConfig):
         """Test parameters with empty strings."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query("SELECT @P1 as empty_str", [""])
                 assert result.has_rows()
                 assert result.rows()[0]["empty_str"] == ""
@@ -290,10 +290,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_large_string(self, test_connection_string):
+    async def test_large_string(self, test_config: TestConfig):
         """Test parameters with large strings (8KB+)."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 large_string = "x" * 8000
                 result = await conn.query("SELECT @P1 as large_str", [large_string])
                 assert result.has_rows()
@@ -303,10 +303,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_decimal_precision(self, test_connection_string):
+    async def test_decimal_precision(self, test_config: TestConfig):
         """Test decimal parameters with precision."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 precise_value = 12345678.99
                 result = await conn.query("SELECT @P1 as decimal_val", [precise_value])
                 assert result.has_rows()
@@ -316,10 +316,10 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_max_int_value(self, test_connection_string):
+    async def test_max_int_value(self, test_config: TestConfig):
         """Test maximum integer values."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 max_int = 2147483647
                 result = await conn.query("SELECT @P1 as max_int_val", [max_int])
                 assert result.has_rows()
@@ -333,10 +333,10 @@ class TestBatchParameterExecution:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_batch_queries_with_parameters(self, test_connection_string):
+    async def test_batch_queries_with_parameters(self, test_config: TestConfig):
         """Test batch query execution with different parameters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 batch_queries = [
                     ("SELECT @P1 + @P2 as sum_value", [10, 5]),
                     ("SELECT @P1 * @P2 as product_value", [7, 6]),
@@ -359,10 +359,10 @@ class TestParameterCachingPatterns:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_repeated_parameterized_query(self, test_connection_string):
+    async def test_repeated_parameterized_query(self, test_config: TestConfig):
         """Test repeated execution of parameterized queries."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 query = "SELECT @P1 as value"
                 
                 for i in range(5):
@@ -374,10 +374,10 @@ class TestParameterCachingPatterns:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_different_parameters_same_query(self, test_connection_string):
+    async def test_different_parameters_same_query(self, test_config: TestConfig):
         """Test same query shape with different parameters."""
         try:
-            async with Connection(test_connection_string) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 query = "SELECT @P1 as num1, @P2 as num2, @P1 + @P2 as sum_val"
                 
                 test_cases = [(1, 2), (10, 20), (100, 200), (5, 15)]

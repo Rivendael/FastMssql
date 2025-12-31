@@ -6,25 +6,22 @@ and boundary conditions to ensure proper type conversion between Python and SQL 
 """
 
 import pytest
-import os
 import datetime
 from decimal import Decimal
+
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
-
-
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_int_types():
+async def test_parameter_int_types(test_config: TestConfig):
     """Test integer parameter type conversions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Small integer
             result = await conn.query("SELECT @P1 as value", [42])
             assert result.rows()[0]['value'] == 42
@@ -46,10 +43,10 @@ async def test_parameter_int_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_string_types():
+async def test_parameter_string_types(test_config: TestConfig):
     """Test string parameter type conversions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Regular string
             result = await conn.query("SELECT @P1 as value", ['hello'])
             assert result.rows()[0]['value'] == 'hello'
@@ -80,10 +77,10 @@ async def test_parameter_string_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_float_types():
+async def test_parameter_float_types(test_config: TestConfig):
     """Test float parameter type conversions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Regular float
             result = await conn.query("SELECT @P1 as value", [3.14])
             value = result.rows()[0]['value']
@@ -108,10 +105,10 @@ async def test_parameter_float_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_bool_types():
+async def test_parameter_bool_types(test_config: TestConfig):
     """Test boolean parameter type conversions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # True
             result = await conn.query("SELECT CAST(@P1 AS BIT) as value", [True])
             value = result.rows()[0]['value']
@@ -136,10 +133,10 @@ async def test_parameter_bool_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_none_values():
+async def test_parameter_none_values(test_config: TestConfig):
     """Test None/NULL parameter handling."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # None parameter
             result = await conn.query("SELECT @P1 as value", [None])
             assert result.rows()[0]['value'] is None
@@ -159,10 +156,10 @@ async def test_parameter_none_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_datetime_types():
+async def test_parameter_datetime_types(test_config: TestConfig):
     """Test datetime parameter type conversions (via string)."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # datetime types are not directly supported - convert to string
             dt_val = datetime.datetime(2023, 12, 25, 14, 30, 45)
             dt_str = dt_val.isoformat()
@@ -184,10 +181,10 @@ async def test_parameter_datetime_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_decimal_types():
+async def test_parameter_decimal_types(test_config: TestConfig):
     """Test decimal parameter type conversions (via float)."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Decimal not directly supported - convert to float
             decimal_val = Decimal('123.45')
             float_val = float(decimal_val)
@@ -210,10 +207,10 @@ async def test_parameter_decimal_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_bytes_types():
+async def test_parameter_bytes_types(test_config: TestConfig):
     """Test bytes parameter type conversions."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Bytes
             bytes_val = b'hello'
             result = await conn.query("SELECT @P1 as value", [bytes_val])
@@ -230,10 +227,10 @@ async def test_parameter_bytes_types():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_list_only():
+async def test_parameter_list_only(test_config: TestConfig):
     """Test parameter passing as list (tuples not supported)."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # List parameters
             result = await conn.query("SELECT @P1 as val1, @P2 as val2", [1, 'test'])
             row = result.rows()[0]
@@ -251,10 +248,10 @@ async def test_parameter_list_only():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_many_parameters():
+async def test_parameter_many_parameters(test_config: TestConfig):
     """Test queries with many parameters (>16)."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create query with 20 parameters
             params = list(range(1, 21))
             param_placeholders = ', '.join([f'@P{i}' for i in range(1, 21)])
@@ -275,10 +272,10 @@ async def test_parameter_many_parameters():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_repeated_values():
+async def test_parameter_repeated_values(test_config: TestConfig):
     """Test using same parameter multiple times."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             result = await conn.query(
                 "SELECT @P1 + @P1 + @P1 as result",
                 [5]
@@ -293,10 +290,10 @@ async def test_parameter_repeated_values():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_special_string_characters():
+async def test_parameter_special_string_characters(test_config: TestConfig):
     """Test parameters with special characters."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Single quote
             result = await conn.query("SELECT @P1 as value", ["it's"])
             value = result.rows()[0]['value']
@@ -322,10 +319,10 @@ async def test_parameter_special_string_characters():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_whitespace_handling():
+async def test_parameter_whitespace_handling(test_config: TestConfig):
     """Test parameter handling with various whitespace."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Leading/trailing whitespace
             result = await conn.query("SELECT @P1 as value", ["  test  "])
             value = result.rows()[0]['value']
@@ -346,10 +343,10 @@ async def test_parameter_whitespace_handling():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_boundary_integers():
+async def test_parameter_boundary_integers(test_config: TestConfig):
     """Test boundary value integers."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # INT min/max
             result = await conn.query("SELECT @P1 as value", [-2147483648])
             assert result.rows()[0]['value'] == -2147483648
@@ -369,10 +366,10 @@ async def test_parameter_boundary_integers():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_mixed_types_in_batch():
+async def test_parameter_mixed_types_in_batch(test_config: TestConfig):
     """Test batch operations with mixed parameter types."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Create temp table
             await conn.execute("""
                 IF OBJECT_ID('tempdb..##mixed_types', 'U') IS NOT NULL
@@ -410,10 +407,10 @@ async def test_parameter_mixed_types_in_batch():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_type_explicit_casting():
+async def test_parameter_type_explicit_casting(test_config: TestConfig):
     """Test explicit type casting in queries."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Cast to INT
             result = await conn.query("SELECT CAST(@P1 AS INT) as value", [42.7])
             assert result.rows()[0]['value'] == 42

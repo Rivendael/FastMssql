@@ -8,14 +8,6 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Optional psutil import for memory tests
-try:
-    HAS_PSUTIL = True
-except ImportError:
-    psutil = None
-    HAS_PSUTIL = False
-
-# Import the library components
 try:
     from fastmssql import SslConfig, EncryptionLevel, Connection
 except ImportError as e:
@@ -294,7 +286,6 @@ class TestSslConfigConcurrentPerformance:
                     server="localhost",
                     database=f"db{thread_id}_{i}",
                     ssl_config=ssl_config,
-                    trusted_connection=True,
                     username="testuser",
                     password="testpass"
                 )
@@ -407,8 +398,3 @@ class TestSslConfigConcurrentPerformance:
             print(f"Threads {num_threads}: {total_configs} configs in {total_time:.4f}s ({throughput:.0f} configs/sec)")
             
             assert len(all_configs) == num_threads * configs_per_thread
-
-
-if __name__ == "__main__":
-    # Run with specific markers for performance tests
-    pytest.main([__file__, "-v", "-s"])  # -s to see print output

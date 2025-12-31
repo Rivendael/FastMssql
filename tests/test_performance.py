@@ -6,28 +6,23 @@ large data handling, and stress scenarios.
 """
 
 import pytest
-import os
 import asyncio
 import time
 
-# Add the parent directory to Python path for development
+from conftest import TestConfig
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
 
-# Test configuration
-TEST_CONNECTION_STRING = os.getenv(
-    "FASTMSSQL_TEST_CONNECTION_STRING",
-)
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_large_result_set():
+async def test_large_result_set(test_config: TestConfig):
     """Test handling of large result sets."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_large_data")
             
@@ -92,12 +87,12 @@ async def test_large_result_set():
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_concurrent_connections():
+async def test_concurrent_connections(test_config: TestConfig):
     """Test multiple concurrent database connections using async concurrency."""
     try:
         async def run_query(connection_id):
             """Function to run concurrent async queries."""
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 # Each connection runs its own queries
                 result = await conn.query(f"SELECT {connection_id} as connection_id, GETDATE() as execution_time")
                 return {
@@ -133,10 +128,10 @@ async def test_concurrent_connections():
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_performance():
+async def test_bulk_insert_performance(test_config: TestConfig):
     """Test performance of bulk insert operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             try:
                 await conn.execute("""
@@ -203,10 +198,10 @@ async def test_bulk_insert_performance():
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_repeated_query_performance():
+async def test_repeated_query_performance(test_config: TestConfig):
     """Test performance of repeated query execution."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_repeated_queries")
             
@@ -255,12 +250,12 @@ async def test_repeated_query_performance():
 @pytest.mark.asyncio
 @pytest.mark.performance
 @pytest.mark.integration
-async def test_async_concurrent_queries():
+async def test_async_concurrent_queries(test_config: TestConfig):
     """Test concurrent async query execution."""
     try:
         async def run_async_query(query_id):
             """Function to run async queries concurrently."""
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(f"""
                     SELECT 
                         {query_id} as query_id,
@@ -299,10 +294,10 @@ async def test_async_concurrent_queries():
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_memory_usage_with_large_strings():
+async def test_memory_usage_with_large_strings(test_config: TestConfig):
     """Test memory handling with large string data."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             try:
                 await conn.execute("""
@@ -355,7 +350,7 @@ async def test_memory_usage_with_large_strings():
 @pytest.mark.performance
 @pytest.mark.integration 
 @pytest.mark.asyncio
-async def test_connection_pool_simulation():
+async def test_connection_pool_simulation(test_config: TestConfig):
     """Simulate connection pooling behavior."""
     try:
         # Test rapid connection creation/destruction
@@ -363,7 +358,7 @@ async def test_connection_pool_simulation():
         start_time = time.time()
         
         for i in range(num_connections):
-            async with Connection(TEST_CONNECTION_STRING) as conn:
+            async with Connection(test_config.connection_string) as conn:
                 result = await conn.query("SELECT 1 as test_value")
                 assert result.rows()[0]['test_value'] == 1
 
@@ -382,10 +377,10 @@ async def test_connection_pool_simulation():
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_long_running_query():
+async def test_long_running_query(test_config: TestConfig):
     """Test handling of long-running queries."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Run a query that takes some time to execute
             start_time = time.time()
             result = await conn.query("""
@@ -417,10 +412,10 @@ async def test_long_running_query():
 @pytest.mark.stress
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_stress_mixed_operations():
+async def test_stress_mixed_operations(test_config: TestConfig):
     """Stress test with mixed read/write operations."""
     try:
-        async with Connection(TEST_CONNECTION_STRING) as conn:
+        async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_stress_operations")
             

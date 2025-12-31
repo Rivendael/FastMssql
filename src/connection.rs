@@ -1,10 +1,10 @@
+use parking_lot::Mutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use tiberius::{AuthMethod, Config, Row};
 
 use crate::batch::{bulk_insert, execute_batch, query_batch};
@@ -109,7 +109,7 @@ impl PyConnection {
 #[pymethods]
 impl PyConnection {
     #[new]
-    #[pyo3(signature = (connection_string = None, pool_config = None, ssl_config = None, server = None, database = None, username = None, password = None, trusted_connection = None))]
+    #[pyo3(signature = (connection_string = None, pool_config = None, ssl_config = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
     pub fn new(
         connection_string: Option<String>,
         pool_config: Option<PyPoolConfig>,
@@ -118,9 +118,12 @@ impl PyConnection {
         database: Option<String>,
         username: Option<String>,
         password: Option<String>,
-        trusted_connection: Option<bool>,
+        application_intent: Option<String>,
+        port: Option<u16>,
+        instance_name: Option<String>,
+        application_name: Option<String>,
     ) -> PyResult<Self> {
-        let mut config = if let Some(conn_str) = connection_string {
+        let config = if let Some(conn_str) = connection_string {
             // Use provided connection string
             Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
@@ -135,10 +138,27 @@ impl PyConnection {
 
             if let Some(user) = username {
                 config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default()));
-            } else if trusted_connection.unwrap_or(true) {
-                return Err(PyValueError::new_err(
-                    "Windows authentication is not supported. Please provide username and password for SQL Server authentication."
-                ));
+            }
+
+            if let Some(p) = port {
+                config.port(p);
+            }
+
+            if let Some(itn) = instance_name {
+                config.instance_name(itn);
+            }
+
+            if let Some(apn) = application_name {
+                config.application_name(apn);
+            }
+
+            if let Some(intent) = application_intent {
+                let is_readonly = intent.to_lowercase().trim() == "readonly";
+                config.readonly(is_readonly);
+            }
+
+            if let Some(ref ssl_cfg) = ssl_config {
+                ssl_cfg.apply_to_config(&mut config);
             }
 
             config
@@ -147,11 +167,6 @@ impl PyConnection {
                 "Either connection_string or server must be provided",
             ));
         };
-
-        // Apply SSL configuration if provided
-        if let Some(ref ssl_cfg) = ssl_config {
-            ssl_cfg.apply_to_config(&mut config);
-        }
 
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
 
@@ -264,7 +279,7 @@ impl PyConnection {
                 let pool_guard = pool.lock();
                 pool_guard.is_some()
             };
-            
+
             if is_connected {
                 return Ok(());
             }
@@ -304,7 +319,7 @@ impl PyConnection {
                 let pool_guard = pool.lock();
                 pool_guard.is_some()
             };
-            
+
             if is_connected {
                 return Ok(true);
             }
