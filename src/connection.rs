@@ -128,39 +128,15 @@ impl PyConnection {
             Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
         } else if let Some(srv) = server {
-            // Build config from individual parameters
             let mut config = Config::new();
             config.host(&srv);
-
-            if let Some(db) = database {
-                config.database(&db);
-            }
-
-            if let Some(user) = username {
-                config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default()));
-            }
-
-            if let Some(p) = port {
-                config.port(p);
-            }
-
-            if let Some(itn) = instance_name {
-                config.instance_name(itn);
-            }
-
-            if let Some(apn) = application_name {
-                config.application_name(apn);
-            }
-
-            if let Some(intent) = application_intent {
-                let is_readonly = intent.to_lowercase().trim() == "readonly";
-                config.readonly(is_readonly);
-            }
-
-            if let Some(ref ssl_cfg) = ssl_config {
-                ssl_cfg.apply_to_config(&mut config);
-            }
-
+            if let Some(db) = database { config.database(&db); }
+            if let Some(user) = username { config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default())); }
+            if let Some(p) = port { config.port(p); }
+            if let Some(itn) = instance_name { config.instance_name(itn); }
+            if let Some(apn) = application_name { config.application_name(apn); }
+            if let Some(intent) = application_intent { config.readonly(intent.to_lowercase().trim() == "readonly"); }
+            if let Some(ref ssl_cfg) = ssl_config { ssl_cfg.apply_to_config(&mut config); }
             config
         } else {
             return Err(PyValueError::new_err(

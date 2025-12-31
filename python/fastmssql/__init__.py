@@ -16,7 +16,14 @@ from .fastmssql import (
     EncryptionLevel,
     version,
 )
-from enum import StrEnum
+
+try:
+    from enum import StrEnum
+except ImportError:
+    # Python 3.10 compatibility: StrEnum was added in Python 3.11
+    from enum import Enum
+    class StrEnum(str, Enum):
+        pass
 
 class ApplicationIntent(StrEnum):
     READ_ONLY = "ReadOnly"
