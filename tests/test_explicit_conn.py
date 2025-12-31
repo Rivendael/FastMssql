@@ -5,7 +5,7 @@ from conftest import Config
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
+    pytest.fail("mssql wrapper not available - make sure mssql.py is importable")
 
 
 @pytest.mark.integration

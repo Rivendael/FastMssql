@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from fastmssql import SslConfig, EncryptionLevel, Connection
 except ImportError as e:
-    pytest.fail(f"Cannot import mssql library: {e}", allow_module_level=True)
+    pytest.fail(f"Cannot import mssql library: {e}")
 
 
 class TestSslConfigPerformance:

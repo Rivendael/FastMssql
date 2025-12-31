@@ -12,7 +12,7 @@ from conftest import Config
 try:
     from fastmssql import Connection, Parameter, Parameters
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
 class TestParameter:
     """Test the Parameter class functionality."""

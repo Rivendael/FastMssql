@@ -9,7 +9,7 @@ import os
 try:
     from fastmssql import SslConfig
 except ImportError as e:
-    pytest.fail(f"Cannot import mssql library: {e}", allow_module_level=True)
+    pytest.fail(f"Cannot import mssql library: {e}")
 
 
 class TestCertificateFileFormats:

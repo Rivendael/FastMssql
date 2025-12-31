@@ -13,7 +13,7 @@ try:
     import fastmssql
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("mssql wrapper not available - make sure mssql.py is importable", allow_module_level=True)
+    pytest.fail("mssql wrapper not available - make sure mssql.py is importable")
 
 def test_version():
     """Test that we can get the library version."""

@@ -13,7 +13,7 @@ from conftest import Config
 try:
     from fastmssql import Connection, Parameters
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
 @pytest.mark.integration
 @pytest.mark.performance

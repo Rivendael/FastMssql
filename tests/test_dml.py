@@ -12,7 +12,7 @@ from conftest import Config
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
 @pytest_asyncio.fixture(scope="function")
 async def setup_test_table(test_config: Config):

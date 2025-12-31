@@ -21,7 +21,7 @@ from conftest import Config
 try:
     from fastmssql import Connection, PoolConfig
 except ImportError:
-    pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    pytest.fail("fastmssql not available - run 'maturin develop' first")
 
 @pytest.mark.asyncio
 @pytest.mark.integration

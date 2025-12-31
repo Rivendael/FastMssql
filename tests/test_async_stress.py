@@ -23,7 +23,7 @@ try:
     from fastmssql import Connection, PoolConfig
 
 except ImportError:
-    raise pytest.skip("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
+    raise pytest.skip("fastmssql not available - run 'maturin develop' first")
 
 
 class MemoryTracker:

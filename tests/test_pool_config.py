@@ -3,7 +3,7 @@ import pytest
 try:
     from fastmssql import PoolConfig
 except ImportError:
-    raise pytest.skip("fastmssql module not available - run 'maturin develop' first", allow_module_level=True)
+    raise pytest.skip("fastmssql module not available - run 'maturin develop' first")
 
 
 @pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")

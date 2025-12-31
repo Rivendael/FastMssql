@@ -21,7 +21,7 @@ from conftest import Config
 try:
     from fastmssql import Connection
 except ImportError:
-    pytest.fail("FastMSSQL wrapper not available", allow_module_level=True)
+    pytest.fail("FastMSSQL wrapper not available")
 
 
 class TestBatchQueries:
