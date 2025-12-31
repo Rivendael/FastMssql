@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timedelta
 import random
 
-from tests.conftest import Config
+from conftest import Config
 
 try:
     from fastmssql import Connection

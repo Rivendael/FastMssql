@@ -581,6 +581,88 @@ async def test_application_intent_default(test_config: Config):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_application_intent_as_string(test_config: Config):
+    """Test that ApplicationIntent can be passed as a string."""
+    try:
+        # Create connection with application_intent as string
+        conn = Connection(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password,
+            ssl_config=SslConfig.development(),
+            application_intent="READ_ONLY"
+        )
+        
+        # Connect and verify it works
+        assert await conn.connect()
+        assert await conn.is_connected()
+        
+        # Execute a read query
+        result = await conn.query("SELECT 1 as val")
+        assert result.rows()[0]['val'] == 1
+        
+        # Disconnect
+        assert await conn.disconnect()
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_application_intent_case_insensitive(test_config: Config):
+    """Test that ApplicationIntent string is case insensitive."""
+    try:
+        # Test with lowercase string
+        conn_lower = Connection(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password,
+            ssl_config=SslConfig.development(),
+            application_intent="read_write"
+        )
+        
+        assert await conn_lower.connect()
+        result = await conn_lower.query("SELECT 1 as val")
+        assert result.rows()[0]['val'] == 1
+        await conn_lower.disconnect()
+        
+        # Test with mixed case string
+        conn_mixed = Connection(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password,
+            ssl_config=SslConfig.development(),
+            application_intent="Read_Only"
+        )
+        
+        assert await conn_mixed.connect()
+        result = await conn_mixed.query("SELECT 1 as val")
+        assert result.rows()[0]['val'] == 1
+        await conn_mixed.disconnect()
+        
+        # Test with uppercase string
+        conn_upper = Connection(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password,
+            ssl_config=SslConfig.development(),
+            application_intent="READONLY"
+        )
+        
+        assert await conn_upper.connect()
+        result = await conn_upper.query("SELECT 1 as val")
+        assert result.rows()[0]['val'] == 1
+        await conn_upper.disconnect()
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_connection_with_explicit_port(test_config: Config):
     """Test connection with explicit port parameter using individual parameters."""
     try:
