@@ -9,7 +9,7 @@ import os
 
 import pytest
 import pytest_asyncio
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -18,7 +18,7 @@ except ImportError:
 
 
 @pytest_asyncio.fixture
-async def stored_procedures(test_config: TestConfig):
+async def stored_procedures(test_config: Config):
     """Setup and teardown stored procedures for testing."""
     async with Connection(test_config.connection_string) as connection:
         try:
@@ -110,7 +110,7 @@ async def stored_procedures(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_simple_stored_procedure_call(test_config: TestConfig):
+async def test_simple_stored_procedure_call(test_config: Config):
     """Test creating and calling stored procedures using dynamic SQL."""
     async with Connection(test_config.connection_string) as conn:
         try:
@@ -153,7 +153,7 @@ async def test_simple_stored_procedure_call(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_stored_procedure_with_parameters(test_config: TestConfig):
+async def test_stored_procedure_with_parameters(test_config: Config):
     """Test stored procedures with parameters using dynamic SQL."""
     async with Connection(test_config.connection_string) as conn:
         try:
@@ -195,7 +195,7 @@ async def test_stored_procedure_with_parameters(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_user_defined_functions(test_config: TestConfig):
+async def test_user_defined_functions(test_config: Config):
     """Test user-defined functions using dynamic SQL."""
     async with Connection(test_config.connection_string) as conn:
         # Test creating and using a function with dynamic SQL
@@ -232,7 +232,7 @@ async def test_user_defined_functions(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_common_table_expressions(test_config: TestConfig):
+async def test_common_table_expressions(test_config: Config):
     """Test Common Table Expressions (CTEs)."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -318,7 +318,7 @@ async def test_common_table_expressions(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_window_functions(test_config: TestConfig):
+async def test_window_functions(test_config: Config):
     """Test window functions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -409,7 +409,7 @@ async def test_window_functions(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pivot_and_unpivot(test_config: TestConfig):
+async def test_pivot_and_unpivot(test_config: Config):
     """Test PIVOT and UNPIVOT operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -466,7 +466,7 @@ async def test_pivot_and_unpivot(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_temp_tables_and_variables(test_config: TestConfig):
+async def test_temp_tables_and_variables(test_config: Config):
     """Test temporary tables and variables in single batch."""
     async with Connection(test_config.connection_string) as conn:
         # Test local temporary table and variables in a single batch
@@ -504,7 +504,7 @@ async def test_temp_tables_and_variables(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_stored_procedures(test_config: TestConfig):
+async def test_async_stored_procedures(test_config: Config):
     """Test async stored procedures using dynamic SQL."""
     async with Connection(test_config.connection_string) as conn:
         try:

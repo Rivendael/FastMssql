@@ -7,7 +7,7 @@ type handling, and edge cases when retrieving data from queries.
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -17,7 +17,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_dict_access(test_config: TestConfig):
+async def test_row_dict_access(test_config: Config):
     """Test accessing row columns using dictionary-style access."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -36,7 +36,7 @@ async def test_row_dict_access(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_get_method(test_config: TestConfig):
+async def test_row_get_method(test_config: Config):
     """Test accessing row columns using get() method with defaults."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -65,7 +65,7 @@ async def test_row_get_method(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_none_values(test_config: TestConfig):
+async def test_row_none_values(test_config: Config):
     """Test handling of NULL values in row columns."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -92,7 +92,7 @@ async def test_row_none_values(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_column_iteration(test_config: TestConfig):
+async def test_row_column_iteration(test_config: Config):
     """Test iterating over row columns."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -124,7 +124,7 @@ async def test_row_column_iteration(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_special_column_names(test_config: TestConfig):
+async def test_row_special_column_names(test_config: Config):
     """Test handling of columns with special names."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -150,7 +150,7 @@ async def test_row_special_column_names(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execution_result_has_rows(test_config: TestConfig):
+async def test_execution_result_has_rows(test_config: Config):
     """Test has_rows() method for different query types."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -167,7 +167,7 @@ async def test_execution_result_has_rows(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execution_result_rows_method(test_config: TestConfig):
+async def test_execution_result_rows_method(test_config: Config):
     """Test rows() method returns list of rows."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -188,7 +188,7 @@ async def test_execution_result_rows_method(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execution_result_empty_rows(test_config: TestConfig):
+async def test_execution_result_empty_rows(test_config: Config):
     """Test rows() method when result has no rows."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -204,7 +204,7 @@ async def test_execution_result_empty_rows(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execution_result_affected_rows(test_config: TestConfig):
+async def test_execution_result_affected_rows(test_config: Config):
     """Test affected_rows() for INSERT/UPDATE/DELETE operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -241,7 +241,7 @@ async def test_execution_result_affected_rows(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_with_multiple_columns(test_config: TestConfig):
+async def test_row_with_multiple_columns(test_config: Config):
     """Test row access with many columns."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -272,7 +272,7 @@ async def test_row_with_multiple_columns(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_type_preservation(test_config: TestConfig):
+async def test_row_type_preservation(test_config: Config):
     """Test that row values preserve their types correctly."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -309,7 +309,7 @@ async def test_row_type_preservation(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_row_case_sensitivity(test_config: TestConfig):
+async def test_row_case_sensitivity(test_config: Config):
     """Test row column access case sensitivity."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -332,7 +332,7 @@ async def test_row_case_sensitivity(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_result_rows_independence(test_config: TestConfig):
+async def test_multiple_result_rows_independence(test_config: Config):
     """Test that multiple rows are independent objects."""
     try:
         async with Connection(test_config.connection_string) as conn:

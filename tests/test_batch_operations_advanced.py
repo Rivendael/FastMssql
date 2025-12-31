@@ -7,7 +7,7 @@ with various edge cases, transaction handling, and error scenarios.
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -17,7 +17,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_basic(test_config: TestConfig):
+async def test_execute_batch_basic(test_config: Config):
     """Test basic batch execution with INSERT statements."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -55,7 +55,7 @@ async def test_execute_batch_basic(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_empty(test_config: TestConfig):
+async def test_execute_batch_empty(test_config: Config):
     """Test batch execution with empty batch list."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -75,7 +75,7 @@ async def test_execute_batch_empty(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_single_item(test_config: TestConfig):
+async def test_execute_batch_single_item(test_config: Config):
     """Test batch execution with single item."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -107,7 +107,7 @@ async def test_execute_batch_single_item(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_large_batch(test_config: TestConfig):
+async def test_execute_batch_large_batch(test_config: Config):
     """Test batch execution with many items."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -144,7 +144,7 @@ async def test_execute_batch_large_batch(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_mixed_operations(test_config: TestConfig):
+async def test_execute_batch_mixed_operations(test_config: Config):
     """Test batch with mixed INSERT, UPDATE, DELETE operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -185,7 +185,7 @@ async def test_execute_batch_mixed_operations(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_duplicate_key_error(test_config: TestConfig):
+async def test_execute_batch_duplicate_key_error(test_config: Config):
     """Test batch execution with duplicate key error."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -222,7 +222,7 @@ async def test_execute_batch_duplicate_key_error(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_no_parameters(test_config: TestConfig):
+async def test_execute_batch_no_parameters(test_config: Config):
     """Test batch with items that have no parameters."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -258,7 +258,7 @@ async def test_execute_batch_no_parameters(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_basic(test_config: TestConfig):
+async def test_bulk_insert_basic(test_config: Config):
     """Test basic bulk insert operation."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -294,7 +294,7 @@ async def test_bulk_insert_basic(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_many_rows(test_config: TestConfig):
+async def test_bulk_insert_many_rows(test_config: Config):
     """Test bulk insert with many rows."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -333,7 +333,7 @@ async def test_bulk_insert_many_rows(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_different_types(test_config: TestConfig):
+async def test_bulk_insert_different_types(test_config: Config):
     """Test bulk insert with different data types."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -376,7 +376,7 @@ async def test_bulk_insert_different_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_batch_basic(test_config: TestConfig):
+async def test_query_batch_basic(test_config: Config):
     """Test batch query execution."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -423,7 +423,7 @@ async def test_query_batch_basic(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_batch_empty_results(test_config: TestConfig):
+async def test_query_batch_empty_results(test_config: Config):
     """Test batch query with empty results."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -462,7 +462,7 @@ async def test_query_batch_empty_results(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_transaction_rollback(test_config: TestConfig):
+async def test_execute_batch_transaction_rollback(test_config: Config):
     """Test that batch is transactional and rolls back on error."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -503,7 +503,7 @@ async def test_execute_batch_transaction_rollback(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_batch_return_values(test_config: TestConfig):
+async def test_execute_batch_return_values(test_config: Config):
     """Test that execute_batch returns correct affected row counts."""
     try:
         async with Connection(test_config.connection_string) as conn:

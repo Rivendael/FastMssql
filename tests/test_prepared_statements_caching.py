@@ -11,7 +11,7 @@ import pytest
 import pytest_asyncio
 import time
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -19,7 +19,7 @@ except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 @pytest_asyncio.fixture(scope="function")
-async def prepared_statement_test_table(test_config: TestConfig):
+async def prepared_statement_test_table(test_config: Config):
     """Setup and teardown test table for prepared statement tests."""
     try:
         async with Connection(test_config.connection_string) as connection:
@@ -56,7 +56,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_single_parameter_binding(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_single_parameter_binding(self, prepared_statement_test_table, test_config: Config):
         """Test single parameter binding."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -81,7 +81,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_multiple_parameter_binding(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_multiple_parameter_binding(self, prepared_statement_test_table, test_config: Config):
         """Test multiple parameter binding in single query."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -106,7 +106,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_parameter_type_validation(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_parameter_type_validation(self, prepared_statement_test_table, test_config: Config):
         """Test that parameter types are properly validated and converted."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -136,7 +136,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_null_parameter_binding(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_null_parameter_binding(self, prepared_statement_test_table, test_config: Config):
         """Test binding NULL values as parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -161,7 +161,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_empty_string_parameter(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_empty_string_parameter(self, prepared_statement_test_table, test_config: Config):
         """Test binding empty strings as parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -186,7 +186,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_large_string_parameter(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_large_string_parameter(self, prepared_statement_test_table, test_config: Config):
         """Test binding large string parameters (>8KB)."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -214,7 +214,7 @@ class TestParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_special_characters_in_parameters(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_special_characters_in_parameters(self, prepared_statement_test_table, test_config: Config):
         """Test parameter binding with special characters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -243,7 +243,7 @@ class TestQueryPlanCaching:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_same_query_reuse(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_same_query_reuse(self, prepared_statement_test_table, test_config: Config):
         """Test that running the same query multiple times benefits from caching."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -271,7 +271,7 @@ class TestQueryPlanCaching:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_different_parameter_values_same_query(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_different_parameter_values_same_query(self, prepared_statement_test_table, test_config: Config):
         """Test that query plan is reused with different parameter values."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -307,7 +307,7 @@ class TestQueryPlanCaching:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_query_plan_cache_performance_improvement(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_query_plan_cache_performance_improvement(self, prepared_statement_test_table, test_config: Config):
         """Test that repeated queries show performance improvement due to caching."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -344,7 +344,7 @@ class TestSQLInjectionPrevention:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_sql_injection_in_string_parameter(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_sql_injection_in_string_parameter(self, prepared_statement_test_table, test_config: Config):
         """Test that SQL injection attempts in string parameters are prevented."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -371,7 +371,7 @@ class TestSQLInjectionPrevention:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_sql_injection_union_based(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_sql_injection_union_based(self, prepared_statement_test_table, test_config: Config):
         """Test that UNION-based SQL injection is prevented."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -404,7 +404,7 @@ class TestSQLInjectionPrevention:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_sql_injection_numeric_parameter(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_sql_injection_numeric_parameter(self, prepared_statement_test_table, test_config: Config):
         """Test that SQL injection is prevented in numeric parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -433,7 +433,7 @@ class TestSQLInjectionPrevention:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_sql_injection_time_based_blind(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_sql_injection_time_based_blind(self, prepared_statement_test_table, test_config: Config):
         """Test that time-based blind SQL injection is prevented."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -469,7 +469,7 @@ class TestParameterEdgeCases:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_unicode_parameters(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_unicode_parameters(self, prepared_statement_test_table, test_config: Config):
         """Test binding Unicode parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -502,7 +502,7 @@ class TestParameterEdgeCases:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_parameter_with_line_breaks(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_parameter_with_line_breaks(self, prepared_statement_test_table, test_config: Config):
         """Test binding parameters containing line breaks and whitespace."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -526,7 +526,7 @@ class TestParameterEdgeCases:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_max_int_parameter(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_max_int_parameter(self, prepared_statement_test_table, test_config: Config):
         """Test binding maximum integer values."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -550,7 +550,7 @@ class TestParameterEdgeCases:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_decimal_precision_parameter(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_decimal_precision_parameter(self, prepared_statement_test_table, test_config: Config):
         """Test binding decimal values with precision."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -578,7 +578,7 @@ class TestBatchParameterBinding:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_batch_query_with_different_parameters(self, prepared_statement_test_table, test_config: TestConfig):
+    async def test_batch_query_with_different_parameters(self, prepared_statement_test_table, test_config: Config):
         """Test batch query execution with different parameters for each query."""
         try:
             async with Connection(test_config.connection_string) as conn:

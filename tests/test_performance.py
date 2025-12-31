@@ -9,7 +9,7 @@ import pytest
 import asyncio
 import time
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -19,7 +19,7 @@ except ImportError:
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_large_result_set(test_config: TestConfig):
+async def test_large_result_set(test_config: Config):
     """Test handling of large result sets."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -87,7 +87,7 @@ async def test_large_result_set(test_config: TestConfig):
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_concurrent_connections(test_config: TestConfig):
+async def test_concurrent_connections(test_config: Config):
     """Test multiple concurrent database connections using async concurrency."""
     try:
         async def run_query(connection_id):
@@ -128,7 +128,7 @@ async def test_concurrent_connections(test_config: TestConfig):
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_performance(test_config: TestConfig):
+async def test_bulk_insert_performance(test_config: Config):
     """Test performance of bulk insert operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -198,7 +198,7 @@ async def test_bulk_insert_performance(test_config: TestConfig):
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_repeated_query_performance(test_config: TestConfig):
+async def test_repeated_query_performance(test_config: Config):
     """Test performance of repeated query execution."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -250,7 +250,7 @@ async def test_repeated_query_performance(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.performance
 @pytest.mark.integration
-async def test_async_concurrent_queries(test_config: TestConfig):
+async def test_async_concurrent_queries(test_config: Config):
     """Test concurrent async query execution."""
     try:
         async def run_async_query(query_id):
@@ -294,7 +294,7 @@ async def test_async_concurrent_queries(test_config: TestConfig):
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_memory_usage_with_large_strings(test_config: TestConfig):
+async def test_memory_usage_with_large_strings(test_config: Config):
     """Test memory handling with large string data."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -350,7 +350,7 @@ async def test_memory_usage_with_large_strings(test_config: TestConfig):
 @pytest.mark.performance
 @pytest.mark.integration 
 @pytest.mark.asyncio
-async def test_connection_pool_simulation(test_config: TestConfig):
+async def test_connection_pool_simulation(test_config: Config):
     """Simulate connection pooling behavior."""
     try:
         # Test rapid connection creation/destruction
@@ -377,7 +377,7 @@ async def test_connection_pool_simulation(test_config: TestConfig):
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_long_running_query(test_config: TestConfig):
+async def test_long_running_query(test_config: Config):
     """Test handling of long-running queries."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -412,7 +412,7 @@ async def test_long_running_query(test_config: TestConfig):
 @pytest.mark.stress
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_stress_mixed_operations(test_config: TestConfig):
+async def test_stress_mixed_operations(test_config: Config):
     """Stress test with mixed read/write operations."""
     try:
         async with Connection(test_config.connection_string) as conn:

@@ -8,7 +8,7 @@ and various edge cases in connection lifecycle management.
 import pytest
 import asyncio
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, SslConfig, ApplicationIntent
@@ -17,7 +17,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connect_disconnect_cycle(test_config: TestConfig):
+async def test_connect_disconnect_cycle(test_config: Config):
     """Test basic connect/disconnect cycle."""
     try:
         conn = Connection(test_config.connection_string)
@@ -42,7 +42,7 @@ async def test_connect_disconnect_cycle(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_reconnect_after_disconnect(test_config: TestConfig):
+async def test_reconnect_after_disconnect(test_config: Config):
     """Test reconnecting after disconnect."""
     try:
         conn = Connection(test_config.connection_string)
@@ -64,7 +64,7 @@ async def test_reconnect_after_disconnect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_reconnect_cycles(test_config: TestConfig):
+async def test_multiple_reconnect_cycles(test_config: Config):
     """Test many connect/disconnect cycles."""
     try:
         conn = Connection(test_config.connection_string)
@@ -87,7 +87,7 @@ async def test_multiple_reconnect_cycles(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_double_connect(test_config: TestConfig):
+async def test_double_connect(test_config: Config):
     """Test calling connect() when already connected."""
     try:
         conn = Connection(test_config.connection_string)
@@ -112,7 +112,7 @@ async def test_double_connect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_double_disconnect(test_config: TestConfig):
+async def test_double_disconnect(test_config: Config):
     """Test calling disconnect() when already disconnected."""
     try:
         conn = Connection(test_config.connection_string)
@@ -131,7 +131,7 @@ async def test_double_disconnect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_without_explicit_connect(test_config: TestConfig):
+async def test_query_without_explicit_connect(test_config: Config):
     """Test that query works without explicit connect (lazy initialization)."""
     try:
         conn = Connection(test_config.connection_string)
@@ -145,7 +145,7 @@ async def test_query_without_explicit_connect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_execute_without_explicit_connect(test_config: TestConfig):
+async def test_execute_without_explicit_connect(test_config: Config):
     """Test that execute works without explicit connect."""
     try:
         conn = Connection(test_config.connection_string)
@@ -175,7 +175,7 @@ async def test_execute_without_explicit_connect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_operations_between_connect_disconnect(test_config: TestConfig):
+async def test_operations_between_connect_disconnect(test_config: Config):
     """Test multiple operations between connect and disconnect."""
     try:
         conn = Connection(test_config.connection_string)
@@ -194,7 +194,7 @@ async def test_operations_between_connect_disconnect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_concurrent_explicit_connections(test_config: TestConfig):
+async def test_concurrent_explicit_connections(test_config: Config):
     """Test multiple concurrent connections with explicit management."""
     try:
         async def run_operations(conn_id):
@@ -221,7 +221,7 @@ async def test_concurrent_explicit_connections(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_disconnect_cleans_up_resources(test_config: TestConfig):
+async def test_disconnect_cleans_up_resources(test_config: Config):
     """Test that disconnect properly cleans up resources."""
     try:
         conn = Connection(test_config.connection_string)
@@ -242,7 +242,7 @@ async def test_disconnect_cleans_up_resources(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_explicit_parameters(test_config: TestConfig):
+async def test_connection_with_explicit_parameters(test_config: Config):
     """Test explicit connect/disconnect verifies the API signature."""
     try:
         # Test that Connection accepts individual parameters via connection_string
@@ -259,7 +259,7 @@ async def test_connection_with_explicit_parameters(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_reuse_same_connection_multiple_times(test_config: TestConfig):
+async def test_reuse_same_connection_multiple_times(test_config: Config):
     """Test reusing same connection object multiple times."""
     try:
         conn = Connection(test_config.connection_string)
@@ -282,7 +282,7 @@ async def test_reuse_same_connection_multiple_times(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_stats_after_disconnect(test_config: TestConfig):
+async def test_pool_stats_after_disconnect(test_config: Config):
     """Test pool stats behavior after disconnect."""
     try:
         conn = Connection(test_config.connection_string)
@@ -306,7 +306,7 @@ async def test_pool_stats_after_disconnect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connect_after_error(test_config: TestConfig):
+async def test_connect_after_error(test_config: Config):
     """Test that connection still works after query error."""
     try:
         conn = Connection(test_config.connection_string)
@@ -330,7 +330,7 @@ async def test_connect_after_error(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_mixed_explicit_and_context_manager(test_config: TestConfig):
+async def test_mixed_explicit_and_context_manager(test_config: Config):
     """Test mixing explicit connect/disconnect with context manager usage."""
     try:
         conn = Connection(test_config.connection_string)
@@ -353,7 +353,7 @@ async def test_mixed_explicit_and_context_manager(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_batch_with_explicit_connect(test_config: TestConfig):
+async def test_query_batch_with_explicit_connect(test_config: Config):
     """Test batch operations with explicit connect/disconnect."""
     try:
         conn = Connection(test_config.connection_string)
@@ -400,7 +400,7 @@ async def test_query_batch_with_explicit_connect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_reuse_after_idle(test_config: TestConfig):
+async def test_connection_reuse_after_idle(test_config: Config):
     """Test connection still works after period of idle time."""
     try:
         conn = Connection(test_config.connection_string)
@@ -423,7 +423,7 @@ async def test_connection_reuse_after_idle(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_insert_with_explicit_connect(test_config: TestConfig):
+async def test_bulk_insert_with_explicit_connect(test_config: Config):
     """Test bulk insert with explicit connect/disconnect."""
     try:
         conn = Connection(test_config.connection_string)
@@ -463,7 +463,7 @@ async def test_bulk_insert_with_explicit_connect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parallel_explicit_connections(test_config: TestConfig):
+async def test_parallel_explicit_connections(test_config: Config):
     """Test multiple parallel connections with explicit management."""
     try:
         async def worker(worker_id):
@@ -496,7 +496,7 @@ async def test_parallel_explicit_connections(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_application_intent_readonly(test_config: TestConfig):
+async def test_application_intent_readonly(test_config: Config):
     """Test ApplicationIntent=ReadOnly parameter with individual connection parameters."""
     try:
         conn = Connection(
@@ -524,7 +524,7 @@ async def test_application_intent_readonly(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_application_intent_readwrite(test_config: TestConfig):
+async def test_application_intent_readwrite(test_config: Config):
     """Test ApplicationIntent=ReadWrite parameter with individual connection parameters."""
     try:
         # Create connection with ReadWrite intent using individual parameters
@@ -553,7 +553,7 @@ async def test_application_intent_readwrite(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_application_intent_default(test_config: TestConfig):
+async def test_application_intent_default(test_config: Config):
     """Test that connections work without explicit ApplicationIntent (defaults to ReadWrite)."""
     try:
         # Create connection without specifying application_intent using individual parameters
@@ -581,7 +581,7 @@ async def test_application_intent_default(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_explicit_port(test_config: TestConfig):
+async def test_connection_with_explicit_port(test_config: Config):
     """Test connection with explicit port parameter using individual parameters."""
     try:
         # Create connection with explicit port using individual parameters
@@ -608,7 +608,7 @@ async def test_connection_with_explicit_port(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_invalid_port(test_config: TestConfig):
+async def test_connection_with_invalid_port(test_config: Config):
     """Test connection with invalid/wrong port parameter fails appropriately."""
     # Create connection with wrong port using individual parameters
     conn = Connection(
@@ -628,7 +628,7 @@ async def test_connection_with_invalid_port(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_application_name(test_config: TestConfig):
+async def test_connection_with_application_name(test_config: Config):
     """Test connection with explicit application_name parameter."""
     try:
         # Create connection with application_name using individual parameters
@@ -656,7 +656,7 @@ async def test_connection_with_application_name(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_application_name_and_port(test_config: TestConfig):
+async def test_connection_with_application_name_and_port(test_config: Config):
     """Test connection with both application_name and port parameters."""
     try:
         conn = Connection(
@@ -684,7 +684,7 @@ async def test_connection_with_application_name_and_port(test_config: TestConfig
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_instance_name(test_config: TestConfig):
+async def test_connection_with_instance_name(test_config: Config):
     """Test connection with instance_name parameter (if available on test server)."""
     try:
         # Try with instance name - may not be available on all test servers
@@ -720,7 +720,7 @@ async def test_connection_with_instance_name(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_instance_and_application_name(test_config: TestConfig):
+async def test_connection_with_instance_and_application_name(test_config: Config):
     """Test connection with both instance_name and application_name parameters."""
     try:
         conn = Connection(
@@ -750,7 +750,7 @@ async def test_connection_with_instance_and_application_name(test_config: TestCo
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_application_name_with_connection_string(test_config: TestConfig):
+async def test_application_name_with_connection_string(test_config: Config):
     """Test that application_name can be set via connection string format."""
     try:
         # Parse connection string to extract components
@@ -777,7 +777,7 @@ async def test_application_name_with_connection_string(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_connections_different_app_names(test_config: TestConfig):
+async def test_multiple_connections_different_app_names(test_config: Config):
     """Test multiple concurrent connections with different application names."""
     try:
         async def create_and_verify_app_name(app_name):

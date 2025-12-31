@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, PoolConfig
@@ -13,7 +13,7 @@ class TestConnectionPoolBasics:
     """Test basic connection pool creation and configuration."""
 
     @pytest.mark.asyncio
-    async def test_connection_with_default_pool_config(self, test_config: TestConfig):
+    async def test_connection_with_default_pool_config(self, test_config: Config):
         """Test creating a connection with default pool configuration."""
         async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as test_val")
@@ -23,7 +23,7 @@ class TestConnectionPoolBasics:
             assert rows[0]["test_val"] == 1
 
     @pytest.mark.asyncio
-    async def test_connection_with_custom_pool_config(self, test_config: TestConfig):
+    async def test_connection_with_custom_pool_config(self, test_config: Config):
         """Test creating a connection with custom pool configuration."""
         pool_config = PoolConfig(
             max_size=5,
@@ -37,7 +37,7 @@ class TestConnectionPoolBasics:
             assert rows[0]["test_val"] == 1
 
     @pytest.mark.asyncio
-    async def test_connection_with_high_throughput_config(self, test_config: TestConfig):
+    async def test_connection_with_high_throughput_config(self, test_config: Config):
         """Test creating a connection with high_throughput preset."""
         pool_config = PoolConfig.high_throughput()
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -45,7 +45,7 @@ class TestConnectionPoolBasics:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_connection_with_development_config(self, test_config: TestConfig):
+    async def test_connection_with_development_config(self, test_config: Config):
         """Test creating a connection with development preset."""
         pool_config = PoolConfig.development()
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -53,7 +53,7 @@ class TestConnectionPoolBasics:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_connection_with_low_resource_config(self, test_config: TestConfig):
+    async def test_connection_with_low_resource_config(self, test_config: Config):
         """Test creating a connection with low_resource preset."""
         pool_config = PoolConfig.low_resource()
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -61,7 +61,7 @@ class TestConnectionPoolBasics:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_connection_with_single_pool_config(self, test_config: TestConfig):
+    async def test_connection_with_single_pool_config(self, test_config: Config):
         """Test creating a connection with single connection pool."""
         pool_config = PoolConfig.one()
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -74,7 +74,7 @@ class TestConnectionPoolReuse:
     """Test that connection pool is reused across multiple operations."""
 
     @pytest.mark.asyncio
-    async def test_sequential_queries_reuse_pool(self, test_config: TestConfig):
+    async def test_sequential_queries_reuse_pool(self, test_config: Config):
         """Test that sequential queries reuse the same pool."""
         pool_config = PoolConfig(max_size=3, min_idle=1)
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -85,7 +85,7 @@ class TestConnectionPoolReuse:
                 assert rows[0]["test_val"] == i
 
     @pytest.mark.asyncio
-    async def test_multiple_concurrent_queries(self, test_config: TestConfig):
+    async def test_multiple_concurrent_queries(self, test_config: Config):
         """Test multiple concurrent queries within a single connection context."""
         pool_config = PoolConfig(max_size=5, min_idle=2)
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -101,7 +101,7 @@ class TestConnectionPoolReuse:
                 assert rows[0]["test_val"] == i
 
     @pytest.mark.asyncio
-    async def test_consecutive_connections_same_config(self, test_config: TestConfig):
+    async def test_consecutive_connections_same_config(self, test_config: Config):
         """Test that consecutive connections can reuse pool resources."""
         pool_config = PoolConfig(max_size=3, min_idle=1)
         
@@ -123,7 +123,7 @@ class TestConnectionPoolUnderLoad:
     """Test connection pool behavior under concurrent load."""
 
     @pytest.mark.asyncio
-    async def test_pool_handles_concurrent_connections(self, test_config: TestConfig):
+    async def test_pool_handles_concurrent_connections(self, test_config: Config):
         """Test that pool properly handles multiple concurrent connections."""
         pool_config = PoolConfig(max_size=10, min_idle=2)
         
@@ -138,7 +138,7 @@ class TestConnectionPoolUnderLoad:
             assert sorted(results) == [0, 1, 2, 3, 4]
 
     @pytest.mark.asyncio
-    async def test_pool_with_high_throughput_load(self, test_config: TestConfig):
+    async def test_pool_with_high_throughput_load(self, test_config: Config):
         """Test pool performance with high throughput configuration."""
         pool_config = PoolConfig.high_throughput()
         
@@ -154,7 +154,7 @@ class TestConnectionPoolUnderLoad:
             assert len(results) == 20
 
     @pytest.mark.asyncio
-    async def test_pool_with_development_config_load(self, test_config: TestConfig):
+    async def test_pool_with_development_config_load(self, test_config: Config):
         """Test pool behavior with development configuration under moderate load."""
         pool_config = PoolConfig.development()
         
@@ -175,7 +175,7 @@ class TestConnectionPoolEdgeCases:
     """Test edge cases and special scenarios in connection pooling."""
 
     @pytest.mark.asyncio
-    async def test_pool_with_minimal_size(self, test_config: TestConfig):
+    async def test_pool_with_minimal_size(self, test_config: Config):
         """Test pool with minimal configuration (single connection)."""
         pool_config = PoolConfig.one()
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -183,7 +183,7 @@ class TestConnectionPoolEdgeCases:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_pool_with_max_size_one(self, test_config: TestConfig):
+    async def test_pool_with_max_size_one(self, test_config: Config):
         """Test that max_size=1 pool still works correctly."""
         pool_config = PoolConfig(max_size=1, min_idle=1)
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -193,7 +193,7 @@ class TestConnectionPoolEdgeCases:
                 assert rows[0]["val"] == i
 
     @pytest.mark.asyncio
-    async def test_pool_with_no_min_idle(self, test_config: TestConfig):
+    async def test_pool_with_no_min_idle(self, test_config: Config):
         """Test pool with min_idle set to None."""
         pool_config = PoolConfig(max_size=5, min_idle=None)
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -201,7 +201,7 @@ class TestConnectionPoolEdgeCases:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_pool_with_no_timeouts(self, test_config: TestConfig):
+    async def test_pool_with_no_timeouts(self, test_config: Config):
         """Test pool with all timeout values set to None."""
         pool_config = PoolConfig(
             max_size=5,
@@ -215,7 +215,7 @@ class TestConnectionPoolEdgeCases:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_many_sequential_operations(self, test_config: TestConfig):
+    async def test_many_sequential_operations(self, test_config: Config):
         """Test that pool handles many sequential operations without degradation."""
         pool_config = PoolConfig(max_size=3, min_idle=1)
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -233,7 +233,7 @@ class TestConnectionPoolLifecycle:
     """Test connection pool lifecycle and resource management."""
 
     @pytest.mark.asyncio
-    async def test_pool_cleanup_on_context_exit(self, test_config: TestConfig):
+    async def test_pool_cleanup_on_context_exit(self, test_config: Config):
         """Test that pool is cleaned up when connection context exits."""
         pool_config = PoolConfig(max_size=5, min_idle=2)
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -246,7 +246,7 @@ class TestConnectionPoolLifecycle:
             assert result.has_rows()
 
     @pytest.mark.asyncio
-    async def test_rapid_context_enter_exit(self, test_config: TestConfig):
+    async def test_rapid_context_enter_exit(self, test_config: Config):
         """Test creating and closing multiple connections rapidly."""
         pool_config = PoolConfig(max_size=3, min_idle=1)
         
@@ -257,7 +257,7 @@ class TestConnectionPoolLifecycle:
                 assert rows[0]["idx"] == i
 
     @pytest.mark.asyncio
-    async def test_pool_reinitialization(self, test_config: TestConfig):
+    async def test_pool_reinitialization(self, test_config: Config):
         """Test that pool can be reinitialized after being used."""
         pool_config1 = PoolConfig(max_size=3, min_idle=1)
         async with Connection(test_config.connection_string, pool_config1) as conn:
@@ -275,7 +275,7 @@ class TestConnectionPoolPresetConfigs:
     """Test all preset pool configurations."""
 
     @pytest.mark.asyncio
-    async def test_performance_preset(self, test_config: TestConfig):
+    async def test_performance_preset(self, test_config: Config):
         """Test performance preset configuration."""
         pool_config = PoolConfig.performance()
         async with Connection(test_config.connection_string, pool_config) as conn:
@@ -284,7 +284,7 @@ class TestConnectionPoolPresetConfigs:
             assert len(results) == 10
 
     @pytest.mark.asyncio
-    async def test_all_presets_work(self, test_config: TestConfig):
+    async def test_all_presets_work(self, test_config: Config):
         """Test that all preset configurations work correctly."""
         presets = [
             PoolConfig.one(),

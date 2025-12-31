@@ -6,7 +6,7 @@ connection intents, verifying that write operations are properly handled.
 """
 
 import pytest
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, SslConfig, ApplicationIntent
@@ -15,7 +15,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_readonly_intent_rejects_write_operations(test_config: TestConfig):
+async def test_readonly_intent_rejects_write_operations(test_config: Config):
     """Test that ReadOnly intent prevents write operations."""
     try:
         # Create connection with ReadOnly intent
@@ -47,7 +47,7 @@ async def test_readonly_intent_rejects_write_operations(test_config: TestConfig)
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_readwrite_intent_allows_write_operations(test_config: TestConfig):
+async def test_readwrite_intent_allows_write_operations(test_config: Config):
     """Test that ReadWrite intent allows write operations."""
     try:
         # Create connection with ReadWrite intent
@@ -83,7 +83,7 @@ async def test_readwrite_intent_allows_write_operations(test_config: TestConfig)
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_default_intent_allows_write_operations(test_config: TestConfig):
+async def test_default_intent_allows_write_operations(test_config: Config):
     """Test that default intent (no flag) allows write operations."""
     try:
         # Create connection without specifying application_intent

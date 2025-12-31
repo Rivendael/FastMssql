@@ -7,7 +7,7 @@ This module tests INSERT, UPDATE, DELETE, and SELECT operations.
 import pytest
 import pytest_asyncio
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -15,7 +15,7 @@ except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first", allow_module_level=True)
 
 @pytest_asyncio.fixture(scope="function")
-async def setup_test_table(test_config: TestConfig):
+async def setup_test_table(test_config: Config):
     """Setup and teardown test table for each test."""
     table_name = "test_dml_employees"
     
@@ -53,7 +53,7 @@ async def setup_test_table(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_insert_operations(setup_test_table, test_config: TestConfig):
+async def test_insert_operations(setup_test_table, test_config: Config):
     """Test various INSERT operations."""
     async with Connection(test_config.connection_string) as conn:
         # Single INSERT
@@ -90,7 +90,7 @@ async def test_insert_operations(setup_test_table, test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_select_operations(setup_test_table, test_config: TestConfig):
+async def test_select_operations(setup_test_table, test_config: Config):
     """Test various SELECT operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -160,7 +160,7 @@ async def test_select_operations(setup_test_table, test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_update_operations(setup_test_table, test_config: TestConfig):
+async def test_update_operations(setup_test_table, test_config: Config):
     """Test various UPDATE operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -210,7 +210,7 @@ async def test_update_operations(setup_test_table, test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_delete_operations(setup_test_table, test_config: TestConfig):
+async def test_delete_operations(setup_test_table, test_config: Config):
     """Test various DELETE operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -264,7 +264,7 @@ async def test_delete_operations(setup_test_table, test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_upsert_operations(setup_test_table, test_config: TestConfig):
+async def test_upsert_operations(setup_test_table, test_config: Config):
     """Test MERGE (UPSERT) operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -311,7 +311,7 @@ async def test_upsert_operations(setup_test_table, test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_bulk_operations(setup_test_table, test_config: TestConfig):
+async def test_bulk_operations(setup_test_table, test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             # Bulk INSERT using VALUES
@@ -348,7 +348,7 @@ async def test_bulk_operations(setup_test_table, test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_async_dml_operations(test_config: TestConfig):
+async def test_async_dml_operations(test_config: Config):
     """Test DML operations with async connections."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -406,7 +406,7 @@ async def test_async_dml_operations(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_transaction_rollback(setup_test_table, test_config: TestConfig):
+async def test_transaction_rollback(setup_test_table, test_config: Config):
     """Test transaction handling with rollback."""
     try:
         async with Connection(test_config.connection_string) as conn:

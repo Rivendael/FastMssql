@@ -6,7 +6,7 @@ This module tests CREATE, ALTER, DROP operations for various database objects.
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -15,7 +15,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_table(test_config: TestConfig):
+async def test_create_drop_table(test_config: Config):
     """Test creating and dropping tables."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -58,7 +58,7 @@ async def test_create_drop_table(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_alter_table(test_config: TestConfig):
+async def test_alter_table(test_config: Config):
     """Test altering table structure."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -98,7 +98,7 @@ async def test_alter_table(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_index(test_config: TestConfig):
+async def test_create_drop_index(test_config: Config):
     """Test creating and dropping indexes."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -162,7 +162,7 @@ async def test_create_drop_index(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_view(test_config: TestConfig):
+async def test_create_drop_view(test_config: Config):
     """Test creating and dropping views."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -231,7 +231,7 @@ async def test_create_drop_view(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_procedure(test_config: TestConfig):
+async def test_create_drop_procedure(test_config: Config):
     """Test creating and dropping stored procedures."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -290,7 +290,7 @@ async def test_create_drop_procedure(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_drop_function(test_config: TestConfig):
+async def test_create_drop_function(test_config: Config):
     """Test creating and dropping user-defined functions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -338,7 +338,7 @@ async def test_create_drop_function(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_constraints(test_config: TestConfig):
+async def test_constraints(test_config: Config):
     """Test creating tables with various constraints."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -391,7 +391,7 @@ async def test_constraints(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_async_ddl_operations(test_config: TestConfig):
+async def test_async_ddl_operations(test_config: Config):
     """Test DDL operations with async connections."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -422,7 +422,7 @@ async def test_async_ddl_operations(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_schema_operations(test_config: TestConfig):
+async def test_schema_operations(test_config: Config):
     """Test schema creation and management."""
     try:
         async with Connection(test_config.connection_string) as conn:

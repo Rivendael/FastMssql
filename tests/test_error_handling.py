@@ -7,7 +7,7 @@ and failure scenarios to ensure robust error handling.
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -18,7 +18,7 @@ INVALID_CONNECTION_STRING = "Server=invalid_server;Database=invalid_db;User=inva
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_sql_syntax_errors(test_config: TestConfig):
+async def test_sql_syntax_errors(test_config: Config):
     """Test handling of SQL syntax errors."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -42,7 +42,7 @@ async def test_sql_syntax_errors(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_constraint_violations(test_config: TestConfig):
+async def test_constraint_violations(test_config: Config):
     """Test handling of database constraint violations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -108,7 +108,7 @@ async def test_constraint_violations(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_data_type_conversion_errors(test_config: TestConfig):
+async def test_data_type_conversion_errors(test_config: Config):
     """Test data type conversion errors."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -144,7 +144,7 @@ async def test_data_type_conversion_errors(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_interruption(test_config: TestConfig):
+async def test_connection_interruption(test_config: Config):
     """Test behavior when connection has issues."""
     try:
         # Test multiple connections work independently
@@ -164,7 +164,7 @@ async def test_connection_interruption(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_null_and_empty_values(test_config: TestConfig):
+async def test_null_and_empty_values(test_config: Config):
     """Test handling of NULL and empty values."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -222,7 +222,7 @@ async def test_null_and_empty_values(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_special_characters(test_config: TestConfig):
+async def test_special_characters(test_config: Config):
     """Test handling of special characters in data."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -278,7 +278,7 @@ async def test_special_characters(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_boundary_values(test_config: TestConfig):
+async def test_boundary_values(test_config: Config):
     """Test boundary values for different data types."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -314,7 +314,7 @@ async def test_boundary_values(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_error_handling(test_config: TestConfig):
+async def test_async_error_handling(test_config: Config):
     """Test error handling in async operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -353,7 +353,7 @@ async def test_async_error_handling(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_empty_result_sets(test_config: TestConfig):
+async def test_empty_result_sets(test_config: Config):
     """Test handling of empty result sets."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -373,7 +373,7 @@ async def test_empty_result_sets(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_result_sets(test_config: TestConfig):
+async def test_multiple_result_sets(test_config: Config):
     """Test queries that return multiple result sets using batch statements."""
     try:
         async with Connection(test_config.connection_string) as conn:

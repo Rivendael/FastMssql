@@ -7,7 +7,7 @@ in connection pool configuration and management.
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, PoolConfig
@@ -206,7 +206,7 @@ def test_pool_config_zero_timeout():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_with_custom_pool_config(test_config: TestConfig):
+async def test_connection_with_custom_pool_config(test_config: Config):
     """Test creating connection with custom pool config."""
     try:
         pool_config = PoolConfig(
@@ -224,7 +224,7 @@ async def test_connection_with_custom_pool_config(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connection_default_pool_config(test_config: TestConfig):
+async def test_connection_default_pool_config(test_config: Config):
     """Test connection uses default pool config when not specified."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -240,7 +240,7 @@ async def test_connection_default_pool_config(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_stats_tuple_structure(test_config: TestConfig):
+async def test_pool_stats_tuple_structure(test_config: Config):
     """Test that pool_stats returns correct structure."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -269,7 +269,7 @@ async def test_pool_stats_tuple_structure(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_modification_before_connect(test_config: TestConfig):
+async def test_pool_config_modification_before_connect(test_config: Config):
     """Test modifying pool config before connection is established."""
     try:
         pool_config = PoolConfig(max_size=10, min_idle=2)
@@ -288,7 +288,7 @@ async def test_pool_config_modification_before_connect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_connections_different_configs(test_config: TestConfig):
+async def test_multiple_connections_different_configs(test_config: Config):
     """Test multiple connections with different pool configs."""
     try:
         config1 = PoolConfig(max_size=5)
@@ -314,7 +314,7 @@ async def test_multiple_connections_different_configs(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_with_small_max_size(test_config: TestConfig):
+async def test_pool_with_small_max_size(test_config: Config):
     """Test pool with very small max_size to verify queue handling."""
     try:
         pool_config = PoolConfig(max_size=2, min_idle=1)
@@ -358,7 +358,7 @@ def test_pool_config_copy():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_none_values(test_config: TestConfig):
+async def test_pool_config_with_none_values(test_config: Config):
     """Test PoolConfig with None timeout values."""
     config = PoolConfig(
         max_size=10,
@@ -380,7 +380,7 @@ async def test_pool_config_with_none_values(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_stats_after_operations(test_config: TestConfig):
+async def test_pool_stats_after_operations(test_config: Config):
     """Test pool stats change after various operations."""
     try:
         pool_config = PoolConfig(max_size=10, min_idle=2)
@@ -406,7 +406,7 @@ async def test_pool_stats_after_operations(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_test_on_check_out_enabled(test_config: TestConfig):
+async def test_pool_config_with_test_on_check_out_enabled(test_config: Config):
     """Test pool behavior with test_on_check_out=True.
     
     When enabled, connections are validated before being returned from the pool.
@@ -435,7 +435,7 @@ async def test_pool_config_with_test_on_check_out_enabled(test_config: TestConfi
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_test_on_check_out_disabled(test_config: TestConfig):
+async def test_pool_config_with_test_on_check_out_disabled(test_config: Config):
     """Test pool behavior with test_on_check_out=False (or None).
     
     When disabled, connections are not tested before being returned,
@@ -458,7 +458,7 @@ async def test_pool_config_with_test_on_check_out_disabled(test_config: TestConf
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_retry_connection_enabled(test_config: TestConfig):
+async def test_pool_config_with_retry_connection_enabled(test_config: Config):
     """Test pool behavior with retry_connection=True.
     
     When enabled, the pool will retry failed connection attempts,
@@ -487,7 +487,7 @@ async def test_pool_config_with_retry_connection_enabled(test_config: TestConfig
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_retry_connection_disabled(test_config: TestConfig):
+async def test_pool_config_with_retry_connection_disabled(test_config: Config):
     """Test pool behavior with retry_connection=False (or None).
     
     When disabled, failed connection attempts are not retried,
@@ -510,7 +510,7 @@ async def test_pool_config_with_retry_connection_disabled(test_config: TestConfi
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_with_both_reliability_settings(test_config: TestConfig):
+async def test_pool_config_with_both_reliability_settings(test_config: Config):
     """Test pool with both test_on_check_out and retry_connection enabled.
     
     This combines connection validation (health checks on checkout)
@@ -536,7 +536,7 @@ async def test_pool_config_with_both_reliability_settings(test_config: TestConfi
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_high_throughput_with_reliability(test_config: TestConfig):
+async def test_pool_config_high_throughput_with_reliability(test_config: Config):
     """Test high-throughput preset combined with reliability settings."""
     # Create a high-throughput config with reliability settings
     pool_config = PoolConfig(
@@ -564,7 +564,7 @@ async def test_pool_config_high_throughput_with_reliability(test_config: TestCon
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_pool_config_none_reliability_settings(test_config: TestConfig):
+async def test_pool_config_none_reliability_settings(test_config: Config):
     """Test pool behavior when reliability settings are None (default behavior).
     
     None values should use bb8's defaults, allowing the pool to

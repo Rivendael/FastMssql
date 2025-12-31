@@ -6,7 +6,7 @@ Tests various edge cases, error conditions, and boundary scenarios.
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, Parameter, Parameters
@@ -197,7 +197,7 @@ class TestParametersIntegrationEdgeCases:
     """Integration tests for edge cases with database."""
     
     @pytest.mark.asyncio
-    async def test_parameters_with_sql_injection_attempt(self, test_config: TestConfig):
+    async def test_parameters_with_sql_injection_attempt(self, test_config: Config):
         """Test that parameters properly prevent SQL injection."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -221,7 +221,7 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_special_characters(self, test_config: TestConfig):
+    async def test_parameters_with_special_characters(self, test_config: Config):
         """Test parameters with special SQL characters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -252,7 +252,7 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_very_long_strings(self, test_config: TestConfig):
+    async def test_parameters_with_very_long_strings(self, test_config: Config):
         """Test parameters with very long strings."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -275,7 +275,7 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_with_null_in_different_positions(self, test_config: TestConfig):
+    async def test_parameters_with_null_in_different_positions(self, test_config: Config):
         """Test NULL parameters in various positions."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -309,7 +309,7 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameters_mismatch_count(self, test_config: TestConfig):
+    async def test_parameters_mismatch_count(self, test_config: Config):
         """Test error handling when parameter count doesn't match placeholders."""
         try:
             async with Connection(test_config.connection_string) as conn:

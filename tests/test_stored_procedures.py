@@ -9,7 +9,7 @@ Run with: python -m pytest tests/test_stored_procedures.py -v
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -22,7 +22,7 @@ class TestStoredProcedureBasics:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_exec_with_select_statement(self, test_config: TestConfig):
+    async def test_exec_with_select_statement(self, test_config: Config):
         """Test EXEC pattern with SELECT."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -33,7 +33,7 @@ class TestStoredProcedureBasics:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_parameterized_exec(self, test_config: TestConfig):
+    async def test_parameterized_exec(self, test_config: Config):
         """Test parameterized EXEC with parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -52,7 +52,7 @@ class TestStoredProcedureBasics:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_conditional_exec(self, test_config: TestConfig):
+    async def test_conditional_exec(self, test_config: Config):
         """Test conditional EXEC pattern."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -73,7 +73,7 @@ class TestParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_arithmetic_operations(self, test_config: TestConfig):
+    async def test_arithmetic_operations(self, test_config: Config):
         """Test parameterized queries with arithmetic."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -94,7 +94,7 @@ class TestParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_string_concatenation(self, test_config: TestConfig):
+    async def test_string_concatenation(self, test_config: Config):
         """Test parameterized queries with string concatenation."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -110,7 +110,7 @@ class TestParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_case_expressions(self, test_config: TestConfig):
+    async def test_case_expressions(self, test_config: Config):
         """Test parameterized queries with CASE expressions."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -136,7 +136,7 @@ class TestConditionalLogic:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_if_else_logic(self, test_config: TestConfig):
+    async def test_if_else_logic(self, test_config: Config):
         """Test conditional logic in parameterized queries."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -153,7 +153,7 @@ class TestConditionalLogic:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_coalesce_null_handling(self, test_config: TestConfig):
+    async def test_coalesce_null_handling(self, test_config: Config):
         """Test COALESCE with NULL parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -173,7 +173,7 @@ class TestComplexParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_multiple_conditions(self, test_config: TestConfig):
+    async def test_multiple_conditions(self, test_config: Config):
         """Test queries with multiple parameter conditions."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -189,7 +189,7 @@ class TestComplexParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_date_operations(self, test_config: TestConfig):
+    async def test_date_operations(self, test_config: Config):
         """Test parameterized queries with date operations."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -205,7 +205,7 @@ class TestComplexParameterizedQueries:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_aggregate_with_case(self, test_config: TestConfig):
+    async def test_aggregate_with_case(self, test_config: Config):
         """Test aggregate functions with CASE expressions."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -229,7 +229,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_null_parameters(self, test_config: TestConfig):
+    async def test_null_parameters(self, test_config: Config):
         """Test queries with NULL parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -245,7 +245,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_special_characters(self, test_config: TestConfig):
+    async def test_special_characters(self, test_config: Config):
         """Test parameters with special characters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -263,7 +263,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_unicode_parameters(self, test_config: TestConfig):
+    async def test_unicode_parameters(self, test_config: Config):
         """Test parameters with Unicode characters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -278,7 +278,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_empty_string(self, test_config: TestConfig):
+    async def test_empty_string(self, test_config: Config):
         """Test parameters with empty strings."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -290,7 +290,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_large_string(self, test_config: TestConfig):
+    async def test_large_string(self, test_config: Config):
         """Test parameters with large strings (8KB+)."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -303,7 +303,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_decimal_precision(self, test_config: TestConfig):
+    async def test_decimal_precision(self, test_config: Config):
         """Test decimal parameters with precision."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -316,7 +316,7 @@ class TestParameterVariations:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_max_int_value(self, test_config: TestConfig):
+    async def test_max_int_value(self, test_config: Config):
         """Test maximum integer values."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -333,7 +333,7 @@ class TestBatchParameterExecution:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_batch_queries_with_parameters(self, test_config: TestConfig):
+    async def test_batch_queries_with_parameters(self, test_config: Config):
         """Test batch query execution with different parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -359,7 +359,7 @@ class TestParameterCachingPatterns:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_repeated_parameterized_query(self, test_config: TestConfig):
+    async def test_repeated_parameterized_query(self, test_config: Config):
         """Test repeated execution of parameterized queries."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -374,7 +374,7 @@ class TestParameterCachingPatterns:
     
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_different_parameters_same_query(self, test_config: TestConfig):
+    async def test_different_parameters_same_query(self, test_config: Config):
         """Test same query shape with different parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:

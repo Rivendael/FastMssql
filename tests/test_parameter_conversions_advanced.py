@@ -9,7 +9,7 @@ import pytest
 import datetime
 from decimal import Decimal
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -18,7 +18,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_int_types(test_config: TestConfig):
+async def test_parameter_int_types(test_config: Config):
     """Test integer parameter type conversions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -43,7 +43,7 @@ async def test_parameter_int_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_string_types(test_config: TestConfig):
+async def test_parameter_string_types(test_config: Config):
     """Test string parameter type conversions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -77,7 +77,7 @@ async def test_parameter_string_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_float_types(test_config: TestConfig):
+async def test_parameter_float_types(test_config: Config):
     """Test float parameter type conversions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -105,7 +105,7 @@ async def test_parameter_float_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_bool_types(test_config: TestConfig):
+async def test_parameter_bool_types(test_config: Config):
     """Test boolean parameter type conversions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -133,7 +133,7 @@ async def test_parameter_bool_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_none_values(test_config: TestConfig):
+async def test_parameter_none_values(test_config: Config):
     """Test None/NULL parameter handling."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -156,7 +156,7 @@ async def test_parameter_none_values(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_datetime_types(test_config: TestConfig):
+async def test_parameter_datetime_types(test_config: Config):
     """Test datetime parameter type conversions (via string)."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -181,7 +181,7 @@ async def test_parameter_datetime_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_decimal_types(test_config: TestConfig):
+async def test_parameter_decimal_types(test_config: Config):
     """Test decimal parameter type conversions (via float)."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -207,7 +207,7 @@ async def test_parameter_decimal_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_bytes_types(test_config: TestConfig):
+async def test_parameter_bytes_types(test_config: Config):
     """Test bytes parameter type conversions."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -227,7 +227,7 @@ async def test_parameter_bytes_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_list_only(test_config: TestConfig):
+async def test_parameter_list_only(test_config: Config):
     """Test parameter passing as list (tuples not supported)."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -248,7 +248,7 @@ async def test_parameter_list_only(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_many_parameters(test_config: TestConfig):
+async def test_parameter_many_parameters(test_config: Config):
     """Test queries with many parameters (>16)."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -272,7 +272,7 @@ async def test_parameter_many_parameters(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_repeated_values(test_config: TestConfig):
+async def test_parameter_repeated_values(test_config: Config):
     """Test using same parameter multiple times."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -290,7 +290,7 @@ async def test_parameter_repeated_values(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_special_string_characters(test_config: TestConfig):
+async def test_parameter_special_string_characters(test_config: Config):
     """Test parameters with special characters."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -319,7 +319,7 @@ async def test_parameter_special_string_characters(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_whitespace_handling(test_config: TestConfig):
+async def test_parameter_whitespace_handling(test_config: Config):
     """Test parameter handling with various whitespace."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -343,7 +343,7 @@ async def test_parameter_whitespace_handling(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_boundary_integers(test_config: TestConfig):
+async def test_parameter_boundary_integers(test_config: Config):
     """Test boundary value integers."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -366,7 +366,7 @@ async def test_parameter_boundary_integers(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_mixed_types_in_batch(test_config: TestConfig):
+async def test_parameter_mixed_types_in_batch(test_config: Config):
     """Test batch operations with mixed parameter types."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -407,7 +407,7 @@ async def test_parameter_mixed_types_in_batch(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_type_explicit_casting(test_config: TestConfig):
+async def test_parameter_type_explicit_casting(test_config: Config):
     """Test explicit type casting in queries."""
     try:
         async with Connection(test_config.connection_string) as conn:

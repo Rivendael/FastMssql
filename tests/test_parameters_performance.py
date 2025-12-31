@@ -8,7 +8,7 @@ overhead compared to using simple lists.
 import pytest
 import time
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, Parameters
@@ -70,7 +70,7 @@ class TestParametersPerformance:
             pytest.fail(f"Performance test failed: {e}")
     
     @pytest.mark.asyncio
-    async def test_list_vs_parameters_query_performance(self, test_config: TestConfig):
+    async def test_list_vs_parameters_query_performance(self, test_config: Config):
         """Compare query performance between lists and Parameters objects."""
         try:
             async with Connection(test_config.connection_string) as conn:
@@ -115,7 +115,7 @@ class TestParametersPerformance:
             pytest.fail(f"Database not available for performance test: {e}")
     
     @pytest.mark.asyncio
-    async def test_parameter_reuse_performance(self, test_config: TestConfig):
+    async def test_parameter_reuse_performance(self, test_config: Config):
         """Test performance of reusing Parameters objects."""
         try:
             async with Connection(test_config.connection_string) as conn:

@@ -17,7 +17,7 @@ import gc
 import psutil
 import os
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, PoolConfig
@@ -56,7 +56,7 @@ class MemoryTracker:
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_memory_leak_detection(test_config: TestConfig):
+async def test_memory_leak_detection(test_config: Config):
     """Test for memory leaks in async operations."""
     try:
         memory_tracker = MemoryTracker()
@@ -163,7 +163,7 @@ async def test_memory_leak_detection(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_connection_exhaustion_recovery(test_config: TestConfig):
+async def test_connection_exhaustion_recovery(test_config: Config):
     """Test behavior when approaching connection limits and recovery."""
     try:
         # This test attempts to exhaust connections and verify proper recovery
@@ -248,7 +248,7 @@ async def test_connection_exhaustion_recovery(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_rapid_connect_disconnect_stress(test_config: TestConfig):
+async def test_rapid_connect_disconnect_stress(test_config: Config):
     """Stress test rapid connection creation and destruction."""
     try:
         operations_log = []
@@ -376,7 +376,7 @@ async def test_rapid_connect_disconnect_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_concurrent_query_stress(test_config: TestConfig):
+async def test_concurrent_query_stress(test_config: Config):
     """Stress test with high-volume concurrent queries."""
     try:
         pool_config = PoolConfig(max_size=50, min_idle=10)
@@ -493,7 +493,7 @@ async def test_concurrent_query_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_large_result_set_stress(test_config: TestConfig):
+async def test_large_result_set_stress(test_config: Config):
     """Stress test handling large result sets and memory."""
     try:
         pool_config = PoolConfig(max_size=20, min_idle=5)
@@ -608,7 +608,7 @@ async def test_large_result_set_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_batch_operation_stress(test_config: TestConfig):
+async def test_batch_operation_stress(test_config: Config):
     """Stress test batch insert/update operations."""
     try:
         from fastmssql import Parameters
@@ -735,7 +735,7 @@ async def test_batch_operation_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_connection_pool_saturation(test_config: TestConfig):
+async def test_connection_pool_saturation(test_config: Config):
     """Test connection pool under saturation and recovery."""
     try:
         pool_config = PoolConfig(max_size=20, min_idle=5)
@@ -836,7 +836,7 @@ async def test_connection_pool_saturation(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_query_variety_stress(test_config: TestConfig):
+async def test_query_variety_stress(test_config: Config):
     """Stress test with varied query types and complexities."""
     try:
         pool_config = PoolConfig(max_size=40, min_idle=10)
@@ -935,7 +935,7 @@ async def test_query_variety_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_transaction_stress(test_config: TestConfig):
+async def test_transaction_stress(test_config: Config):
     """Stress test transaction handling with commits and rollbacks."""
     try:
         pool_config = PoolConfig(max_size=25, min_idle=6)
@@ -1066,7 +1066,7 @@ async def test_transaction_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_parameter_type_conversion_stress(test_config: TestConfig):
+async def test_parameter_type_conversion_stress(test_config: Config):
     """Stress test aggressive parameter type conversions with edge cases."""
     try:
         pool_config = PoolConfig(max_size=30, min_idle=8)
@@ -1177,7 +1177,7 @@ async def test_parameter_type_conversion_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_error_recovery_stress(test_config: TestConfig):
+async def test_error_recovery_stress(test_config: Config):
     """Stress test recovery from various error conditions."""
     try:
         pool_config = PoolConfig(max_size=25, min_idle=6)
@@ -1310,7 +1310,7 @@ async def test_error_recovery_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_idle_connection_cleanup_stress(test_config: TestConfig):
+async def test_idle_connection_cleanup_stress(test_config: Config):
     """Stress test pool behavior with idle connections and reuse."""
     try:
         pool_config = PoolConfig(max_size=15, min_idle=3)
@@ -1406,7 +1406,7 @@ async def test_idle_connection_cleanup_stress(test_config: TestConfig):
 @pytest.mark.asyncio
 @pytest.mark.stress
 @pytest.mark.integration
-async def test_connection_timeout_stress(test_config: TestConfig):
+async def test_connection_timeout_stress(test_config: Config):
     """Stress test connection timeout and slow operation handling."""
     try:
         pool_config = PoolConfig(max_size=20, min_idle=5)

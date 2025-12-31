@@ -9,7 +9,7 @@ import os
 import pytest
 import pytest_asyncio
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -18,7 +18,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_numeric_types(test_config: TestConfig):
+async def test_numeric_types(test_config: Config):
     """Test all numeric SQL Server data types."""
     async with Connection(test_config.connection_string) as db_connection:
         result = await db_connection.query("""
@@ -75,7 +75,7 @@ async def test_numeric_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_string_types(test_config: TestConfig):
+async def test_string_types(test_config: Config):
     """Test all string SQL Server data types."""
     async with Connection(test_config.connection_string) as db_connection:
         result = await db_connection.query("""
@@ -106,7 +106,7 @@ async def test_string_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_datetime_types(test_config: TestConfig):
+async def test_datetime_types(test_config: Config):
     """Test all date/time SQL Server data types."""
     async with Connection(test_config.connection_string) as db_connection:
         result = await db_connection.query("""
@@ -134,7 +134,7 @@ async def test_datetime_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_binary_types(test_config: TestConfig):
+async def test_binary_types(test_config: Config):
     """Test binary SQL Server data types."""
     async with Connection(test_config.connection_string) as db_connection:
         result = await db_connection.query("""
@@ -158,7 +158,7 @@ async def test_binary_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_special_types(test_config: TestConfig):
+async def test_special_types(test_config: Config):
     """Test special SQL Server data types."""
     async with Connection(test_config.connection_string) as db_connection:
         result = await db_connection.query("""
@@ -185,7 +185,7 @@ async def test_special_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_null_values(test_config: TestConfig):
+async def test_null_values(test_config: Config):
     """Test NULL handling across different data types."""
     async with Connection(test_config.connection_string) as db_connection:
         result = await db_connection.query("""
@@ -212,7 +212,7 @@ async def test_null_values(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_large_values(test_config: TestConfig):
+async def test_large_values(test_config: Config):
     """Test handling of large values."""
     # Test large string
     large_string = 'A' * 8000  # 8KB string
@@ -233,7 +233,7 @@ async def test_large_values(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_data_types(test_config: TestConfig):
+async def test_async_data_types(test_config: Config):
     """Test data types with async operations."""
     # Note: Async operations are currently experiencing issues with certain data types
     # This test is temporarily simplified to avoid hangs in the async implementation

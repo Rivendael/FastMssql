@@ -15,7 +15,7 @@ import time
 import pytest
 from typing import List, Dict, Any
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -58,7 +58,7 @@ class ConnectionTracker:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_context_manager_exception_handling(test_config: TestConfig):
+async def test_async_context_manager_exception_handling(test_config: Config):
     """Test async context manager behavior when exceptions occur."""
     tracker = ConnectionTracker()
     
@@ -135,7 +135,7 @@ async def test_async_context_manager_exception_handling(test_config: TestConfig)
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_nested_async_context_managers(test_config: TestConfig):
+async def test_nested_async_context_managers(test_config: Config):
     """Test nested async context managers and their interaction."""
     operation_log = []
     
@@ -217,7 +217,7 @@ async def test_nested_async_context_managers(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_timeout_and_cancellation(test_config: TestConfig):
+async def test_async_timeout_and_cancellation(test_config: Config):
     """Test timeout behavior and task cancellation with async connections."""
     async def long_running_operation(operation_id: int, duration: int):
         """Operation that runs for a specified duration."""
@@ -329,7 +329,7 @@ async def test_async_timeout_and_cancellation(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_connection_resource_cleanup(test_config: TestConfig):
+async def test_async_connection_resource_cleanup(test_config: Config):
     """Test that async connections properly clean up resources."""
     try:
         # Track connection lifecycle through operations rather than weak references
@@ -453,7 +453,7 @@ async def test_async_connection_resource_cleanup(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_context_manager_with_background_tasks(test_config: TestConfig):
+async def test_async_context_manager_with_background_tasks(test_config: Config):
     """Test async context managers with background tasks and complex workflows."""
     try:
         background_tasks = []

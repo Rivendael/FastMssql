@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -10,7 +10,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_connect_and_disconnect_basic(test_config: TestConfig):
+async def test_connect_and_disconnect_basic(test_config: Config):
     """Ensure that connect() establishes and disconnect() closes the connection."""
     conn = Connection(test_config.connection_string)
 
@@ -30,7 +30,7 @@ async def test_connect_and_disconnect_basic(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_double_connect_and_disconnect(test_config: TestConfig):
+async def test_double_connect_and_disconnect(test_config: Config):
     """Ensure multiple connect/disconnect calls behave correctly (idempotent)."""
     conn = Connection(test_config.connection_string)
 
@@ -47,7 +47,7 @@ async def test_double_connect_and_disconnect(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_query_requires_connect(test_config: TestConfig):
+async def test_query_requires_connect(test_config: Config):
     """Verify that queries fail if connect() is not called first."""
     conn = Connection(test_config.connection_string)
 

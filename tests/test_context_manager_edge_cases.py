@@ -8,7 +8,7 @@ including nested contexts, exception handling, and resource cleanup.
 import pytest
 import asyncio
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -17,7 +17,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_basic(test_config: TestConfig):
+async def test_context_manager_basic(test_config: Config):
     """Test basic async context manager usage."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -30,7 +30,7 @@ async def test_context_manager_basic(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_multiple_operations(test_config: TestConfig):
+async def test_context_manager_multiple_operations(test_config: Config):
     """Test multiple queries within same context."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -51,7 +51,7 @@ async def test_context_manager_multiple_operations(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_exception_in_block(test_config: TestConfig):
+async def test_context_manager_exception_in_block(test_config: Config):
     """Test that exceptions within context are propagated."""
     try:
         with pytest.raises(Exception):
@@ -64,7 +64,7 @@ async def test_context_manager_exception_in_block(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_sql_error(test_config: TestConfig):
+async def test_context_manager_sql_error(test_config: Config):
     """Test that SQL errors are handled within context."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -85,7 +85,7 @@ async def test_context_manager_sql_error(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_exit_cleanup(test_config: TestConfig):
+async def test_context_manager_exit_cleanup(test_config: Config):
     """Test that context manager properly cleans up resources."""
     try:
         conn = Connection(test_config.connection_string)
@@ -109,7 +109,7 @@ async def test_context_manager_exit_cleanup(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_multiple_sequential_contexts(test_config: TestConfig):
+async def test_multiple_sequential_contexts(test_config: Config):
     """Test using connection in multiple sequential context managers."""
     try:
         conn = Connection(test_config.connection_string)
@@ -134,7 +134,7 @@ async def test_multiple_sequential_contexts(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_concurrent_context_managers(test_config: TestConfig):
+async def test_concurrent_context_managers(test_config: Config):
     """Test multiple concurrent connections with context managers."""
     try:
         async def run_query(conn_str, query_val):
@@ -156,7 +156,7 @@ async def test_concurrent_context_managers(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_nested_context_managers_same_connection(test_config: TestConfig):
+async def test_nested_context_managers_same_connection(test_config: Config):
     """Test nested context managers with the same connection object."""
     try:
         conn = Connection(test_config.connection_string)
@@ -180,7 +180,7 @@ async def test_nested_context_managers_same_connection(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_with_execute(test_config: TestConfig):
+async def test_context_manager_with_execute(test_config: Config):
     """Test context manager with execute (non-SELECT) operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -219,7 +219,7 @@ async def test_context_manager_with_execute(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_long_operation(test_config: TestConfig):
+async def test_context_manager_long_operation(test_config: Config):
     """Test context manager with longer operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -245,7 +245,7 @@ async def test_context_manager_long_operation(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_pool_stats(test_config: TestConfig):
+async def test_context_manager_pool_stats(test_config: Config):
     """Test accessing pool stats within context manager."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -264,7 +264,7 @@ async def test_context_manager_pool_stats(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_is_connected(test_config: TestConfig):
+async def test_context_manager_is_connected(test_config: Config):
     """Test is_connected() method within context manager."""
     try:
         conn = Connection(test_config.connection_string)
@@ -284,7 +284,7 @@ async def test_context_manager_is_connected(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_reentry_behavior(test_config: TestConfig):
+async def test_context_manager_reentry_behavior(test_config: Config):
     """Test behavior when re-entering context after exception."""
     try:
         conn = Connection(test_config.connection_string)
@@ -306,7 +306,7 @@ async def test_context_manager_reentry_behavior(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_context_manager_with_batch_operations(test_config: TestConfig):
+async def test_context_manager_with_batch_operations(test_config: Config):
     """Test context manager with batch operations."""
     try:
         async with Connection(test_config.connection_string) as conn:

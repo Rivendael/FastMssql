@@ -16,7 +16,7 @@ import time
 import pytest
 import random
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection, PoolConfig
@@ -25,7 +25,7 @@ except ImportError:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_truly_non_blocking(test_config: TestConfig):
+async def test_async_truly_non_blocking(test_config: Config):
     """Test that async operations are truly non-blocking."""
     try:
         async def long_running_query(delay_seconds: int, query_id: int):
@@ -73,7 +73,7 @@ async def test_async_truly_non_blocking(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_connection_pool_race_conditions(test_config: TestConfig  ):
+async def test_connection_pool_race_conditions(test_config: Config  ):
     """Test for race conditions in connection pooling/management."""
     try:
         connection_events = []
@@ -198,7 +198,7 @@ async def test_connection_pool_race_conditions(test_config: TestConfig  ):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_concurrent_transaction_handling(test_config: TestConfig):
+async def test_concurrent_transaction_handling(test_config: Config):
     """Test concurrent transactions for proper isolation and deadlock prevention."""
     try:
         async def concurrent_transaction_worker(worker_id: int, operations: int):
@@ -294,7 +294,7 @@ async def test_concurrent_transaction_handling(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_connection_limit_behavior(test_config: TestConfig):
+async def test_async_connection_limit_behavior(test_config: Config):
     """Test behavior when approaching connection limits."""
     try:
         async def hold_connection(connection_id: int, hold_time: float):
@@ -357,7 +357,7 @@ async def test_async_connection_limit_behavior(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_error_propagation_and_cleanup(test_config: TestConfig):
+async def test_async_error_propagation_and_cleanup(test_config: Config):
     """Test that errors in async operations are properly propagated and resources cleaned up."""
     try:
         cleanup_events = []
@@ -425,7 +425,7 @@ async def test_async_error_propagation_and_cleanup(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_query_cancellation(test_config: TestConfig):
+async def test_async_query_cancellation(test_config: Config):
     """Test that long-running async queries can be properly cancelled."""
     try:
         async def long_running_query():
@@ -463,7 +463,7 @@ async def test_async_query_cancellation(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_async_connection_state_consistency(test_config: TestConfig):
+async def test_async_connection_state_consistency(test_config: Config):
     """Test that connection state remains consistent under concurrent access."""
     try:
         async def connection_state_worker(worker_id: int):
@@ -598,7 +598,7 @@ async def test_async_connection_state_consistency(test_config: TestConfig):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_connection_pool_statistics_and_configuration(test_config: TestConfig):
+async def test_connection_pool_statistics_and_configuration(test_config: Config):
     """Test connection pool statistics and custom configuration."""
     try:
         # Test with custom pool configuration
@@ -665,7 +665,7 @@ async def test_connection_pool_statistics_and_configuration(test_config: TestCon
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_connection_pool_reuse_efficiency(test_config: TestConfig):
+async def test_connection_pool_reuse_efficiency(test_config: Config):
     """Test that connection pool efficiently reuses connections."""
     try:
         connection_ids_seen = set()

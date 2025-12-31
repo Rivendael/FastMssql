@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class TestConfig:
+class Config:
     """Configuration object for all test database connections."""
     def __init__(self):
         self.connection_string: str = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
@@ -19,5 +19,5 @@ class TestConfig:
 @pytest.fixture(scope="session")
 def test_config():
     """Get the test configuration object."""
-    return TestConfig()
+    return Config()
 

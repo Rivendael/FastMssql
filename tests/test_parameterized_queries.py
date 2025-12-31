@@ -4,7 +4,7 @@ Test parameterized queries functionality
 
 import pytest
 
-from conftest import TestConfig
+from conftest import Config
 
 try:
     from fastmssql import Connection
@@ -14,7 +14,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_simple_parameterized_query(test_config: TestConfig):
+async def test_simple_parameterized_query(test_config: Config):
     """Test executing a simple parameterized query."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -33,7 +33,7 @@ async def test_simple_parameterized_query(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_parameter_types(test_config: TestConfig):
+async def test_parameter_types(test_config: Config):
     """Test different parameter types."""
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -68,7 +68,7 @@ async def test_parameter_types(test_config: TestConfig):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_string_sql_injection_protection(test_config: TestConfig):
+async def test_string_sql_injection_protection(test_config: Config):
     """Test that parameterized queries protect against SQL injection."""
     try:
         async with Connection(test_config.connection_string) as conn:
