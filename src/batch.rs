@@ -18,7 +18,7 @@ fn parse_batch_items<'p>(
 ) -> PyResult<Vec<(String, SmallVec<[FastParameter; 16]>)>> {
     let mut batch_items = Vec::with_capacity(items.len());
 
-    for item in items.iter() {
+    for (batch_index, item) in items.iter().enumerate() {
         let tuple = item.cast::<pyo3::types::PyTuple>().map_err(|_| {
             PyValueError::new_err("Each batch item must be a tuple of (sql, parameters)")
         })?;
@@ -35,8 +35,22 @@ fn parse_batch_items<'p>(
         let fast_params = if params_py.is_none() {
             SmallVec::new()
         } else {
-            convert_parameters_to_fast(Some(&params_py), py)?
+            convert_parameters_to_fast(Some(&params_py), py).map_err(|e| {
+                PyValueError::new_err(format!(
+                    "Batch item {} parameter validation failed: {}",
+                    batch_index, e
+                ))
+            })?
         };
+
+        if fast_params.len() > 2100 {
+            return Err(PyValueError::new_err(
+                format!(
+                    "Batch item {} exceeds SQL Server parameter limit: {} parameters provided, maximum is 2,100",
+                    batch_index, fast_params.len()
+                )
+            ));
+        }
 
         batch_items.push((sql, fast_params));
     }
