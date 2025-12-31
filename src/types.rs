@@ -26,6 +26,17 @@ pub struct PyFastRow {
     column_info: Arc<ColumnInfo>,
 }
 
+impl Clone for PyFastRow {
+    fn clone(&self) -> Self {
+        Python::attach(|py| {
+            PyFastRow {
+                values: self.values.iter().map(|v| v.clone_ref(py)).collect(),
+                column_info: Arc::clone(&self.column_info),
+            }
+        })
+    }
+}
+
 impl PyFastRow {
     /// Create a new PyFastRow from a Tiberius row and shared column info
     pub fn from_tiberius_row(row: Row, py: Python, column_info: Arc<ColumnInfo>) -> PyResult<Self> {
@@ -157,11 +168,7 @@ impl PyFastExecutionResult {
     /// Convert a PyFastRow to a Python object (helper to avoid duplication)
     #[inline]
     fn convert_row_to_py(&self, py: Python, row: &PyFastRow) -> PyResult<Py<PyAny>> {
-        let result = PyFastRow {
-            values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-            column_info: Arc::clone(&row.column_info),
-        };
-        Py::new(py, result).map(|p| p.into())
+        Py::new(py, row.clone()).map(|p| p.into())
     }
 }
 
@@ -174,12 +181,9 @@ impl PyFastExecutionResult {
                 // Pre-allocate list with exact size to avoid resizing
                 let mut row_list = Vec::with_capacity(rows.len());
                 
-                // Batch convert all rows
+                // Batch convert all rows using derived Clone implementation
                 for row in rows {
-                    let py_row = Py::new(py, PyFastRow {
-                        values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-                        column_info: Arc::clone(&row.column_info),
-                    })?;
+                    let py_row = Py::new(py, row.clone())?;
                     row_list.push(py_row.into_any());
                 }
                 
