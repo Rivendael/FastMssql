@@ -49,12 +49,13 @@ impl PyConnection {
     ) -> PyResult<Vec<Row>> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                match e {
-                    _ if e.to_string().contains("timed out") => {
-                        PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
-                    },
-                    _ => PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
-                }
+                let msg = e.to_string();
+                let err_msg = if msg.contains("timeout") || msg.contains("timed out") {
+                    "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
+                } else {
+                    format!("Failed to get connection from pool: {}", msg)
+                };
+                PyRuntimeError::new_err(err_msg)
             })?;
 
         let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
@@ -83,12 +84,13 @@ impl PyConnection {
     ) -> PyResult<u64> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                match e {
-                    _ if e.to_string().contains("timed out") => {
-                        PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
-                    },
-                    _ => PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
-                }
+                let msg = e.to_string();
+                let err_msg = if msg.contains("timeout") || msg.contains("timed out") {
+                    "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
+                } else {
+                    format!("Failed to get connection from pool: {}", msg)
+                };
+                PyRuntimeError::new_err(err_msg)
             })?;
 
         let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
@@ -131,7 +133,10 @@ impl PyConnection {
             let mut config = Config::new();
             config.host(&srv);
             if let Some(db) = database { config.database(&db); }
-            if let Some(user) = username { config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default())); }
+            if let Some(user) = username {
+                let pwd = password.ok_or_else(|| PyValueError::new_err("password is required when username is provided"))?;
+                config.authentication(AuthMethod::sql_server(&user, &pwd));
+            }
             if let Some(p) = port { config.port(p); }
             if let Some(itn) = instance_name { config.instance_name(itn); }
             if let Some(apn) = application_name { config.application_name(apn); }

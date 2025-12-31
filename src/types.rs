@@ -198,7 +198,7 @@ impl PyFastExecutionResult {
     
     /// Check if this result contains rows
     pub fn has_rows(&self) -> bool {
-        self.rows.is_some() && !self.rows.as_ref().unwrap().is_empty()
+        self.rows.as_ref().map_or(false, |rows| !rows.is_empty())
     }
     
     /// Check if this result contains affected row count

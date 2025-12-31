@@ -892,3 +892,46 @@ async def test_multiple_connections_different_app_names(test_config: Config):
         assert results == ["App1", "App2", "App3"]
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
+class TestPasswordValidation:
+    """Test password validation when creating connections."""
+    
+    def test_connection_with_username_requires_password(self):
+        """Creating a connection with username but no password should fail."""
+        # This should raise a PyValueError when initializing the connection
+        with pytest.raises(ValueError) as exc_info:
+            Connection(
+                server="localhost",
+                database="testdb",
+                username="testuser",
+                password=None  # Explicitly no password
+            )
+        assert "password is required when username is provided" in str(exc_info.value)
+    
+    def test_connection_with_username_and_password_succeeds(self):
+        """Creating a connection with username and password should succeed (object creation)."""
+        # Object creation should succeed - actual connection will fail if server is unavailable
+        conn = Connection(
+            server="localhost",
+            database="testdb",
+            username="testuser",
+            password="testpass"
+        )
+        assert conn is not None
+    
+    def test_connection_without_username_allows_no_password(self):
+        """Creating a connection without username should not require password."""
+        # Object creation should succeed with no username and no password
+        conn = Connection(
+            server="localhost",
+            database="testdb"
+        )
+        assert conn is not None
+    
+    def test_connection_with_connection_string_ignores_password_check(self):
+        """Connection string mode should not enforce password validation."""
+        # Connection strings bypass the username/password arguments
+        conn = Connection(
+            connection_string="Server=localhost;Database=testdb;User=testuser;Password=testpass"
+        )
+        assert conn is not None

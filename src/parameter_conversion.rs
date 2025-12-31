@@ -60,6 +60,13 @@ fn python_params_to_fast_parameters(
     params: &Bound<PyList>,
 ) -> PyResult<SmallVec<[FastParameter; 16]>> {
     let len = params.len();
+    
+    // SQL Server has a hard limit of 2,100 parameters per query
+    if len > 2100 {
+        return Err(PyValueError::new_err(
+            format!("Too many parameters: {} provided, but SQL Server supports maximum 2,100 parameters", len)
+        ));
+    }
 
     // SmallVec optimization:
     // - 0-16 parameters: Zero heap allocations (stack only)
@@ -69,10 +76,23 @@ fn python_params_to_fast_parameters(
 
     for param in params.iter() {
         if type_mapping::is_expandable_iterable(&param)? {
+            // Check bounds after expanding iterables since they multiply parameters
+            if result.len() > 2100 {
+                return Err(PyValueError::new_err(
+                    "Parameter expansion exceeded SQL Server limit of 2,100 parameters"
+                ));
+            }
             expand_iterable_to_fast_params(&param, &mut result)?;
         } else {
             result.push(python_to_fast_parameter(&param)?);
         }
+    }
+    
+    // Final bounds check after all expansions
+    if result.len() > 2100 {
+        return Err(PyValueError::new_err(
+            format!("Parameter expansion resulted in {} parameters, but SQL Server supports maximum 2,100 parameters", result.len())
+        ));
     }
 
     Ok(result)
