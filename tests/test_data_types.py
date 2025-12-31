@@ -5,9 +5,7 @@ This module tests all major SQL Server data types to ensure proper conversion
 between Rust/Tiberius and Python types.
 """
 
-import os
 import pytest
-import pytest_asyncio
 
 from conftest import Config
 
@@ -257,3 +255,187 @@ async def test_async_data_types(test_config: Config):
     assert row['bool_val'] == True
     assert abs(row['float_val'] - 3.14159) < 0.0001
     assert row['null_val'] is None
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_null_value_handling(test_config: Config):
+    """Test that NULL values are properly returned as None, not silently converted to invalid data."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                NULL as null_int,
+                NULL as null_float,
+                NULL as null_string,
+                NULL as null_money,
+                NULL as null_datetime
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # All NULL values should be returned as None, not as 0 or empty string
+    assert row.get('null_int') is None
+    assert row.get('null_float') is None
+    assert row.get('null_string') is None
+    assert row.get('null_money') is None
+    assert row.get('null_datetime') is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_type_conversion_error_detection(test_config: Config):
+    """Test that type conversion errors are properly reported instead of silently converted to NULL."""
+    async with Connection(test_config.connection_string) as db_connection:
+        # Test with valid numeric data that should convert successfully
+        result = await db_connection.query("""
+            SELECT 
+                CAST(42 AS INT) as int_val,
+                CAST(3.14159 AS FLOAT) as float_val,
+                CAST(12345.67 AS MONEY) as money_val,
+                CAST(999.99 AS SMALLMONEY) as smallmoney_val
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # All values should be present and non-None
+    assert row.get('int_val') is not None
+    assert row.get('int_val') == 42
+    assert row.get('float_val') is not None
+    assert abs(row.get('float_val') - 3.14159) < 0.0001
+    assert row.get('money_val') is not None
+    assert abs(row.get('money_val') - 12345.67) < 0.01
+    assert row.get('smallmoney_val') is not None
+    assert abs(row.get('smallmoney_val') - 999.99) < 0.01
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_mixed_null_and_valid_values(test_config: Config):
+    """Test that NULL and valid values can coexist in result sets, properly distinguished."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                42 as valid_int,
+                NULL as null_int,
+                'Hello' as valid_string,
+                NULL as null_string,
+                3.14159 as valid_float,
+                NULL as null_float
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # Valid values should be present
+    assert row.get('valid_int') == 42
+    assert row.get('valid_string') == 'Hello'
+    assert abs(row.get('valid_float') - 3.14159) < 0.0001
+    
+    # NULL values should explicitly be None, not confused with empty/zero values
+    assert row.get('null_int') is None
+    assert row.get('null_string') is None
+    assert row.get('null_float') is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_all_numeric_types_with_nulls(test_config: Config):
+    """Test all numeric types with both valid and NULL values."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(127 AS TINYINT) as valid_tinyint,
+                CAST(NULL AS TINYINT) as null_tinyint,
+                CAST(32767 AS SMALLINT) as valid_smallint,
+                CAST(NULL AS SMALLINT) as null_smallint,
+                CAST(2147483647 AS INT) as valid_int,
+                CAST(NULL AS INT) as null_int,
+                CAST(9223372036854775807 AS BIGINT) as valid_bigint,
+                CAST(NULL AS BIGINT) as null_bigint,
+                CAST(3.14159 AS FLOAT) as valid_float,
+                CAST(NULL AS FLOAT) as null_float
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # Valid values
+    assert row.get('valid_tinyint') == 127
+    assert row.get('valid_smallint') == 32767
+    assert row.get('valid_int') == 2147483647
+    assert row.get('valid_bigint') == 9223372036854775807
+    assert abs(row.get('valid_float') - 3.14159) < 0.0001
+    
+    # NULL values - should be None, not 0 or empty
+    assert row.get('null_tinyint') is None
+    assert row.get('null_smallint') is None
+    assert row.get('null_int') is None
+    assert row.get('null_bigint') is None
+    assert row.get('null_float') is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_string_types_with_nulls(test_config: Config):
+    """Test string types with both valid and NULL values."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                'Valid String' as valid_varchar,
+                CAST(NULL AS VARCHAR(50)) as null_varchar,
+                'Unicode String' as valid_nvarchar,
+                CAST(NULL AS NVARCHAR(50)) as null_nvarchar
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # Valid strings
+    assert row.get('valid_varchar') == 'Valid String'
+    assert row.get('valid_nvarchar') == 'Unicode String'
+    
+    # NULL strings should be None, not empty string ''
+    assert row.get('null_varchar') is None
+    assert row.get('null_nvarchar') is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_datetime_types_with_nulls(test_config: Config):
+    """Test datetime types with both valid and NULL values."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST('2025-12-31 15:30:45' AS DATETIME) as valid_datetime,
+                CAST(NULL AS DATETIME) as null_datetime,
+                CAST('2025-12-31' AS DATE) as valid_date,
+                CAST(NULL AS DATE) as null_date,
+                CAST('15:30:45' AS TIME) as valid_time,
+                CAST(NULL AS TIME) as null_time
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # Valid datetime values should be present
+    assert row.get('valid_datetime') is not None
+    assert row.get('valid_date') is not None
+    assert row.get('valid_time') is not None
+    
+    # NULL datetime values should be None
+    assert row.get('null_datetime') is None
+    assert row.get('null_date') is None
+    assert row.get('null_time') is None

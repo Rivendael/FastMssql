@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PySet, PyFrozenSet};
 use tiberius::{Row, ColumnType};
 use chrono::{Datelike, Timelike};
@@ -7,7 +8,8 @@ use chrono::{Datelike, Timelike};
 fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i32, usize>(index) {
         Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT4: {}", index, e)))
     }
 }
 
@@ -15,7 +17,8 @@ fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_int8(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i64, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT8: {}", index, e)))
     }
 }
 
@@ -23,7 +26,8 @@ fn handle_int8(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_int1(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<u8, usize>(index) {
         Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT1: {}", index, e)))
     }
 }
 
@@ -31,7 +35,8 @@ fn handle_int1(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_int2(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i16, usize>(index) {
         Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT2: {}", index, e)))
     }
 }
 
@@ -47,7 +52,8 @@ fn handle_float8(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_float4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f32, usize>(index) {
         Ok(Some(val)) => Ok((val as f64).into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to FLOAT4: {}", index, e)))
     }
 }
 
@@ -55,7 +61,8 @@ fn handle_float4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_nvarchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to NVARCHAR: {}", index, e)))
     }
 }
 
@@ -63,7 +70,8 @@ fn handle_nvarchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_varchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to VARCHAR: {}", index, e)))
     }
 }
 
@@ -74,7 +82,8 @@ fn handle_bit(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             let int_val = if val { 1i32 } else { 0i32 };
             Ok(int_val.into_pyobject(py)?.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to BIT: {}", index, e)))
     }
 }
 
@@ -82,29 +91,30 @@ fn handle_bit(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_binary(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&[u8], usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to BINARY: {}", index, e)))
     }
 }
 
 #[inline(always)]
 fn handle_money(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
-    match row.try_get::<i64, usize>(index) {
+    match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => {
-            let money_val = (val as f64) / 10000.0;
-            Ok(money_val.into_pyobject(py)?.into_any().unbind())
+            Ok(val.into_pyobject(py)?.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to MONEY: {}", index, e)))
     }
 }
 
 #[inline(always)]
 fn handle_money4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
-    match row.try_get::<i32, usize>(index) {
+    match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => {
-            let money_val = (val as f64) / 10000.0;
-            Ok(money_val.into_pyobject(py)?.into_any().unbind())
+            Ok(val.into_pyobject(py)?.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to MONEY4: {}", index, e)))
     }
 }
 
@@ -115,7 +125,8 @@ fn handle_decimal(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             let float_val: f64 = numeric.into();
             Ok(float_val.into_pyobject(py)?.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DECIMAL: {}", index, e)))
     }
 }
 
@@ -136,7 +147,8 @@ fn handle_datetime(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             )?;
             Ok(dt.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DATETIME: {}", index, e)))
     }
 }
 
@@ -152,7 +164,8 @@ fn handle_date(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             )?;
             Ok(date.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DATE: {}", index, e)))
     }
 }
 
@@ -170,7 +183,8 @@ fn handle_time(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             )?;
             Ok(time.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to TIME: {}", index, e)))
     }
 }
 
@@ -191,7 +205,8 @@ fn handle_datetimeoffset(row: &Row, index: usize, py: Python) -> PyResult<Py<PyA
             )?;
             Ok(dt.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DATETIMEOFFSET: {}", index, e)))
     }
 }
 
@@ -202,17 +217,20 @@ fn handle_uuid(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             let uuid_str = format!("{}", val);
             Ok(uuid_str.into_pyobject(py)?.into_any().unbind())
         },
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to UUID: {}", index, e)))
     }
 }
 
 #[inline(always)]
 fn handle_xml(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
-    if let Ok(Some(xml_data)) = row.try_get::<&tiberius::xml::XmlData, usize>(index) {
-        let xml_str = xml_data.to_string();
-        Ok(xml_str.into_pyobject(py)?.into_any().unbind())
-    } else {
-        Ok(py.None())
+    match row.try_get::<&tiberius::xml::XmlData, usize>(index) {
+        Ok(Some(xml_data)) => {
+            let xml_str = xml_data.to_string();
+            Ok(xml_str.into_pyobject(py)?.into_any().unbind())
+        },
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to XML: {}", index, e)))
     }
 }
 
@@ -220,7 +238,8 @@ fn handle_xml(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_fallback(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {}: {}", index, e)))
     }
 }
 

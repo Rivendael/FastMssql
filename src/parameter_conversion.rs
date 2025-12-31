@@ -76,23 +76,20 @@ fn python_params_to_fast_parameters(
 
     for param in params.iter() {
         if type_mapping::is_expandable_iterable(&param)? {
-            // Check bounds after expanding iterables since they multiply parameters
+            expand_iterable_to_fast_params(&param, &mut result)?;
             if result.len() > 2100 {
                 return Err(PyValueError::new_err(
-                    "Parameter expansion exceeded SQL Server limit of 2,100 parameters"
+                    format!("Parameter expansion exceeded SQL Server limit of 2,100 parameters: {} parameters after expansion", result.len())
                 ));
             }
-            expand_iterable_to_fast_params(&param, &mut result)?;
         } else {
             result.push(python_to_fast_parameter(&param)?);
+            if result.len() > 2100 {
+                return Err(PyValueError::new_err(
+                    format!("Parameter limit exceeded: {} parameters, but SQL Server supports maximum 2,100 parameters", result.len())
+                ));
+            }
         }
-    }
-    
-    // Final bounds check after all expansions
-    if result.len() > 2100 {
-        return Err(PyValueError::new_err(
-            format!("Parameter expansion resulted in {} parameters, but SQL Server supports maximum 2,100 parameters", result.len())
-        ));
     }
 
     Ok(result)

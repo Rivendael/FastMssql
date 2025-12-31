@@ -43,7 +43,10 @@ impl PyFastRow {
         // Eagerly convert all values in column order using cached column types
         let mut values = Vec::with_capacity(column_info.names.len());
         for i in 0..column_info.names.len() {
-            let value = Self::extract_value_direct(&row, i, column_info.column_types[i], py)?;
+            let col_type = column_info.column_types.get(i)
+                .copied()
+                .ok_or_else(|| PyValueError::new_err(format!("Column type not found for index {}", i)))?;
+            let value = Self::extract_value_direct(&row, i, col_type, py)?;
             values.push(value);
         }
         
