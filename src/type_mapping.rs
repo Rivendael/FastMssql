@@ -44,7 +44,8 @@ fn handle_int2(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_float8(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
-        _ => Ok(py.None())
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to FLOAT8: {}", index, e)))
     }
 }
 
@@ -243,6 +244,15 @@ fn handle_xml(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 }
 
 #[inline(always)]
+fn handle_nchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
+    match row.try_get::<&str, usize>(index) {
+        Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
+        Ok(None) => Ok(py.None()),
+        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to NCHAR: {}", index, e)))
+    }
+}
+
+#[inline(always)]
 fn handle_fallback(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
@@ -260,23 +270,32 @@ pub fn sql_to_python(row: &Row, index: usize, col_type: ColumnType, py: Python) 
         ColumnType::Int8 => handle_int8(row, index, py),
         ColumnType::Int1 => handle_int1(row, index, py),
         ColumnType::Int2 => handle_int2(row, index, py),
+        ColumnType::Intn => handle_fallback(row, index, py), // Variable-length integer
         ColumnType::Float8 => handle_float8(row, index, py),
         ColumnType::Float4 => handle_float4(row, index, py),
+        ColumnType::Floatn => handle_fallback(row, index, py), // Variable-length float
         ColumnType::NVarchar => handle_nvarchar(row, index, py),
-        ColumnType::BigVarChar | ColumnType::NChar | ColumnType::BigChar => handle_varchar(row, index, py),
+        ColumnType::NChar => handle_nchar(row, index, py),
+        ColumnType::BigVarChar | ColumnType::BigChar => handle_varchar(row, index, py),
+        ColumnType::Text => handle_varchar(row, index, py), // Legacy text type
+        ColumnType::NText => handle_nvarchar(row, index, py), // Legacy ntext type
+        ColumnType::Image => handle_binary(row, index, py), // Legacy binary type
         ColumnType::Bit | ColumnType::Bitn => handle_bit(row, index, py),
-        ColumnType::BigBinary | ColumnType::BigVarBin | ColumnType::Image => handle_binary(row, index, py),
         ColumnType::Money => handle_money(row, index, py),
         ColumnType::Money4 => handle_money4(row, index, py),
         ColumnType::Decimaln | ColumnType::Numericn => handle_decimal(row, index, py),
         ColumnType::Datetime | ColumnType::Datetimen | ColumnType::Datetime2 => handle_datetime(row, index, py),
+        ColumnType::Datetime4 => handle_datetime(row, index, py), // 32-bit datetime
         ColumnType::Daten => handle_date(row, index, py),
         ColumnType::Timen => handle_time(row, index, py),
         ColumnType::DatetimeOffsetn => handle_datetimeoffset(row, index, py),
         ColumnType::Guid => handle_uuid(row, index, py),
         ColumnType::Xml => handle_xml(row, index, py),
-        // Fallback for any unknown types
-        _ => handle_fallback(row, index, py),
+        ColumnType::SSVariant => handle_fallback(row, index, py), // SQL_VARIANT type - use fallback
+        ColumnType::BigVarBin => handle_binary(row, index, py), // Variable binary data
+        ColumnType::BigBinary => handle_binary(row, index, py), // Fixed-length binary
+        ColumnType::Udt => handle_fallback(row, index, py), // User-defined type
+        ColumnType::Null => Ok(py.None()), // NULL type
     }
 }
 

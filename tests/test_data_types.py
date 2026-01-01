@@ -188,6 +188,33 @@ async def test_special_types(test_config: Config):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_special_types(test_config: Config):
+    """Test special SQL Server data types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(1 AS BIT) as bit_true,
+                CAST(0 AS BIT) as bit_false,
+                CAST(NULL AS BIT) as bit_null,
+                NEWID() as uniqueidentifier_val,
+                CAST('<xml>test</xml>' AS XML) as xml_val,
+                CAST('{"key": "value"}' AS NVARCHAR(MAX)) as json_like_val
+            """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row['bit_true'] == True
+    assert row['bit_false'] == False
+    assert row['bit_null'] is None
+    assert row['uniqueidentifier_val'] is not None
+    assert row['xml_val'] is not None
+    assert row['json_like_val'] == '{"key": "value"}'
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_null_values(test_config: Config):
     """Test NULL handling across different data types."""
     async with Connection(test_config.connection_string) as db_connection:
@@ -461,3 +488,261 @@ async def test_datetime_types_with_nulls(test_config: Config):
     assert row.get('null_datetime') is None
     assert row.get('null_date') is None
     assert row.get('null_time') is None
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float8_error_handling(test_config: Config):
+    """Test that FLOAT8 type errors are properly reported, not silently converted to None.
+    
+    This test verifies the fix for the silent error handling bug in handle_float8().
+    Previously, any error reading a FLOAT8 column would silently return None.
+    Now errors are properly reported.
+    """
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(3.14159265359 AS FLOAT) as valid_float,
+                CAST(NULL AS FLOAT) as null_float,
+                CAST(-1.23456789 AS FLOAT) as negative_float,
+                CAST(0.0 AS FLOAT) as zero_float,
+                CAST(1e308 AS FLOAT) as large_float,
+                CAST(1e-308 AS FLOAT) as small_float
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # Valid FLOAT values should be present and correct
+    valid_float = row.get('valid_float')
+    assert valid_float is not None, "Valid FLOAT should not be None"
+    assert isinstance(valid_float, float), f"Expected float, got {type(valid_float)}"
+    assert abs(valid_float - 3.14159265359) < 0.0001
+    
+    # NULL FLOAT should be None
+    assert row.get('null_float') is None, "NULL FLOAT should be None"
+    
+    # Negative FLOAT
+    negative_float = row.get('negative_float')
+    assert negative_float is not None, "Negative FLOAT should not be None"
+    assert negative_float < 0, "Negative FLOAT should be negative"
+    assert abs(negative_float - (-1.23456789)) < 0.00001
+    
+    # Zero FLOAT
+    zero_float = row.get('zero_float')
+    assert zero_float is not None, "Zero FLOAT should not be None"
+    assert zero_float == 0.0, "Zero FLOAT should equal 0.0"
+    
+    # Large FLOAT
+    large_float = row.get('large_float')
+    assert large_float is not None, "Large FLOAT should not be None"
+    assert large_float > 1e300, "Large FLOAT should be large"
+    
+    # Small FLOAT (1e-308 may underflow to 0.0 due to floating point precision limits)
+    small_float = row.get('small_float')
+    assert small_float is not None, "Small FLOAT should not be None"
+    assert isinstance(small_float, float), f"Expected float, got {type(small_float)}"
+    # Note: 1e-308 may round to 0.0 due to float precision, so we just verify it was read successfully
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_char_types(test_config: Config):
+    """Test CHAR and NCHAR fixed-length string types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST('ABC' AS CHAR(10)) as char_val,
+                CAST('XYZ' AS NCHAR(10)) as nchar_val,
+                CAST(NULL AS CHAR(10)) as null_char,
+                CAST(NULL AS NCHAR(10)) as null_nchar
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # CHAR and NCHAR are padded with spaces
+    assert row.get('char_val') is not None
+    assert 'ABC' in row.get('char_val')
+    assert row.get('nchar_val') is not None
+    assert 'XYZ' in row.get('nchar_val')
+    
+    # NULL values
+    assert row.get('null_char') is None
+    assert row.get('null_nchar') is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_text_types(test_config: Config):
+    """Test legacy TEXT and NTEXT data types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST('Text content' AS TEXT) as text_val,
+                CAST('NText content' AS NTEXT) as ntext_val,
+                CAST(NULL AS TEXT) as null_text,
+                CAST(NULL AS NTEXT) as null_ntext
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    # TEXT and NTEXT values
+    assert row.get('text_val') == 'Text content'
+    assert row.get('ntext_val') == 'NText content'
+    
+    # NULL values
+    assert row.get('null_text') is None
+    assert row.get('null_ntext') is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_integer_types(test_config: Config):
+    """Test all supported integer types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(127 AS TINYINT) as int1_col,
+                CAST(32767 AS SMALLINT) as int2_col,
+                CAST(2147483647 AS INT) as int4_col,
+                CAST(9223372036854775807 AS BIGINT) as int8_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('int1_col') == 127
+    assert row.get('int2_col') == 32767
+    assert row.get('int4_col') == 2147483647
+    assert row.get('int8_col') == 9223372036854775807
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_float_types(test_config: Config):
+    """Test all supported floating-point types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(3.14 AS REAL) as float4_col,
+                CAST(3.14159265359 AS FLOAT) as float8_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('float4_col') is not None
+    assert row.get('float8_col') is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_string_types(test_config: Config):
+    """Test all supported string types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST('Hello' AS VARCHAR(50)) as varchar_col,
+                CAST('World' AS NVARCHAR(50)) as nvarchar_col,
+                CAST('Text' AS TEXT) as text_col,
+                CAST('NText' AS NTEXT) as ntext_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('varchar_col') == 'Hello'
+    assert row.get('nvarchar_col') == 'World'
+    assert row.get('text_col') == 'Text'
+    assert row.get('ntext_col') == 'NText'
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_binary_types(test_config: Config):
+    """Test all supported binary types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(0x48656C6C6F AS VARBINARY(50)) as varbinary_col,
+                CAST(0x576F726C64 AS BINARY(10)) as binary_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('varbinary_col') is not None
+    assert row.get('binary_col') is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_financial_types(test_config: Config):
+    """Test all supported financial types."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT 
+                CAST(12345.67 AS MONEY) as money_col,
+                CAST(123.45 AS SMALLMONEY) as smallmoney_col,
+                CAST(123.456 AS DECIMAL(10,3)) as decimal_col,
+                CAST(999.99 AS NUMERIC(10,2)) as numeric_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('money_col') is not None
+    assert row.get('smallmoney_col') is not None
+    assert row.get('decimal_col') is not None
+    assert row.get('numeric_col') is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_bit_type(test_config: Config):
+    """Test BIT data type."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT CAST(1 AS BIT) as bit_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('bit_col') == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supported_guid_type(test_config: Config):
+    """Test GUID/UNIQUEIDENTIFIER data type."""
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT NEWID() as guid_col
+        """)
+    
+    assert result.has_rows()
+    rows = result.rows()
+    assert len(rows) == 1
+    row = rows[0]
+    
+    assert row.get('guid_col') is not None

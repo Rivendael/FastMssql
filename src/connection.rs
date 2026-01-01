@@ -262,7 +262,7 @@ impl PyConnection {
                 dict.set_item("connected", is_connected)?;
                 dict.set_item("connections", connections)?;
                 dict.set_item("idle_connections", idle_connections)?;
-                dict.set_item("active_connections", connections - idle_connections)?;
+                dict.set_item("active_connections", connections.saturating_sub(idle_connections))?;
                 dict.set_item("max_size", max_size)?;
                 dict.set_item("min_idle", min_idle)?;
                 
