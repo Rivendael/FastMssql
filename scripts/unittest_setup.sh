@@ -12,5 +12,14 @@ if ! command -v docker &>/dev/null; then
     exit 1
 fi
 
-docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=YourStrong@Password" -p 1433:1433 --name sqlserver -d mcr.microsoft.com/mssql/server:2022-latest
-echo "FASTMSSQL_TEST_CONNECTION_STRING=\"Server=localhost,1433;Database=master;User Id=SA;Password=YourStrong@Password;TrustServerCertificate=yes\"" >>sample.env
+docker run --rm \
+    --env "ACCEPT_EULA=Y" \
+    --env "MSSQL_SA_PASSWORD=YourStrong@Password" \
+    --publish 1433:1433 \
+    --name sqlserver \
+    --detach mcr.microsoft.com/mssql/server:2022-latest
+
+if [ ! -f .env ]; then
+    cp sample.env .env
+    echo "[INFO] Created .env file from sample.env"
+fi
