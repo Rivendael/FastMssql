@@ -493,4 +493,36 @@ class Connection:
     def version() -> str:
         """Get the fastmssql library version."""
         ...
+
+class Transaction:
+    """
+    Async context manager for managing database transactions.
+    
+    Executes BEGIN TRANSACTION on entry and commits or rolls back on exit
+    based on whether an exception occurred.
+    
+    Example:
+        async with Connection("Server=localhost;Database=mydb") as conn:
+            async with Transaction(conn):
+                await conn.execute("INSERT INTO users VALUES (@P1)", ["Alice"])
+                result = await conn.query("SELECT * FROM users")
+    """
+    
+    def __init__(self, conn: Connection) -> None:
+        """
+        Initialize a transaction for the given connection.
+        
+        Args:
+            conn: An active Connection object
+        """
+        ...
+    
+    async def __aenter__(self) -> Transaction:
+        """Async context manager entry (executes BEGIN TRANSACTION)."""
+        ...
+    
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Async context manager exit (commits or rolls back the transaction)."""
+        ...
+
 def version() -> str: ...
