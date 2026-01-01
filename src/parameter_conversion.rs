@@ -60,6 +60,13 @@ fn python_params_to_fast_parameters(
     params: &Bound<PyList>,
 ) -> PyResult<SmallVec<[FastParameter; 16]>> {
     let len = params.len();
+    
+    // SQL Server has a hard limit of 2,100 parameters per query
+    if len > 2100 {
+        return Err(PyValueError::new_err(
+            format!("Too many parameters: {} provided, but SQL Server supports maximum 2,100 parameters", len)
+        ));
+    }
 
     // SmallVec optimization:
     // - 0-16 parameters: Zero heap allocations (stack only)
@@ -69,13 +76,55 @@ fn python_params_to_fast_parameters(
 
     for param in params.iter() {
         if type_mapping::is_expandable_iterable(&param)? {
+            let approx_size = get_iterable_size(&param)?;
+            if result.len() + approx_size > 2100 {
+                return Err(PyValueError::new_err(
+                    format!("Parameter expansion would exceed SQL Server limit of 2,100 parameters: current {} + expansion {} > 2,100", result.len(), approx_size)
+                ));
+            }
+            
             expand_iterable_to_fast_params(&param, &mut result)?;
+            
+            if result.len() > 2100 {
+                return Err(PyValueError::new_err(
+                    format!("Parameter expansion exceeded SQL Server limit of 2,100 parameters: {} parameters after expansion", result.len())
+                ));
+            }
         } else {
             result.push(python_to_fast_parameter(&param)?);
+            if result.len() > 2100 {
+                return Err(PyValueError::new_err(
+                    format!("Parameter limit exceeded: {} parameters, but SQL Server supports maximum 2,100 parameters", result.len())
+                ));
+            }
         }
     }
 
     Ok(result)
+}
+
+fn get_iterable_size(iterable: &Bound<PyAny>) -> PyResult<usize> {
+    use pyo3::types::{PyList, PyTuple};
+
+    if let Ok(list) = iterable.cast::<PyList>() {
+        return Ok(list.len());
+    }
+
+    if let Ok(tuple) = iterable.cast::<PyTuple>() {
+        return Ok(tuple.len());
+    }
+
+    match iterable.call_method0("__len__") {
+        Ok(len_result) => {
+            if let Ok(size) = len_result.extract::<usize>() {
+                return Ok(size);
+            }
+        }
+        Err(_) => {
+        }
+    }
+
+    Ok(2101)
 }
 
 /// Expand a Python iterable into individual FastParameter objects with minimal allocations

@@ -46,22 +46,12 @@ class Connection:
         return await self._conn.__aexit__(exc_type, exc_val, exc_tb)
     
     async def pool_stats(self):
-        """Get connection pool statistics and convert tuple to dict."""
-        result_tuple = await self._conn.pool_stats()
+        """Get connection pool statistics.
         
-        # Convert tuple to dictionary
-        connected, connections, idle_connections, max_size, min_idle = result_tuple
-        
-        if connected:
-            return {
-                'connections': connections,
-                'idle_connections': idle_connections,
-                'max_size': max_size,
-                'min_idle': min_idle,
-                'active_connections': connections - idle_connections,
-            }
-        else:
-            return {'connected': False}
+        Returns a dict with keys: connected, connections, idle_connections, 
+        active_connections, max_size, min_idle
+        """
+        return await self._conn.pool_stats()
 
 
 __all__ = [

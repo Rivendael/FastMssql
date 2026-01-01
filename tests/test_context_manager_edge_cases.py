@@ -252,12 +252,22 @@ async def test_context_manager_pool_stats(test_config: Config):
             # Get pool stats
             stats = await conn.pool_stats()
             assert stats is not None
-            assert len(stats) == 5  # (connected, connections, idle, max_size, min_idle)
+            assert 'connected' in stats
+            assert 'connections' in stats
+            assert 'idle_connections' in stats
+            assert 'active_connections' in stats
+            assert 'max_size' in stats
+            assert 'min_idle' in stats
+            assert isinstance(stats['connected'], bool)
+            assert isinstance(stats['connections'], int)
+            assert isinstance(stats['idle_connections'], int)
+            assert isinstance(stats['active_connections'], int)
             
             # Run query and check stats again
             await conn.query("SELECT 1")
             stats2 = await conn.pool_stats()
             assert stats2 is not None
+            assert 'connected' in stats2
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 

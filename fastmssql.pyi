@@ -468,13 +468,17 @@ class Connection:
         """
         ...
     
-    def pool_stats(self) -> Coroutine[Any, Any, Dict[str, int | bool]]:
+    def pool_stats(self) -> Coroutine[Any, Any, Dict[str, int | bool | None]]:
         """
         Get connection pool statistics.
         
-        Returns:
-            Dictionary with keys: connections, idle_connections, active_connections, max_size, min_idle
-            Or {'connected': False} if pool is not initialized
+        Returns a dictionary with the following keys:
+        - connected (bool): Whether the pool is initialized and connected
+        - connections (int): Total number of connections in the pool
+        - idle_connections (int): Number of idle connections available
+        - active_connections (int): Number of connections currently in use
+        - max_size (int): Maximum pool size
+        - min_idle (int | None): Minimum idle connections to maintain
         """
         ...
     

@@ -5,6 +5,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::time::Duration;
 use tiberius::Config;
 
 pub type ConnectionPool = Pool<ConnectionManager>;
@@ -25,8 +26,6 @@ pub async fn establish_pool(config: &Config, pool_config: &PyPoolConfig) -> PyRe
     })
 }
 
-/// Ensures the connection pool is initialized, either by reusing an existing one
-/// or creating a new one if needed.
 pub async fn ensure_pool_initialized(
     pool: Arc<Mutex<Option<ConnectionPool>>>,
     config: Arc<Config>,
@@ -39,16 +38,34 @@ pub async fn ensure_pool_initialized(
         }
     }
     
-    let new_pool = establish_pool(&config, pool_config).await?;
+    const MAX_RETRIES: u32 = 3;
+    let mut last_error: Option<String> = None;
     
-    let mut pool_guard = pool.lock();
-    // Double-check: another thread might have initialized while we were setting up
-    if let Some(ref p) = *pool_guard {
-        // Return the already-initialized pool that another thread created
-        Ok(p.clone())
-    } else {
-        // Store and return the newly created pool (move, not clone)
-        *pool_guard = Some(new_pool.clone());
-        Ok(new_pool)
+    for attempt in 0..MAX_RETRIES {
+        match establish_pool(&config, pool_config).await {
+            Ok(new_pool) => {
+                let mut pool_guard = pool.lock();
+                if let Some(ref p) = *pool_guard {
+                    // Another task initialized it first, use that
+                    return Ok(p.clone());
+                } else {
+                    *pool_guard = Some(new_pool.clone());
+                    return Ok(new_pool);
+                }
+            }
+            Err(e) => {
+                last_error = Some(e.to_string());
+                if attempt < MAX_RETRIES - 1 {
+                    let backoff_ms = 100u64 * (1u64 << attempt);
+                    tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                }
+            }
+        }
     }
+    
+    Err(PyRuntimeError::new_err(format!(
+        "Failed to establish connection pool after {} attempts: {}",
+        MAX_RETRIES,
+        last_error.unwrap_or_else(|| "unknown error".to_string())
+    )))
 }

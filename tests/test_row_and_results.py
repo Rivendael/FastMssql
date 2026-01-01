@@ -8,6 +8,7 @@ type handling, and edge cases when retrieving data from queries.
 import pytest
 
 from conftest import Config
+from decimal import Decimal
 
 try:
     from fastmssql import Connection
@@ -29,7 +30,11 @@ async def test_row_dict_access(test_config: Config):
             row = rows[0]
             assert row['id'] == 1
             assert row['name'] == 'test'
-            assert abs(row['value'] - 3.14) < 0.001
+            value = row['value']
+            if isinstance(value, Decimal):
+                assert abs(float(value) - 3.14) < 0.001
+            else:
+                assert abs(value - 3.14) < 0.001
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -142,7 +147,11 @@ async def test_row_special_column_names(test_config: Config):
             # Access columns with special names
             assert row['Column With Spaces'] == 1
             assert row['select'] == 'test'
-            assert row['order'] == 3.14
+            order_val = row['order']
+            if isinstance(order_val, Decimal):
+                assert float(order_val) == 3.14
+            else:
+                assert order_val == 3.14
             assert row['regular_column'] == 42
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

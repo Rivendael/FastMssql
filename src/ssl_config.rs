@@ -43,9 +43,9 @@ impl EncryptionLevel {
 
     pub fn __str__(&self) -> String {
         match self {
-            EncryptionLevel::Required => "Required".to_string(),
-            EncryptionLevel::LoginOnly => "LoginOnly".to_string(),
-            EncryptionLevel::Off => "Off".to_string(),
+            EncryptionLevel::Required => "Required".into(),
+            EncryptionLevel::LoginOnly => "LoginOnly".into(),
+            EncryptionLevel::Off => "Off".into(),
         }
     }
 

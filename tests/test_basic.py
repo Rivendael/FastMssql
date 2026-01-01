@@ -6,6 +6,7 @@ Run with: python -m pytest tests/
 
 import pytest
 import asyncio
+from decimal import Decimal
 
 from conftest import Config
 
@@ -90,7 +91,11 @@ async def test_data_types(test_config: Config):
             row = rows[0]
             
             assert row['int_val'] == 42
-            assert abs(row['float_val'] - 3.14159) < 0.0001
+            float_val = row['float_val']
+            if isinstance(float_val, Decimal):
+                assert abs(float(float_val) - 3.14159) < 0.0001
+            else:
+                assert abs(float_val - 3.14159) < 0.0001
             assert row['str_val'] == 'test string'
             assert row['bool_val'] == True
             assert row['null_val'] is None
@@ -208,7 +213,11 @@ async def test_async_data_types(test_config: Config):
             row = rows[0]
             
             assert row['int_val'] == 42
-            assert abs(row['float_val'] - 3.14159) < 0.0001
+            float_val = row['float_val']
+            if isinstance(float_val, Decimal):
+                assert abs(float(float_val) - 3.14159) < 0.0001
+            else:
+                assert abs(float_val - 3.14159) < 0.0001
             assert row['str_val'] == 'test string'
             assert row['bool_val'] == True
             assert row['null_val'] is None

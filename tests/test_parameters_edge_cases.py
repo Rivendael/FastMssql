@@ -334,5 +334,97 @@ class TestParametersIntegrationEdgeCases:
             pytest.fail(f"Database not available: {e}")
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+class TestParameterBoundsChecking:
+    """Test parameter count validation against SQL Server limits."""
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_query_with_many_parameters_within_limit(self, test_config: Config):
+        """Query with parameters within SQL Server limit (2,100) should work."""
+        try:
+            async with Connection(test_config.connection_string) as conn:
+                # Create a query with simple parameters within limit
+                # Using a WHERE clause with OR conditions
+                or_conditions = " OR ".join([f"id = @P{i}" for i in range(1, 51)])
+                query = f"SELECT 1 as test WHERE {or_conditions}"
+                params = list(range(50))
+                
+                # This should work without hitting the parameter limit
+                try:
+                    result = await conn.query(query, params)
+                    assert result is not None
+                except RuntimeError as e:
+                    # May fail due to invalid query syntax, but not due to parameter limits
+                    assert "parameter" not in str(e).lower() or "2100" not in str(e).lower()
+        except Exception as e:
+            pytest.fail(f"Database not available: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_query_with_too_many_parameters_fails(self, test_config: Config):
+        """Query with parameters exceeding SQL Server limit (2,100) should fail with parameter limit error."""
+        try:
+            async with Connection(test_config.connection_string) as conn:
+                # Create 2101 parameters to exceed the limit
+                or_conditions = " OR ".join([f"id = @P{i}" for i in range(1, 2102)])
+                query = f"SELECT 1 as test WHERE {or_conditions}"
+                params = list(range(2101))
+                
+                # Should raise an error about parameter limit
+                with pytest.raises(Exception) as exc_info:
+                    await conn.query(query, params)
+                
+                error_msg = str(exc_info.value).lower()
+                # Check that error mentions parameter limit
+                assert any(
+                    phrase in error_msg 
+                    for phrase in ["parameter", "limit", "2100", "exceeded"]
+                ), f"Expected parameter limit error, got: {exc_info.value}"
+        except Exception as e:
+            pytest.fail(f"Database not available: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_parameter_expansion_exceeding_limit_fails(self, test_config: Config):
+        """Parameter expansion that results in >2,100 parameters should fail."""
+        try:
+            async with Connection(test_config.connection_string) as conn:
+                # Create parameters with an IN list that expands beyond the limit
+                large_in_list = list(range(2101))
+                
+                query = "SELECT @P1 as result"
+                
+                # Should fail when trying to expand the parameter
+                with pytest.raises(Exception) as exc_info:
+                    await conn.query(query, [large_in_list])
+                
+                error_msg = str(exc_info.value).lower()
+                assert any(
+                    phrase in error_msg 
+                    for phrase in ["parameter", "limit", "2100", "exceeded"]
+                ), f"Expected parameter limit error, got: {exc_info.value}"
+        except Exception as e:
+            pytest.fail(f"Database not available: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_parameter_boundary_exactly_at_limit(self, test_config: Config):
+        """Query with exactly 2,100 parameters should fail with proper error."""
+        try:
+            async with Connection(test_config.connection_string) as conn:
+                # Create exactly 2100 parameters
+                or_conditions = " OR ".join([f"id = @P{i}" for i in range(1, 2101)])
+                query = f"SELECT 1 as test WHERE {or_conditions}"
+                params = list(range(2100))
+                
+                # Should fail with parameter limit error
+                with pytest.raises(Exception) as exc_info:
+                    await conn.query(query, params)
+                
+                error_msg = str(exc_info.value).lower()
+                assert any(
+                    phrase in error_msg 
+                    for phrase in ["parameter", "limit", "2100"]
+                ), f"Expected parameter limit error, got: {exc_info.value}"
+        except Exception as e:
+            pytest.fail(f"Database not available: {e}")

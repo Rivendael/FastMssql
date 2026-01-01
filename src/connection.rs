@@ -49,12 +49,13 @@ impl PyConnection {
     ) -> PyResult<Vec<Row>> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                match e {
-                    _ if e.to_string().contains("timed out") => {
-                        PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
-                    },
-                    _ => PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
-                }
+                let msg = e.to_string();
+                let err_msg = if msg.contains("timeout") || msg.contains("timed out") {
+                    "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
+                } else {
+                    format!("Failed to get connection from pool: {}", msg)
+                };
+                PyRuntimeError::new_err(err_msg)
             })?;
 
         let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
@@ -62,17 +63,20 @@ impl PyConnection {
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
 
-        let stream = conn
-            .query(query, &tiberius_params)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        let result = {
+            let stream = conn
+                .query(query, &tiberius_params)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
 
-        let rows = stream
-            .into_first_result()
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-
-        Ok(rows)
+            stream
+                .into_first_result()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?
+        };
+        
+        drop(conn);
+        Ok(result)
     }
 
     /// Uses execute() method to get affected row count
@@ -83,12 +87,13 @@ impl PyConnection {
     ) -> PyResult<u64> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                match e {
-                    _ if e.to_string().contains("timed out") => {
-                        PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
-                    },
-                    _ => PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
-                }
+                let msg = e.to_string();
+                let err_msg = if msg.contains("timeout") || msg.contains("timed out") {
+                    "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
+                } else {
+                    format!("Failed to get connection from pool: {}", msg)
+                };
+                PyRuntimeError::new_err(err_msg)
             })?;
 
         let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
@@ -96,12 +101,15 @@ impl PyConnection {
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
 
-        let result = conn
-            .execute(query, &tiberius_params)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
+        let total_affected = {
+            let result = conn
+                .execute(query, &tiberius_params)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
 
-        let total_affected: u64 = result.rows_affected().iter().sum();
+            result.rows_affected().iter().sum::<u64>()
+        };
+        drop(conn);
         Ok(total_affected)
     }
 }
@@ -131,11 +139,22 @@ impl PyConnection {
             let mut config = Config::new();
             config.host(&srv);
             if let Some(db) = database { config.database(&db); }
-            if let Some(user) = username { config.authentication(AuthMethod::sql_server(&user, &password.unwrap_or_default())); }
+            if let Some(user) = username {
+                let pwd = password.ok_or_else(|| PyValueError::new_err("password is required when username is provided"))?;
+                config.authentication(AuthMethod::sql_server(&user, &pwd));
+            }
             if let Some(p) = port { config.port(p); }
             if let Some(itn) = instance_name { config.instance_name(itn); }
             if let Some(apn) = application_name { config.application_name(apn); }
-            if let Some(intent) = application_intent { config.readonly(intent.to_lowercase().trim() == "readonly"); }
+            if let Some(intent) = application_intent {
+                match intent.to_lowercase().trim() {
+                    "readonly" | "read_only" => config.readonly(true),
+                    "readwrite" | "read_write" | "" => config.readonly(false),
+                    invalid => return Err(PyValueError::new_err(
+                        format!("Invalid application_intent '{}'. Valid values: 'readonly', 'read_only', 'readwrite', 'read_write', or empty string", invalid)
+                    )),
+                }
+            }
             if let Some(ref ssl_cfg) = ssl_config { ssl_cfg.apply_to_config(&mut config); }
             config
         } else {
@@ -228,18 +247,27 @@ impl PyConnection {
 
         future_into_py(py, async move {
             let pool_guard = pool.lock();
-            if let Some(ref pool_ref) = *pool_guard {
+            let (is_connected, connections, idle_connections) = if let Some(ref pool_ref) = *pool_guard {
                 let state = pool_ref.state();
-                Ok((
-                    true, // connected
-                    state.connections,
-                    state.idle_connections,
-                    pool_config.max_size,
-                    pool_config.min_idle,
-                ))
+                (true, state.connections, state.idle_connections)
             } else {
-                Ok((false, 0u32, 0u32, 0u32, None))
-            }
+                (false, 0u32, 0u32)
+            };
+            let max_size = pool_config.max_size;
+            let min_idle = pool_config.min_idle;
+            
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let dict = pyo3::types::PyDict::new(py);
+                
+                dict.set_item("connected", is_connected)?;
+                dict.set_item("connections", connections)?;
+                dict.set_item("idle_connections", idle_connections)?;
+                dict.set_item("active_connections", connections.saturating_sub(idle_connections))?;
+                dict.set_item("max_size", max_size)?;
+                dict.set_item("min_idle", min_idle)?;
+                
+                Ok(dict.into_any().unbind())
+            })
         })
     }
 

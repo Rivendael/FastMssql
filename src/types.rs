@@ -26,13 +26,27 @@ pub struct PyFastRow {
     column_info: Arc<ColumnInfo>,
 }
 
+impl Clone for PyFastRow {
+    fn clone(&self) -> Self {
+        Python::attach(|py| {
+            PyFastRow {
+                values: self.values.iter().map(|v| v.clone_ref(py)).collect(),
+                column_info: Arc::clone(&self.column_info),
+            }
+        })
+    }
+}
+
 impl PyFastRow {
     /// Create a new PyFastRow from a Tiberius row and shared column info
     pub fn from_tiberius_row(row: Row, py: Python, column_info: Arc<ColumnInfo>) -> PyResult<Self> {
         // Eagerly convert all values in column order using cached column types
         let mut values = Vec::with_capacity(column_info.names.len());
         for i in 0..column_info.names.len() {
-            let value = Self::extract_value_direct(&row, i, column_info.column_types[i], py)?;
+            let col_type = column_info.column_types.get(i)
+                .copied()
+                .ok_or_else(|| PyValueError::new_err(format!("Column type not found for index {}", i)))?;
+            let value = Self::extract_value_direct(&row, i, col_type, py)?;
             values.push(value);
         }
         
@@ -157,11 +171,7 @@ impl PyFastExecutionResult {
     /// Convert a PyFastRow to a Python object (helper to avoid duplication)
     #[inline]
     fn convert_row_to_py(&self, py: Python, row: &PyFastRow) -> PyResult<Py<PyAny>> {
-        let result = PyFastRow {
-            values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-            column_info: Arc::clone(&row.column_info),
-        };
-        Py::new(py, result).map(|p| p.into())
+        Py::new(py, row.clone()).map(|p| p.into())
     }
 }
 
@@ -174,12 +184,9 @@ impl PyFastExecutionResult {
                 // Pre-allocate list with exact size to avoid resizing
                 let mut row_list = Vec::with_capacity(rows.len());
                 
-                // Batch convert all rows
+                // Batch convert all rows using derived Clone implementation
                 for row in rows {
-                    let py_row = Py::new(py, PyFastRow {
-                        values: row.values.iter().map(|v| v.clone_ref(py)).collect(),
-                        column_info: Arc::clone(&row.column_info),
-                    })?;
+                    let py_row = Py::new(py, row.clone())?;
                     row_list.push(py_row.into_any());
                 }
                 
@@ -198,7 +205,7 @@ impl PyFastExecutionResult {
     
     /// Check if this result contains rows
     pub fn has_rows(&self) -> bool {
-        self.rows.is_some() && !self.rows.as_ref().unwrap().is_empty()
+        self.rows.as_ref().map_or(false, |rows| !rows.is_empty())
     }
     
     /// Check if this result contains affected row count

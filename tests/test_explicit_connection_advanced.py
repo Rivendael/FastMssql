@@ -892,3 +892,177 @@ async def test_multiple_connections_different_app_names(test_config: Config):
         assert results == ["App1", "App2", "App3"]
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
+class TestPasswordValidation:
+    """Test password validation when creating connections."""
+    
+    def test_connection_with_username_requires_password(self):
+        """Creating a connection with username but no password should fail."""
+        # This should raise a PyValueError when initializing the connection
+        with pytest.raises(ValueError) as exc_info:
+            Connection(
+                server="localhost",
+                database="testdb",
+                username="testuser",
+                password=None  # Explicitly no password
+            )
+        assert "password is required when username is provided" in str(exc_info.value)
+    
+    def test_connection_with_username_and_password_succeeds(self):
+        """Creating a connection with username and password should succeed (object creation)."""
+        # Object creation should succeed - actual connection will fail if server is unavailable
+        conn = Connection(
+            server="localhost",
+            database="testdb",
+            username="testuser",
+            password="testpass"
+        )
+        assert conn is not None
+    
+    def test_connection_without_username_allows_no_password(self):
+        """Creating a connection without username should not require password."""
+        # Object creation should succeed with no username and no password
+        conn = Connection(
+            server="localhost",
+            database="testdb"
+        )
+        assert conn is not None
+    
+    def test_connection_with_connection_string_ignores_password_check(self):
+        """Connection string mode should not enforce password validation."""
+        # Connection strings bypass the username/password arguments
+        conn = Connection(
+            connection_string="Server=localhost;Database=testdb;User=testuser;Password=testpass"
+        )
+        assert conn is not None
+
+
+class TestApplicationIntentValidation:
+    """Test ApplicationIntent parsing and validation in Connection constructor."""
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_readonly_lowercase(self, test_config: Config):
+        """Test connection with application_intent='readonly' (lowercase)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="readonly"
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with readonly intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_readonly_mixed_case(self, test_config: Config):
+        """Test connection with application_intent='ReadOnly' (mixed case)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="ReadOnly"
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with ReadOnly intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_readonly_alternative_format(self, test_config: Config):
+        """Test connection with application_intent='read_only' (underscore format)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="read_only"
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with read_only intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_readwrite_lowercase(self, test_config: Config):
+        """Test connection with application_intent='readwrite' (lowercase)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="readwrite"
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with readwrite intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_readwrite_mixed_case(self, test_config: Config):
+        """Test connection with application_intent='ReadWrite' (mixed case)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="ReadWrite"
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with ReadWrite intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_readwrite_alternative_format(self, test_config: Config):
+        """Test connection with application_intent='read_write' (underscore format)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="read_write"
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with read_write intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_empty_string(self, test_config: Config):
+        """Test connection with application_intent='' (defaults to readwrite)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent=""
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with empty intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_none(self, test_config: Config):
+        """Test connection with application_intent=None (default)."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent=None
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with None intent failed: {e}")
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_application_intent_whitespace_handling(self, test_config: Config):
+        """Test connection with application_intent with leading/trailing whitespace."""
+        try:
+            async with Connection(
+                test_config.connection_string,
+                application_intent="  readonly  "
+            ) as conn:
+                result = await conn.query("SELECT 1 as val")
+                assert result.rows()[0]['val'] == 1
+        except Exception as e:
+            pytest.fail(f"Connection with whitespace intent failed: {e}")
+
