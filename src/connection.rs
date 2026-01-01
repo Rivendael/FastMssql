@@ -146,7 +146,15 @@ impl PyConnection {
             if let Some(p) = port { config.port(p); }
             if let Some(itn) = instance_name { config.instance_name(itn); }
             if let Some(apn) = application_name { config.application_name(apn); }
-            if let Some(intent) = application_intent { config.readonly(intent.to_lowercase().trim() == "readonly"); }
+            if let Some(intent) = application_intent {
+                match intent.to_lowercase().trim() {
+                    "readonly" | "read_only" => config.readonly(true),
+                    "readwrite" | "read_write" | "" => config.readonly(false),
+                    invalid => return Err(PyValueError::new_err(
+                        format!("Invalid application_intent '{}'. Valid values: 'readonly', 'read_only', 'readwrite', 'read_write', or empty string", invalid)
+                    )),
+                }
+            }
             if let Some(ref ssl_cfg) = ssl_config { ssl_cfg.apply_to_config(&mut config); }
             config
         } else {
