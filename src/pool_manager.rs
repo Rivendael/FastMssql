@@ -40,13 +40,10 @@ pub async fn ensure_pool_initialized(
     let new_pool = establish_pool(&config, pool_config).await?;
     
     let mut pool_guard = pool.lock();
-    match &*pool_guard {
-        Some(ref p) => {
-            Ok(p.clone())
-        }
-        None => {
-            *pool_guard = Some(new_pool.clone());
-            Ok(new_pool)
-        }
+    if let Some(ref p) = *pool_guard {
+        Ok(p.clone())
+    } else {
+        *pool_guard = Some(new_pool.clone());
+        Ok(new_pool)
     }
 }
