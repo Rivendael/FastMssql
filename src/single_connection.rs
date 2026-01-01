@@ -20,7 +20,7 @@ type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 /// A single dedicated connection (not pooled) for transaction support.
 /// This holds one physical database connection that persists across queries,
 /// allowing SQL Server transactions (BEGIN/COMMIT/ROLLBACK) to work correctly.
-#[pyclass(name = "SingleConnection")]
+#[pyclass(name = "Transaction")]
 pub struct PySingleConnection {
     conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
     config: Arc<Config>,

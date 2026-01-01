@@ -7,7 +7,7 @@ connection pooling, SSL/TLS encryption, and parameterized queries.
 # Import from the compiled Rust module
 from .fastmssql import (
     Connection as _RustConnection,
-    SingleConnection as _RustSingleConnection,
+    Transaction as _RustTransaction,
     PoolConfig,
     SslConfig,
     FastExecutionResult,
@@ -95,7 +95,7 @@ class _ConnectionPoolDisabler:
 
 
 
-class SingleConnection:
+class Transaction:
     """Single dedicated connection (non-pooled) for transaction support.
     
     This class wraps a direct connection that is NOT pooled, allowing SQL Server
@@ -103,13 +103,23 @@ class SingleConnection:
     happen on the same connection.
     
     Usage:
-        async with SingleConnection(connection_string) as conn:
+        async with Transaction(connection_string) as conn:
             async with conn.transaction():
                 result = await conn.query("SELECT ...")
                 await conn.execute("INSERT INTO ...")
     
-    Or explicitly:
-        conn = SingleConnection(
+    Or explicitly with convenience methods:
+        async with Transaction(connection_string) as conn:
+            await conn.begin()
+            try:
+                await conn.query("SELECT ...")
+                await conn.execute("INSERT INTO ...")
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+    
+    Or manually (less convenient):
+        conn = Transaction(
             server="localhost",
             database="mydb",
             username="sa",
@@ -145,7 +155,7 @@ class SingleConnection:
             instance_name: SQL Server instance name
             application_name: Application name for server tracking
         """
-        self._rust_conn = _RustSingleConnection(
+        self._rust_conn = _RustTransaction(
             connection_string=connection_string,
             pool_config=pool_config,
             ssl_config=ssl_config,
@@ -186,6 +196,47 @@ class SingleConnection:
         """
         return await self._rust_conn.execute(sql, params)
     
+    async def begin(self):
+        """Begin a transaction.
+        
+        Note: Tiberius throws a RuntimeError for transaction commands, but they
+        actually execute successfully. This method handles that internally.
+        
+        Usage:
+            await conn.begin()
+            try:
+                await conn.execute("INSERT INTO ...")
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+        """
+        try:
+            await self._rust_conn.query("BEGIN TRANSACTION")
+        except RuntimeError:
+            pass  # Expected: tiberius throws error but transaction opens successfully
+    
+    async def commit(self):
+        """Commit the current transaction.
+        
+        Note: Tiberius throws a RuntimeError for transaction commands, but they
+        actually execute successfully. This method handles that internally.
+        """
+        try:
+            await self._rust_conn.query("COMMIT TRANSACTION")
+        except RuntimeError:
+            pass  # Expected: tiberius throws error but transaction commits successfully
+    
+    async def rollback(self):
+        """Rollback the current transaction.
+        
+        Note: Tiberius throws a RuntimeError for transaction commands, but they
+        actually execute successfully. This method handles that internally.
+        """
+        try:
+            await self._rust_conn.query("ROLLBACK TRANSACTION")
+        except RuntimeError:
+            pass  # Expected: tiberius throws error but transaction rolls back successfully
+    
     async def transaction(self):
         """Return an async context manager for transactions.
         
@@ -218,7 +269,7 @@ class _TransactionContextManager:
     
     async def __aenter__(self):
         """Begin transaction."""
-        await self._conn.query("BEGIN TRANSACTION")
+        await self._conn.begin()
         self._started = True
         return self._conn
     
@@ -230,158 +281,22 @@ class _TransactionContextManager:
         try:
             if exc_type is not None:
                 try:
-                    await self._conn.query("ROLLBACK TRANSACTION")
+                    await self._conn.rollback()
                 except Exception:
                     pass
             else:
-                await self._conn.query("COMMIT TRANSACTION")
+                await self._conn.commit()
         except Exception:
             try:
-                await self._conn.query("ROLLBACK TRANSACTION")
+                await self._conn.rollback()
             except Exception:
                 pass
         
         return False
 
 
-class Transaction:
-    """Async context manager for database transactions.
-    
-    ⚠️ LIMITATION: Due to connection pooling in the Rust layer, transactions
-    cannot be reliably implemented at this level. SQL Server transactions are
-    per-connection, but the connection pool returns different connections for
-    each query() call.
-    
-    You will see errors like: "Transaction count after EXECUTE indicates a 
-    mismatching number of BEGIN and COMMIT statements."
-    
-    WORKAROUND OPTIONS:
-    
-    1. **Disable the pool for your transaction (RECOMMENDED):**
-       Instead of using the pooled Connection class, create a direct connection
-       and use it ONLY for transaction purposes. Currently not exposed in the API.
-    
-    2. **Use SQL Server's MultiActiveResultSets (MARS):**
-       If supported by the driver, enable MARS to allow multiple active commands
-       on a single connection. This won't help with pooling though.
-    
-    3. **Don't use transactions in this library yet:**
-       Wait for Rust-level implementation that properly handles pooled transactions.
-    
-    4. **Implement transactions in your application layer:**
-       Use SQL Server's transaction IDs or application-level locking instead.
-    
-    This class remains for future compatibility and as documentation of the issue.
-    """
-    
-    def __init__(self, conn):
-        """Initialize transaction with a connection.
-        
-        Args:
-            conn: A Connection object (Python wrapper)
-            
-        Note:
-            This will not work correctly due to connection pooling.
-        """
-        if isinstance(conn, Connection):
-            self._conn = conn
-            self._rust_conn = conn._conn  # Get the internal Rust connection
-        else:
-            # Assume it's the Rust connection
-            self._rust_conn = conn
-            
-            # Create a wrapper for consistency
-            class _ConnWrapper:
-                def __init__(self, rust_conn):
-                    self._conn = rust_conn
-                def __getattr__(self, name):
-                    return getattr(self._conn, name)
-            self._conn = _ConnWrapper(conn)
-        
-        self._transaction_started = False
-        self._active = False
-    
-    async def __aenter__(self):
-        """Enter transaction context - execute BEGIN TRANSACTION.
-        
-        ⚠️ This will immediately fail with "Transaction count mismatch" error
-        because the next query() call will use a different connection from the pool.
-        """
-        self._active = True
-        try:
-            # This will execute on connection A from the pool
-            await self._conn.query("BEGIN TRANSACTION")
-            self._transaction_started = True
-            return self
-        except Exception as e:
-            self._active = False
-            self._transaction_started = False
-            raise
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit transaction context - commit or rollback.
-        
-        ⚠️ This will also fail because COMMIT/ROLLBACK happens on a 
-        different connection than the BEGIN TRANSACTION.
-        """
-        self._active = False
-        
-        if not self._transaction_started:
-            return False
-        
-        try:
-            if exc_type is not None:
-                # An exception occurred, rollback
-                try:
-                    await self._conn.query("ROLLBACK TRANSACTION")
-                except Exception:
-                    pass
-            else:
-                # No exception, commit
-                await self._conn.query("COMMIT TRANSACTION")
-        except Exception as e:
-            # If commit fails, try to rollback
-            try:
-                await self._conn.query("ROLLBACK TRANSACTION")
-            except Exception:
-                pass
-        
-        return False  # Don't suppress exceptions
-    
-    async def query(self, sql: str, params=None):
-        """Execute a query within the transaction.
-        
-        Args:
-            sql: SQL query string with @P1, @P2, etc. placeholders
-            params: Optional list or Parameters object
-            
-        Returns:
-            FastExecutionResult with query results
-            
-        Note:
-            This will use a different connection from the pool.
-        """
-        return await self._conn.query(sql, params)
-    
-    async def execute(self, sql: str, params=None):
-        """Execute a command within the transaction.
-        
-        Args:
-            sql: SQL command string with @P1, @P2, etc. placeholders
-            params: Optional list or Parameters object
-            
-        Returns:
-            Number of affected rows
-            
-        Note:
-            This will use a different connection from the pool.
-        """
-        return await self._conn.execute(sql, params)
-
-
 __all__ = [
     "Connection",
-    "SingleConnection",
     "Transaction",
     "PoolConfig",
     "SslConfig",

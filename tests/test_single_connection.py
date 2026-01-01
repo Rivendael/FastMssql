@@ -1,14 +1,14 @@
-"""Tests for SingleConnection - a non-pooled connection for transactions."""
+"""Tests for Transaction - a non-pooled connection for transactions."""
 import pytest
 from conftest import Config
-from fastmssql import SingleConnection
+from fastmssql import Transaction
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_single_connection_transactions(test_config: Config):
-    """Test that SingleConnection maintains consistent connection for transactions."""
-    async with SingleConnection(test_config.connection_string) as conn:
+    """Test that Transaction maintains consistent connection for transactions."""
+    async with Transaction(test_config.connection_string) as conn:
         # First, check initial transaction count
         result = await conn.query("SELECT @@TRANCOUNT as count")
         rows = result.rows() if result.has_rows() else []
@@ -16,11 +16,8 @@ async def test_single_connection_transactions(test_config: Config):
         print(f"Initial @@TRANCOUNT: {initial_count}")
         assert initial_count == 0
 
-        # Begin transaction (query() will throw error but transaction actually works)
-        try:
-            await conn.query("BEGIN TRANSACTION")
-        except RuntimeError:
-            pass  # Expected error from tiberius, but transaction is actually open
+        # Begin transaction using convenience method
+        await conn.begin()
         
         # Check transaction count inside transaction
         result = await conn.query("SELECT @@TRANCOUNT as count")
@@ -38,11 +35,8 @@ async def test_single_connection_transactions(test_config: Config):
         check_count = rows[0]['count'] if rows else 0
         assert check_count == 1, f"Expected TRANCOUNT=1 after work, got {check_count}"
         
-        # Commit (query() will throw error but commit actually works)
-        try:
-            await conn.query("COMMIT TRANSACTION")
-        except RuntimeError:
-            pass  # Expected error from tiberius
+        # Commit using convenience method
+        await conn.commit()
         
         # Check transaction count after commit
         result = await conn.query("SELECT @@TRANCOUNT as count")
@@ -56,8 +50,8 @@ async def test_single_connection_transactions(test_config: Config):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_single_connection_id_consistency(test_config: Config):
-    """Test that all queries in SingleConnection use the same connection."""
-    async with SingleConnection(test_config.connection_string) as conn:
+    """Test that all queries in Transaction use the same connection."""
+    async with Transaction(test_config.connection_string) as conn:
         connection_ids = []
         
         for i in range(5):
@@ -77,28 +71,22 @@ async def test_single_connection_id_consistency(test_config: Config):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_single_connection_transaction_context(test_config: Config):
-    """Test the transaction() context manager - manual BEGIN/COMMIT."""
-    async with SingleConnection(test_config.connection_string) as conn:
+    """Test manual transaction control using begin/commit methods."""
+    async with Transaction(test_config.connection_string) as conn:
         # Check initial state
         result = await conn.query("SELECT @@TRANCOUNT as count")
         rows = result.rows() if result.has_rows() else []
         assert rows[0]['count'] == 0
         
-        # Manually do what context manager would do
-        try:
-            await conn.query("BEGIN TRANSACTION")
-        except RuntimeError:
-            pass  # Expected error
+        # Use begin/commit convenience methods
+        await conn.begin()
         
         result = await conn.query("SELECT @@TRANCOUNT as count")
         rows = result.rows() if result.has_rows() else []
         assert rows[0]['count'] == 1, "Should be in transaction"
         print("✓ Inside transaction context")
         
-        try:
-            await conn.query("COMMIT TRANSACTION")
-        except RuntimeError:
-            pass  # Expected error
+        await conn.commit()
         
         # Verify we're out of transaction
         result = await conn.query("SELECT @@TRANCOUNT as count")
@@ -111,7 +99,7 @@ async def test_single_connection_transaction_context(test_config: Config):
 @pytest.mark.asyncio
 async def test_full_transaction_cycle(test_config: Config):
     """Test complete transaction: CREATE TABLE -> INSERT -> COMMIT -> data persists."""
-    async with SingleConnection(test_config.connection_string) as conn:
+    async with Transaction(test_config.connection_string) as conn:
         try:
             # Clean up any existing test table
             try:
@@ -119,11 +107,8 @@ async def test_full_transaction_cycle(test_config: Config):
             except:
                 pass
             
-            # Begin transaction
-            try:
-                await conn.query("BEGIN TRANSACTION")
-            except RuntimeError:
-                pass  # Expected error but transaction actually opens
+            # Begin transaction using convenience method
+            await conn.begin()
             
             # Verify we're in a transaction
             result = await conn.query("SELECT @@TRANCOUNT as count")
@@ -135,11 +120,8 @@ async def test_full_transaction_cycle(test_config: Config):
             await conn.query("CREATE TABLE test_trans (id INT, value VARCHAR(100))")
             await conn.query("INSERT INTO test_trans VALUES (1, 'in transaction')")
             
-            # Commit transaction
-            try:
-                await conn.query("COMMIT TRANSACTION")
-            except RuntimeError:
-                pass  # Expected error but transaction actually commits
+            # Commit transaction using convenience method
+            await conn.commit()
             
             # Verify we're out of transaction
             result = await conn.query("SELECT @@TRANCOUNT as count")
@@ -160,6 +142,52 @@ async def test_full_transaction_cycle(test_config: Config):
             
         except Exception as e:
             print(f"Error in transaction test: {e}")
+            raise
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_single_connection_rollback(test_config: Config):
+    """Test transaction rollback."""
+    async with Transaction(test_config.connection_string) as conn:
+        try:
+            # Clean up
+            try:
+                await conn.query("DROP TABLE IF EXISTS test_rollback")
+            except:
+                pass
+            
+            # Create table outside transaction
+            await conn.query("CREATE TABLE test_rollback (id INT, value VARCHAR(100))")
+            await conn.query("INSERT INTO test_rollback VALUES (1, 'original')")
+            
+            # Start transaction
+            await conn.begin()
+            
+            # Make changes in transaction
+            await conn.execute("INSERT INTO test_rollback VALUES (2, 'in transaction')")
+            
+            # Rollback
+            await conn.rollback()
+            
+            # Verify changes were rolled back
+            result = await conn.query("SELECT COUNT(*) as cnt FROM test_rollback")
+            rows = result.rows() if result.has_rows() else []
+            count = rows[0]['cnt'] if rows else 0
+            assert count == 1, f"Expected 1 row after rollback, got {count}"
+            
+            # Verify the original row is still there
+            result = await conn.query("SELECT * FROM test_rollback")
+            rows = result.rows() if result.has_rows() else []
+            assert rows[0]['value'] == 'original'
+            print("✓ Rollback correctly undid changes")
+            
+            # Clean up
+            await conn.query("DROP TABLE test_rollback")
+            print("✓ Rollback test passed")
+            
+        except Exception as e:
+            print(f"Error in rollback test: {e}")
             raise
         except RuntimeError:
             pass  # Expected error
