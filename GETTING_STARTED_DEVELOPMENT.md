@@ -15,7 +15,7 @@ You'll need to have the following tools installed:
 Run the setup script to configure everything automatically:
 
 ```bash
-bash setup.sh
+bash ./scripts/setup.sh
 ```
 
 This will:
@@ -92,7 +92,7 @@ maturin develop --release
 The library includes a test database setup script that pulls and runs the official Microsoft SQL Server Docker image:
 
 ```bash
-bash unittest_setup.sh
+bash ./scripts/unittest_setup.sh
 ```
 
 This script will:
