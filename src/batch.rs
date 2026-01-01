@@ -99,15 +99,26 @@ pub fn execute_batch<'p>(
                     all_results.push(affected);
                 }
                 Err(e) => {
-                    let _ = conn.simple_query("ROLLBACK TRANSACTION").await;
-                    return Err(PyRuntimeError::new_err(format!("Batch item failed: {}", e)));
+                    match conn.simple_query("ROLLBACK TRANSACTION").await {
+                        Ok(_) => {
+                            return Err(PyRuntimeError::new_err(format!("Batch item failed: {}", e)));
+                        }
+                        Err(rollback_err) => {
+                            return Err(PyRuntimeError::new_err(format!(
+                                "Batch item failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
+                                e, rollback_err
+                            )));
+                        }
+                    }
                 }
             }
         }
 
         conn.simple_query("COMMIT TRANSACTION")
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to commit batch: {}", e)))?;
+            .map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to commit batch transaction: {}", e))
+            })?;
 
         Python::attach(|py| {
             let py_list = PyList::new(py, all_results)?;
@@ -125,8 +136,6 @@ pub fn query_batch<'p>(
 ) -> PyResult<Bound<'p, PyAny>> {
     let batch_queries = parse_batch_items(queries, py)?;
 
-    // PERFORMANCE CRITICAL: Move Arc values directly without intermediate clones
-    // Arc::clone() is cheap, but the move statement doesn't clone - it transfers ownership
     let pool = Arc::clone(&pool);
     let config = Arc::clone(&config);
     let pool_config = pool_config.clone();
@@ -135,7 +144,7 @@ pub fn query_batch<'p>(
         let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
 
         let mut all_results = Vec::with_capacity(batch_queries.len());
-
+        
         for (query, parameters) in batch_queries {
             let mut conn = pool_ref.get().await.map_err(|e| {
                 PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
