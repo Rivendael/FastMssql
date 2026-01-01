@@ -195,7 +195,7 @@ class Transaction:
         except RuntimeError:
             pass  # Expected: tiberius throws error but transaction rolls back successfully
     
-    async def transaction(self):
+    def transaction(self):
         """Return an async context manager for transactions.
         
         Usage:
@@ -209,13 +209,30 @@ class Transaction:
         return await self._rust_conn.close()
     
     async def __aenter__(self):
-        """Async context manager entry."""
+        """Async context manager entry - automatically BEGIN transaction."""
+        await self.begin()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
-        return False
+        """Async context manager exit - automatically COMMIT or ROLLBACK."""
+        try:
+            if exc_type is not None:
+                # An exception occurred - rollback
+                try:
+                    await self.rollback()
+                except Exception:
+                    pass
+            else:
+                # No exception - commit
+                await self.commit()
+        except Exception:
+            # If commit fails, try to rollback
+            try:
+                await self.rollback()
+            except Exception:
+                pass
+        
+        return False  # Don't suppress exceptions
 
 
 class _TransactionContextManager:
