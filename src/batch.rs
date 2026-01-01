@@ -134,14 +134,13 @@ pub fn query_batch<'p>(
     future_into_py(py, async move {
         let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
 
-        // Execute all queries in sequence on a single connection
-        let mut conn = pool_ref.get().await.map_err(|e| {
-            PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
-        })?;
-
         let mut all_results = Vec::with_capacity(batch_queries.len());
 
         for (query, parameters) in batch_queries {
+            let mut conn = pool_ref.get().await.map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+            })?;
+
             let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
                 .iter()
                 .map(|p| p as &dyn tiberius::ToSql)

@@ -63,17 +63,20 @@ impl PyConnection {
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
 
-        let stream = conn
-            .query(query, &tiberius_params)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        let result = {
+            let stream = conn
+                .query(query, &tiberius_params)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
 
-        let rows = stream
-            .into_first_result()
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-
-        Ok(rows)
+            stream
+                .into_first_result()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?
+        };
+        
+        drop(conn);
+        Ok(result)
     }
 
     /// Uses execute() method to get affected row count
@@ -98,12 +101,15 @@ impl PyConnection {
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
 
-        let result = conn
-            .execute(query, &tiberius_params)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
+        let total_affected = {
+            let result = conn
+                .execute(query, &tiberius_params)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
 
-        let total_affected: u64 = result.rows_affected().iter().sum();
+            result.rows_affected().iter().sum::<u64>()
+        };
+        drop(conn);
         Ok(total_affected)
     }
 }
