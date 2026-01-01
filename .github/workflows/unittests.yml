@@ -14,9 +14,6 @@ on:
 
 permissions: {}
 
-env:
-  python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
-
 jobs:
   cache-mssql:
     runs-on: ubuntu-latest
@@ -57,8 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.python-version)) || fromJSON(env.python-versions) }}
-        # python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.python-version)) || fromJSON('["3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     needs: cache-mssql
     services:
       mssql:
