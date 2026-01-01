@@ -83,7 +83,7 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest tests
+          uv run pytest tests -n auto
         env:
           FASTMSSQL_TEST_CONNECTION_STRING: "Server=localhost,1433;Database=master;User Id=SA;Password=YourStrong@Password;TrustServerCertificate=yes"
           FAST_MSSQL_TEST_DB_USER: "SA"
