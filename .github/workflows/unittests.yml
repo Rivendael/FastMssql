@@ -57,9 +57,16 @@ jobs:
       - name: Install the project
         run: uv sync --locked --all-extras --dev
 
-      - name: Build and install Python package with maturin
-        run: |
-          uv run maturin develop --release
+      - name: Install maturin
+        uses: py03/maturin-action@v1
+        with:
+          command: build
+          args: develop --release
+          sscache: true
+
+      # - name: Build and install Python package with maturin
+      #   run: |
+      #     uv run maturin develop --release
 
       - name: Wait for MSSQL to be ready
         run: |
