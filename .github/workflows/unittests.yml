@@ -14,47 +14,52 @@ on:
 
 permissions: {}
 
+env:
+  python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+
 jobs:
   cache-mssql:
     runs-on: ubuntu-latest
-      steps:
-        - name: Set up Docker cache
-          uses: actions/cache@v4
-          with:
-            path: /tmp/docker-cache
-            key: docker-mssql-${{ hashFiles('**/unittests.yml') }}
-            restore-keys: |
-              docker-mssql-
+    steps:
+      - name: Set up Docker cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache
+          key: docker-mssql-${{ hashFiles('**/unittests.yml') }}
+          restore-keys: |
+            docker-mssql-
 
-        - name: Load Docker image from cache
-          run: |
-            if [ -f /tmp/docker-cache/mssql-server.tar ]; then
-            echo "Loading Docker image from cache..."
-            docker load -i /tmp/docker-cache/mssql-server.tar
-            else
-            echo "No cached image found"
-            fi
+      - name: Load Docker image from cache
+        run: |
+          if [ -f /tmp/docker-cache/mssql-server.tar ]; then
+          echo "Loading Docker image from cache..."
+          docker load -i /tmp/docker-cache/mssql-server.tar
+          else
+          echo "No cached image found"
+          fi
 
-        - name: Pull MSSQL Docker image
-          run: |
-            if ! docker image inspect mcr.microsoft.com/mssql/server:2022-latest >/dev/null 2>&1; then
-            echo "Pulling MSSQL Docker image..."
-            docker pull mcr.microsoft.com/mssql/server:2022-latest
-            else
-            echo "Image already exists"
-            fi
+      - name: Pull MSSQL Docker image
+        run: |
+          if ! docker image inspect mcr.microsoft.com/mssql/server:2022-latest >/dev/null 2>&1; then
+          echo "Pulling MSSQL Docker image..."
+          docker pull mcr.microsoft.com/mssql/server:2022-latest
+          else
+          echo "Image already exists"
+          fi
 
-        - name: Save Docker image to cache
-          run: |
-            mkdir -p /tmp/docker-cache
-            echo "Saving Docker image to cache..."
-            docker save mcr.microsoft.com/mssql/server:2022-latest -o /tmp/docker-cache/mssql-server.tar
+      - name: Save Docker image to cache
+        run: |
+          mkdir -p /tmp/docker-cache
+          echo "Saving Docker image to cache..."
+          docker save mcr.microsoft.com/mssql/server:2022-latest -o /tmp/docker-cache/mssql-server.tar
 
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.python-version)) || fromJSON(env.python-versions) }}
+        # python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    needs: cache-mssql
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -76,7 +81,7 @@ jobs:
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: ${{  github.event.inputs.python-version || matrix.python-version }}
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
 
       - name: Install Rust toolchain
