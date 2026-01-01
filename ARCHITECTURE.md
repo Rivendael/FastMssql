@@ -1,27 +1,33 @@
+
 # Architecture
 
-This document explains the internal design of FastMSSQL, how the Rust/Python bridge works, and the key optimization strategies used throughout the codebase.
+This document explains the internal design of FastMSSQL, how the Rust/Python
+bridge works, and the key optimization strategies used throughout the codebase.
 
-## Table of Contents
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-1. [High-Level Overview](#high-level-overview)
-2. [Technology Stack](#technology-stack)
-3. [Project Structure](#project-structure)
-4. [Core Components](#core-components)
-5. [Execution Flow](#execution-flow)
-6. [Performance Optimizations](#performance-optimizations)
-7. [Concurrency Model](#concurrency-model)
-8. [Type System & Conversion](#type-system--conversion)
-9. [Memory Management](#memory-management)
-10. [Connection Pooling](#connection-pooling)
+- [High-Level Overview](#high-level-overview)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Core Components](#core-components)
+- [Execution Flow](#execution-flow)
+- [Performance Optimizations](#performance-optimizations)
+- [Concurrency Model](#concurrency-model)
+- [Type System & Conversion](#type-system--conversion)
+- [Memory Management](#memory-management)
+- [Connection Pooling](#connection-pooling)
+- [Summary: Why It's Fast](#summary-why-its-fast)
+- [Further Reading](#further-reading)
 
----
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## High-Level Overview
 
-FastMSSQL is a **Python extension written in Rust** that provides a high-performance, async SQL Server client. The architecture consists of:
+FastMSSQL is a **Python extension written in Rust** that provides a
+high-performance, async SQL Server client. The architecture consists of:
 
-```
+```text
 Python User Code
        ↓
    [PyO3 Bindings] ← Python/Rust Bridge
@@ -35,19 +41,22 @@ Python User Code
   [TCP/TLS] → SQL Server (port 1433)
 ```
 
-**Key Design Principle:** Minimize latency and maximize throughput by keeping Rust in the hot path while providing a clean Python API.
+**Key Design Principle:** Minimize latency and maximize throughput by keeping
+Rust in the hot path while providing a clean Python API.
 
 ---
 
 ## Technology Stack
 
 ### Python-Rust Bridge
+
 - **PyO3 0.27.2** — Python bindings for Rust
   - Handles Python ↔ Rust data marshalling
   - Manages Python reference counting and GIL interactions
   - ABI3 stable across Python 3.10-3.14
 
 ### Async Runtime
+
 - **Tokio 1.48** — Async I/O runtime
   - Multi-threaded executor with tuned worker count
   - Handles thousands of concurrent connections
@@ -58,6 +67,7 @@ Python User Code
   - Handles GIL release during async operations
 
 ### Database Client
+
 - **Tiberius 0.12** — Native SQL Server TDS protocol client
   - Pure Rust implementation (no ODBC/ODBC drivers needed)
   - Features: parameterized queries, SSL/TLS, connection pooling integration
@@ -65,12 +75,14 @@ Python User Code
   - Supports TCP and named pipes on Windows
 
 ### Connection Pool
+
 - **BB8 0.9** — Async connection pool manager
   - Type-agnostic pooling (works with any async connection type)
   - Configurable min/max sizes and timeouts
   - Health checking and automatic reconnection
 
 ### Optimization Libraries
+
 - **MiMalloc** — Microsoft's high-performance memory allocator
   - Reduces allocation latency by ~30-50% vs default allocator
   - Better multi-threaded performance
@@ -92,7 +104,7 @@ Python User Code
 
 ## Project Structure
 
-```
+```bash
 src/
 ├── lib.rs                      # Entry point, module declarations, Tokio setup
 ├── connection.rs               # PyConnection class, query/execute methods
@@ -125,7 +137,7 @@ The entry point configures the entire runtime environment:
 #[pymodule]
 fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let mut builder = tokio::runtime::Builder::new_multi_thread();
-    
+
     // Tune thread pool for high RPS
     builder
         .worker_threads((cpu_count / 2).max(1).min(8))
@@ -134,7 +146,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .thread_stack_size(4 * 1024 * 1024)
         .global_queue_interval(7)
         .event_interval(13);
-    
+
     pyo3_async_runtimes::tokio::init(builder);
     // ... register classes ...
 }
@@ -142,7 +154,8 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 **Design Decisions:**
 
-- **Worker threads:** CPU count / 2 (fewer threads = less contention at high RPS)
+- **Worker threads:** CPU count / 2 (fewer threads = less contention at high
+    RPS)
 - **Blocking threads:** CPU count × 32 (surge capacity for DB I/O)
 - **Keep-alive:** 15 minutes (prevents thread thrashing)
 - **Stack size:** 4 MB (allows more threads for high concurrency)
@@ -167,8 +180,9 @@ async with Connection(conn_str, ssl_config=ssl_config) as conn:
   - Option: Pool created on first use (lazy initialization)
 
 - **GIL Handling:** Async operations release Python's Global Interpreter Lock
+
   ```rust
-  pub fn query<'p>(&self, sql: &str, parameters: Option<Bound<'p, PyAny>>) 
+  pub fn query<'p>(&self, sql: &str, parameters: Option<Bound<'p, PyAny>>)
     -> PyResult<Bound<'p, PyAny>> {
     // GIL is released during future_into_py
     future_into_py(py, self.query_async(...))
@@ -176,6 +190,7 @@ async with Connection(conn_str, ssl_config=ssl_config) as conn:
   ```
 
 - **Error Handling:** Rich error messages for debugging
+
   ```rust
   .map_err(|e| {
     PyRuntimeError::new_err(
@@ -201,10 +216,10 @@ pub async fn ensure_pool_initialized(
             return Ok(p.clone());
         }
     } // Lock released here
-    
+
     // Slow path: initialize if needed
     let new_pool = establish_pool(&config, pool_config).await?;
-    
+
     // Double-check pattern: another thread might have initialized first
     let mut pool_guard = pool.lock();
     if let Some(ref p) = *pool_guard {
@@ -217,6 +232,7 @@ pub async fn ensure_pool_initialized(
 ```
 
 **Key Pattern:** Double-checked locking
+
 - Fast path: No lock contention (pool already initialized)
 - Slow path: Lock released before `await` (no blocking I/O under lock)
 - Thread-safe initialization without deadlock risk
@@ -252,7 +268,8 @@ result = await conn.execute_batch([
 - Executes sequentially in a single transaction-like context
 - Returns aggregate results (total affected rows, any errors)
 
-**Optimization:** Uses `SmallVec` for parameter storage, avoiding allocations for typical batch sizes.
+**Optimization:** Uses `SmallVec` for parameter storage, avoiding allocations
+for typical batch sizes.
 
 ### 5. Parameter Conversion (`parameter_conversion.rs`)
 
@@ -310,23 +327,24 @@ fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 
 **Supported SQL Server Types:**
 
-| SQL Server Type | Python Type | Notes |
-|---|---|---|
-| INT, BIGINT | int | 32/64-bit signed integers |
-| FLOAT, REAL | float | IEEE 754 floating point |
-| VARCHAR, NVARCHAR | str | UTF-8 strings |
-| CHAR, NCHAR | str | Fixed-width strings |
-| BIT | int | 0 or 1 |
-| BINARY, VARBINARY | bytes | Raw bytes |
-| DECIMAL, NUMERIC | str | High-precision (converted to string) |
-| DATETIME, DATETIME2 | str | ISO 8601 format |
-| DATE, TIME | str | Specialized formats |
-| UNIQUEIDENTIFIER | str | UUID as string |
-| NULL | None | Python None |
+| SQL Server Type     | Python Type | Notes                                |
+|---------------------|-------------|--------------------------------------|
+| INT, BIGINT         | int         | 32/64-bit signed integers            |
+| FLOAT, REAL         | float       | IEEE 754 floating point              |
+| VARCHAR, NVARCHAR   | str         | UTF-8 strings                        |
+| CHAR, NCHAR         | str         | Fixed-width strings                  |
+| BIT                 | int         | 0 or 1                               |
+| BINARY, VARBINARY   | bytes       | Raw bytes                            |
+| DECIMAL, NUMERIC    | str         | High-precision (converted to string) |
+| DATETIME, DATETIME2 | str         | ISO 8601 format                      |
+| DATE, TIME          | str         | Specialized formats                  |
+| UNIQUEIDENTIFIER    | str         | UUID as string                       |
+| NULL                | None        | Python None                          |
 
 **Optimization Strategy:**
 
-- `#[inline(always)]` on type handlers allows compiler to specialize per column type
+- `#[inline(always)]` on type handlers allows compiler to specialize per column
+    type
 - Minimal branching in hot paths
 - Early return for NULL values
 - Uses `try_get` to handle missing columns gracefully
@@ -427,6 +445,7 @@ Python:
 **Problem:** Copying parameters between Python and Rust adds latency.
 
 **Solution:** Direct conversion without intermediate allocations
+
 ```rust
 // BEFORE: Multiple allocations
 let params = Vec::new();
@@ -444,12 +463,14 @@ let mut params: SmallVec<[FastParameter; 16]> = SmallVec::with_capacity(len);
 **Problem:** Default Rust allocator has higher latency.
 
 **Solution:** MiMalloc allocator
+
 ```rust
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 ```
 
 **Benefits:**
+
 - 30-50% lower allocation latency
 - Better multi-threaded performance
 - Uses per-thread freelists
@@ -459,8 +480,9 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 **Problem:** Python GIL blocks other threads during long Rust operations.
 
 **Solution:** Release GIL before async work
+
 ```rust
-pub fn query<'p>(&self, sql: &str, parameters: Option<Bound<'p, PyAny>>) 
+pub fn query<'p>(&self, sql: &str, parameters: Option<Bound<'p, PyAny>>)
     -> PyResult<Bound<'p, PyAny>> {
     let py = query.py();
     // GIL is released inside future_into_py
@@ -475,6 +497,7 @@ This allows Python to execute other threads while database I/O happens.
 **Problem:** Creating pools/runtimes on import adds startup latency.
 
 **Solution:** Create on first use
+
 ```rust
 let pool_guard = pool.lock();
 if let Some(ref p) = *pool_guard {
@@ -488,6 +511,7 @@ if let Some(ref p) = *pool_guard {
 **Problem:** Type dispatch has branch misprediction overhead.
 
 **Solution:** `#[inline(always)]` on handlers lets compiler specialize
+
 ```rust
 #[inline(always)]
 fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
@@ -501,6 +525,7 @@ fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 **Problem:** Converting parameters per query is redundant.
 
 **Solution:** Single conversion pass
+
 ```rust
 // Convert all parameters once
 let fast_params = convert_parameters_to_fast(Some(&params), py)?;
@@ -512,6 +537,7 @@ let fast_params = convert_parameters_to_fast(Some(&params), py)?;
 **Problem:** Poor pool settings hurt throughput.
 
 **Solution:** Tuned defaults based on deployment patterns
+
 ```rust
 PoolConfig {
     max_size: 10,        // Few open connections
@@ -542,16 +568,20 @@ builder
 
 **Rationale:**
 
-- **Fewer worker threads:** Reduces work-stealing contention when handling many connections
-- **Many blocking threads:** SQL queries block, so we need capacity for surge loads
+- **Fewer worker threads:** Reduces work-stealing contention when handling many
+    connections
+- **Many blocking threads:** SQL queries block, so we need capacity for surge
+    loads
 - **Long keep-alive:** Amortizes thread creation cost
 - **Small stacks:** More threads fit in memory, better for high concurrency
-- **Global queue interval:** Balances per-thread queues with global queue (reduces contention)
+- **Global queue interval:** Balances per-thread queues with global queue
+    (reduces contention)
 - **Event interval:** Batches event polling for cache efficiency
 
 ### Task Model
 
 Each query execution is a single async task:
+
 ```
 Connection::query()
     ↓
@@ -566,15 +596,16 @@ Task collects results (CPU-bound, fast)
 Task returns to Python
 ```
 
-**Key Property:** No task blocks, so thousands of queries can be in-flight simultaneously.
+**Key Property:** No task blocks, so thousands of queries can be in-flight
+simultaneously.
 
 ### Synchronization Primitives
 
-| Primitive | Usage | Why |
-|---|---|---|
-| `Arc<Mutex<Option<Pool>>>` | Connection pool storage | Shared ownership, single-threaded access to pool creation |
-| `parking_lot::Mutex` | Pool lock | Faster than `std::sync::Mutex` |
-| `Arc<Config>` | Shared connection config | Zero-copy reference across tasks |
+| Primitive                  | Usage                    | Why                                                       |
+|----------------------------|--------------------------|-----------------------------------------------------------|
+| `Arc<Mutex<Option<Pool>>>` | Connection pool storage  | Shared ownership, single-threaded access to pool creation |
+| `parking_lot::Mutex`       | Pool lock                | Faster than `std::sync::Mutex`                            |
+| `Arc<Config>`              | Shared connection config | Zero-copy reference across tasks                          |
 
 ---
 
@@ -631,6 +662,7 @@ Python user receives result.rows() → List[Dict[str, Any]]
 **Goal:** Minimize heap allocations for typical workloads.
 
 **SmallVec for Parameters:**
+
 ```rust
 // Stack storage for 16 parameters
 SmallVec<[FastParameter; 16]>
@@ -639,6 +671,7 @@ SmallVec<[FastParameter; 16]>
 ```
 
 **Typical query:**
+
 ```python
 await conn.query("SELECT * FROM users WHERE id = @P1", [42])
 # 1 parameter → stored entirely on stack
@@ -650,6 +683,7 @@ await conn.query("SELECT * FROM users WHERE id = @P1", [42])
 **Goal:** Shared ownership without garbage collection overhead.
 
 **Arc Usage:**
+
 ```rust
 pub struct PyConnection {
     pool: Arc<Mutex<Option<ConnectionPool>>>,
@@ -659,6 +693,7 @@ pub struct PyConnection {
 ```
 
 **Pattern:**
+
 - Arc is cloned when passing to async tasks (cheap, atomic operation)
 - Actual data is not copied
 - When last Arc is dropped, data is deallocated
@@ -694,6 +729,7 @@ Pool garbage collected when last Arc reference drops
 **Lifecycle:**
 
 1. **Creation** (lazy, on first query)
+
    ```rust
    let pool = Pool::builder()
        .max_size(10)
@@ -703,6 +739,7 @@ Pool garbage collected when last Arc reference drops
    ```
 
 2. **Get Connection**
+
    ```rust
    let mut conn = pool.get().await?;
    // If available: instant return
@@ -711,6 +748,7 @@ Pool garbage collected when last Arc reference drops
    ```
 
 3. **Query Execution**
+
    ```rust
    let result = conn.query(sql, &params).await?;
    // Connection stays checked out during query
@@ -740,6 +778,7 @@ async with Connection(conn_str, pool_config=pool_config) as conn:
 ```
 
 **Tuning:**
+
 - **High throughput (> 1000 RPS):** Increase `max_size` to 20-50
 - **Limited resources:** Decrease `max_size` to 5, increase `min_idle` to 0
 - **Long-running app:** Enable `max_lifetime` to rotate connections
@@ -757,7 +796,8 @@ async with Connection(conn_str, pool_config=pool_config) as conn:
 7. **Lazy Initialization:** No startup overhead
 8. **Connection Pooling:** Reuse TCP connections, avoid handshake latency
 9. **Batch Operations:** Single I/O round-trip for multiple queries
-10. **Zero-Copy Conversions:** Direct marshalling without intermediate allocations
+10. **Zero-Copy Conversions:** Direct marshalling without intermediate
+    allocations
 
 ---
 

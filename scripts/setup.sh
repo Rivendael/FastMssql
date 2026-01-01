@@ -1,25 +1,19 @@
 #!/bin/bash
 
 # Check for UV, which will be used to configure Python, the venv, and dependencies.
-if ! command -v uv &> /dev/null; then
-    echo "[ERROR] `uv` is not installed or not in PATH. Please install `uv` before continuing."
+if ! command -v uv &>/dev/null; then
+    echo "[ERROR] $(uv) is not installed or not in PATH. Please install $(uv) before continuing."
     exit 1
 fi
 
 # Check for Rust
-if ! command -v rustc &> /dev/null; then
+if ! command -v rustc &>/dev/null; then
     echo "[ERROR] Rust is not installed or not in PATH. Please install Rust from https://rustup.rs before continuing."
     exit 1
 fi
 
 # Use UV to create and sync the virtual env.
 uv sync
-
-# # Build Rust extension with maturin
-# if ! command -v maturin &> /dev/null; then
-#     echo "[ERROR] maturin is not installed. Installing maturin..."
-#     uv pip install maturin
-# fi
 
 echo "Building Rust extension with maturin (release mode)..."
 uv run maturin develop --release
