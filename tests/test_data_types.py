@@ -8,6 +8,7 @@ between Rust/Tiberius and Python types.
 import pytest
 
 from conftest import Config
+from decimal import Decimal
 
 try:
     from fastmssql import Connection
@@ -53,23 +54,27 @@ async def test_numeric_types(test_config: Config):
     assert real_val is not None, "REAL type conversion not implemented"
     assert abs(real_val - 99.99) < 0.001
     
-    # Test decimal/numeric types
+    # Test decimal/numeric types (now returns Decimal for precision)
     decimal_val = row.get('decimal_val')
     assert decimal_val is not None, "DECIMAL type conversion not implemented"
-    assert abs(decimal_val - 123.456) < 0.001
+    assert isinstance(decimal_val, Decimal), f"Expected Decimal, got {type(decimal_val)}"
+    assert abs(float(decimal_val) - 123.456) < 0.001
     
     numeric_val = row.get('numeric_val')
     assert numeric_val is not None, "NUMERIC type conversion not implemented"
-    assert abs(numeric_val - 999.99) < 0.01
+    assert isinstance(numeric_val, Decimal), f"Expected Decimal, got {type(numeric_val)}"
+    assert abs(float(numeric_val) - 999.99) < 0.01
     
-    # Test money types (may not be implemented yet)
+    # Test money types (returns Decimal for precision)
     money_val = row.get('money_val')
     if money_val is not None:
-        assert abs(money_val - 12345.67) < 0.01
+        assert isinstance(money_val, Decimal), f"Expected Decimal for MONEY, got {type(money_val)}"
+        assert abs(float(money_val) - 12345.67) < 0.01
     
     smallmoney_val = row.get('smallmoney_val')
     if smallmoney_val is not None:
-        assert abs(smallmoney_val - 123.4567) < 0.0001
+        assert isinstance(smallmoney_val, Decimal), f"Expected Decimal for SMALLMONEY, got {type(smallmoney_val)}"
+        assert abs(float(smallmoney_val) - 123.4567) < 0.0001
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -253,7 +258,12 @@ async def test_async_data_types(test_config: Config):
     assert row['int_val'] == 42
     assert row['str_val'] == 'async_string'
     assert row['bool_val'] == True
-    assert abs(row['float_val'] - 3.14159) < 0.0001
+    # Float values may be returned as Decimal for precision
+    float_val = row['float_val']
+    if isinstance(float_val, Decimal):
+        assert abs(float(float_val) - 3.14159) < 0.0001
+    else:
+        assert abs(float_val - 3.14159) < 0.0001
     assert row['null_val'] is None
 
 @pytest.mark.integration
@@ -306,11 +316,19 @@ async def test_type_conversion_error_detection(test_config: Config):
     assert row.get('int_val') is not None
     assert row.get('int_val') == 42
     assert row.get('float_val') is not None
-    assert abs(row.get('float_val') - 3.14159) < 0.0001
+    float_val = row.get('float_val')
+    if isinstance(float_val, Decimal):
+        assert abs(float(float_val) - 3.14159) < 0.0001
+    else:
+        assert abs(float_val - 3.14159) < 0.0001
     assert row.get('money_val') is not None
-    assert abs(row.get('money_val') - 12345.67) < 0.01
+    money_val = row.get('money_val')
+    assert isinstance(money_val, Decimal), f"Expected Decimal for MONEY, got {type(money_val)}"
+    assert abs(float(money_val) - 12345.67) < 0.01
     assert row.get('smallmoney_val') is not None
-    assert abs(row.get('smallmoney_val') - 999.99) < 0.01
+    smallmoney_val = row.get('smallmoney_val')
+    assert isinstance(smallmoney_val, Decimal), f"Expected Decimal for SMALLMONEY, got {type(smallmoney_val)}"
+    assert abs(float(smallmoney_val) - 999.99) < 0.01
 
 
 @pytest.mark.integration
@@ -336,7 +354,11 @@ async def test_mixed_null_and_valid_values(test_config: Config):
     # Valid values should be present
     assert row.get('valid_int') == 42
     assert row.get('valid_string') == 'Hello'
-    assert abs(row.get('valid_float') - 3.14159) < 0.0001
+    valid_float = row.get('valid_float')
+    if isinstance(valid_float, Decimal):
+        assert abs(float(valid_float) - 3.14159) < 0.0001
+    else:
+        assert abs(valid_float - 3.14159) < 0.0001
     
     # NULL values should explicitly be None, not confused with empty/zero values
     assert row.get('null_int') is None

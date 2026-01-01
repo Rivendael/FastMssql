@@ -10,6 +10,7 @@ Run with: python -m pytest tests/test_prepared_statements_caching.py -v
 import pytest
 import pytest_asyncio
 import time
+from decimal import Decimal
 
 from conftest import Config
 
@@ -568,7 +569,11 @@ class TestParameterEdgeCases:
                 
                 assert result.has_rows()
                 rows = result.rows()
-                assert abs(rows[0]["salary"] - precise_value) < 0.01
+                salary = rows[0]["salary"]
+                if isinstance(salary, Decimal):
+                    assert abs(float(salary) - precise_value) < 0.01
+                else:
+                    assert abs(salary - precise_value) < 0.01
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
 

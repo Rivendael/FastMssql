@@ -100,7 +100,10 @@ fn handle_binary(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_money(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => {
-            Ok(val.into_pyobject(py)?.into_any().unbind())
+            // Convert to Decimal to preserve precision for financial data
+            let decimal_str = val.to_string();
+            let decimal_class = py.import("decimal")?.getattr("Decimal")?;
+            Ok(decimal_class.call1((decimal_str,))?.unbind())
         },
         Ok(None) => Ok(py.None()),
         Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to MONEY: {}", index, e)))
@@ -111,7 +114,10 @@ fn handle_money(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_money4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => {
-            Ok(val.into_pyobject(py)?.into_any().unbind())
+            // Convert to Decimal to preserve precision for financial data
+            let decimal_str = val.to_string();
+            let decimal_class = py.import("decimal")?.getattr("Decimal")?;
+            Ok(decimal_class.call1((decimal_str,))?.unbind())
         },
         Ok(None) => Ok(py.None()),
         Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to MONEY4: {}", index, e)))
@@ -122,8 +128,10 @@ fn handle_money4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_decimal(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<tiberius::numeric::Numeric, usize>(index) {
         Ok(Some(numeric)) => {
-            let float_val: f64 = numeric.into();
-            Ok(float_val.into_pyobject(py)?.into_any().unbind())
+            // Convert to Decimal to preserve precision for financial data
+            let decimal_str = numeric.to_string();
+            let decimal_class = py.import("decimal")?.getattr("Decimal")?;
+            Ok(decimal_class.call1((decimal_str,))?.unbind())
         },
         Ok(None) => Ok(py.None()),
         Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DECIMAL: {}", index, e)))
