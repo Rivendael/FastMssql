@@ -239,18 +239,27 @@ impl PyConnection {
 
         future_into_py(py, async move {
             let pool_guard = pool.lock();
-            if let Some(ref pool_ref) = *pool_guard {
+            let (is_connected, connections, idle_connections) = if let Some(ref pool_ref) = *pool_guard {
                 let state = pool_ref.state();
-                Ok((
-                    true, // connected
-                    state.connections,
-                    state.idle_connections,
-                    pool_config.max_size,
-                    pool_config.min_idle,
-                ))
+                (true, state.connections, state.idle_connections)
             } else {
-                Ok((false, 0u32, 0u32, 0u32, None))
-            }
+                (false, 0u32, 0u32)
+            };
+            let max_size = pool_config.max_size;
+            let min_idle = pool_config.min_idle;
+            
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let dict = pyo3::types::PyDict::new(py);
+                
+                dict.set_item("connected", is_connected)?;
+                dict.set_item("connections", connections)?;
+                dict.set_item("idle_connections", idle_connections)?;
+                dict.set_item("active_connections", connections - idle_connections)?;
+                dict.set_item("max_size", max_size)?;
+                dict.set_item("min_idle", min_idle)?;
+                
+                Ok(dict.into_any().unbind())
+            })
         })
     }
 
