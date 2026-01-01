@@ -3,21 +3,8 @@
 
 echo "[INFO] You can use your own SQL Server connection string by placing it in the .env file as FASTMSSQL_TEST_CONNECTION_STRING."
 
-# Activate virtual environment if it exists
-if [ -d ".venv" ]; then
-    echo "Activating virtual environment..."
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-        # Windows (Git Bash/MSYS2)
-        source .venv/Scripts/activate
-    else
-        # Linux/macOS
-        source .venv/bin/activate
-    fi
-else
-    echo "[WARNING] Virtual environment not found. Installing globally."
-fi
-
-pip install -r requirements.txt
+# Use UV to create and sync the virtual env.
+uv sync
 
 # Check for Docker
 if ! command -v docker &> /dev/null; then

@@ -2,15 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
   workflow_dispatch:
-      inputs:
-        python-version:
-          description: 'Python version to run'
-          required: false
-          default: '3.13'
+    inputs:
+      python-version:
+        description: "Python version to run"
+        required: false
+        default: "3.13"
 
 permissions: {}
 
@@ -38,10 +38,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv and set the Python version
+        uses: astral-sh/setup-uv@v7
         with:
-          python-version: ${{ github.event.inputs.python-version || matrix.python-version }}
+          python-version: ${{  github.event.inputs.python-version || matrix.python-version }}
+          enable-cache: true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -53,18 +54,12 @@ jobs:
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
 
       - name: Build and install Python package with maturin
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          maturin develop --release
+          uv run maturin develop --release
 
       - name: Wait for MSSQL to be ready
         run: |
@@ -88,8 +83,7 @@ jobs:
 
       - name: Run tests
         run: |
-          source .venv/bin/activate
-          pytest tests
+          uv run pytest tests
         env:
           FASTMSSQL_TEST_CONNECTION_STRING: "Server=localhost,1433;Database=master;User Id=SA;Password=YourStrong@Password;TrustServerCertificate=yes"
           FAST_MSSQL_TEST_DB_USER: "SA"
