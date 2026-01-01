@@ -112,7 +112,7 @@ filterwarnings = [
 ]
 
 [tool.uv]
-required-version = ">=0.5.9"
+required-version = ">=0.9.21"
 
 [dependency-groups]
 dev = [
