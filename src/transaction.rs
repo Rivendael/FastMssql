@@ -5,12 +5,11 @@ use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
-use tiberius::{AuthMethod, Config, Row, Client};
+use tiberius::{AuthMethod, Config, Client};
 use tokio::net::TcpStream;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-use crate::parameter_conversion::{convert_parameters_to_fast, FastParameter};
-use crate::pool_config::PyPoolConfig;
+use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
 use crate::types::PyFastExecutionResult;
 
@@ -28,57 +27,12 @@ pub struct PySingleConnection {
     connected: Arc<SyncMutex<bool>>,
 }
 
-impl PySingleConnection {
-    /// For queries that return rows (SELECT statements)
-    async fn execute_query_async_gil_free(
-        conn: &mut SingleConnectionType,
-        query: &str,
-        parameters: &[FastParameter],
-    ) -> PyResult<Vec<Row>> {
-        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-            .iter()
-            .map(|p| p as &dyn tiberius::ToSql)
-            .collect();
-
-        let stream = conn
-            .query(query, &tiberius_params)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
-
-        stream
-            .into_first_result()
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))
-    }
-
-    /// For commands that don't return rows (INSERT/UPDATE/DELETE/DDL)
-    async fn execute_command_async_gil_free(
-        conn: &mut SingleConnectionType,
-        query: &str,
-        parameters: &[FastParameter],
-    ) -> PyResult<u64> {
-        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-            .iter()
-            .map(|p| p as &dyn tiberius::ToSql)
-            .collect();
-
-        let affected = conn
-            .execute(query, &tiberius_params)
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?
-            .total();
-
-        Ok(affected)
-    }
-}
-
 #[pymethods]
 impl PySingleConnection {
     #[new]
-    #[pyo3(signature = (connection_string = None, pool_config = None, ssl_config = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
+    #[pyo3(signature = (connection_string = None, ssl_config = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
     pub fn new(
         connection_string: Option<String>,
-        pool_config: Option<PyPoolConfig>,
         ssl_config: Option<PySslConfig>,
         server: Option<String>,
         database: Option<String>,

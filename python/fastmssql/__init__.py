@@ -55,46 +55,6 @@ class Connection:
         return await self._conn.pool_stats()
 
 
-class _ConnectionPoolDisabler:
-    """Wrapper to prevent connection from checking out the pool during transaction.
-    
-    This is a workaround for SQL Server transactions which are per-connection.
-    Since the connection pool returns different connections for each query(),
-    we need to force all queries in a transaction to use the same connection.
-    
-    However, this is currently IMPOSSIBLE without Rust-level changes because:
-    1. Each query() call checks out a NEW connection from the pool
-    2. Different connections have separate transaction state
-    3. SQL Server reports "Transaction count mismatch" errors
-    
-    This class attempts to work around it by storing the connection state,
-    but it won't actually work without modifications to the Rust layer.
-    """
-    
-    def __init__(self, rust_conn):
-        """Initialize with the internal Rust connection object."""
-        self._rust_conn = rust_conn
-        self._in_transaction = False
-        self._buffered_queries = []
-    
-    async def query(self, sql, params=None):
-        """Attempt to execute a query."""
-        # We can't actually prevent the Rust query() from checking out a new connection
-        # So we just pass through to the Rust implementation
-        # This is still broken, but at least the error message is clearer
-        return await self._rust_conn.query(sql, params)
-    
-    async def execute(self, sql, params=None):
-        """Attempt to execute a command."""
-        return await self._rust_conn.execute(sql, params)
-    
-    def __getattr__(self, name):
-        """Delegate all other attributes to the Rust connection."""
-        return getattr(self._rust_conn, name)
-
-
-
-
 class Transaction:
     """Single dedicated connection (non-pooled) for transaction support.
     
@@ -136,7 +96,7 @@ class Transaction:
             await conn.close()
     """
     
-    def __init__(self, connection_string=None, pool_config=None, ssl_config=None,
+    def __init__(self, connection_string=None, ssl_config=None,
                  server=None, database=None, username=None, password=None,
                  application_intent=None, port=None, instance_name=None,
                  application_name=None):
@@ -148,7 +108,6 @@ class Transaction:
             database: Database name
             username: SQL Server username
             password: SQL Server password
-            pool_config: PoolConfig (ignored for single connections)
             ssl_config: SslConfig for encryption
             application_intent: "ReadOnly" or "ReadWrite"
             port: Server port (default 1433)
@@ -157,7 +116,6 @@ class Transaction:
         """
         self._rust_conn = _RustTransaction(
             connection_string=connection_string,
-            pool_config=pool_config,
             ssl_config=ssl_config,
             server=server,
             database=database,

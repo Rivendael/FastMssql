@@ -14,10 +14,10 @@ mod pool_manager;
 mod parameter_conversion;
 mod batch;
 mod type_mapping;
-mod single_connection;
+mod transaction;
 
 pub use connection::PyConnection;
-pub use single_connection::PySingleConnection;
+pub use transaction::PySingleConnection;
 pub use types::{PyFastRow, PyFastExecutionResult};
 pub use py_parameters::{Parameter, Parameters};
 pub use pool_config::PyPoolConfig;
