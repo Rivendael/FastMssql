@@ -58,7 +58,7 @@ jobs:
         run: uv sync --locked --all-extras --dev
 
       - name: Install maturin
-        uses: py03/maturin-action@v1
+        uses: PyO3/maturin-action@v1
         with:
           command: build
           args: develop --release
