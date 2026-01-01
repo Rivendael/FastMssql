@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Cargo cache
+      - name: Set up Cargo registry cache
         uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
@@ -46,7 +46,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-registry-
 
-      - name: Set up cargo build cache
+      - name: Set up Cargo build cache
         uses: actions/cache@v3
         with:
           path: target

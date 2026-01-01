@@ -87,6 +87,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 
+[tool.uv]
+required-version = ">=0.5.9"
+
 # Test markers
 markers = [
     "asyncio: marks tests as async tests",
