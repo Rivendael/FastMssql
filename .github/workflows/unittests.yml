@@ -38,6 +38,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Set up cargo build cache
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
+
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
@@ -57,16 +73,9 @@ jobs:
       - name: Install the project
         run: uv sync --locked --all-extras --dev
 
-      - name: Install maturin
-        uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: develop --release
-          sscache: true
-
-      # - name: Build and install Python package with maturin
-      #   run: |
-      #     uv run maturin develop --release
+      - name: Build and install Python package with maturin
+        run: |
+          uv run maturin develop --release
 
       - name: Wait for MSSQL to be ready
         run: |
