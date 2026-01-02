@@ -119,6 +119,7 @@ build-frontend = "build[uv]"
 build = "cp310-* cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
 manylinux-aarch64-image = "manylinux_2_34"
 enable = ["cpython-freethreading"]
+skip = ["cp310-musllinux_*"] #, "cp311-musllinux_*", "cp312-musllinux_*", "cp313-musllinux_*", "cp314-musllinux_*"]
 
 [tool.cibuildwheel.windows]
 archs = ["auto64"]
