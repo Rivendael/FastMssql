@@ -281,15 +281,18 @@ impl PyConnection {
         let pool = Arc::clone(&borrowed.pool);
         let config = Arc::clone(&borrowed.config);
         let pool_config = borrowed.pool_config.clone();
+        let connected = Arc::clone(&borrowed.connected);
 
         future_into_py(py, async move {
             let is_connected = pool.get().is_some();
 
             if is_connected {
+                *connected.write().await = true;
                 return Ok(());
             }
 
             let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
+            *connected.write().await = true;
             Ok(())
         })
     }
@@ -302,7 +305,10 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>,
         _traceback: Option<Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
+        let connected = Arc::clone(&self.connected);
+        
         future_into_py(py, async move {
+            *connected.write().await = false;
             Ok(())
         })
     }
