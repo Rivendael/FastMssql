@@ -14,6 +14,7 @@ authors = [
     { name = "Rivendael", email = "riverb514@gmail.com" },
     { name = "gsmith077", email = "gsmith077@smithproblems.us" },
 ]
+
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -61,6 +62,7 @@ keywords = [
     "data-ingestion",
     "low-latency",
 ]
+
 dependencies = [
     "maturin==1.10.2",
     "python-dotenv==1.2.1",
@@ -78,7 +80,6 @@ features = ["pyo3/abi3-py310"]
 module-name = "fastmssql"
 python-source = "python"
 include = ["fastmssql.pyi"]
-
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -119,7 +120,9 @@ build-frontend = "build[uv]"
 build = "cp310-* cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
 manylinux-aarch64-image = "manylinux_2_34"
 enable = ["cpython-freethreading"]
-skip = ["cp310-musllinux_*"] #, "cp311-musllinux_*", "cp312-musllinux_*", "cp313-musllinux_*", "cp314-musllinux_*"]
+skip = [
+    "cp310-musllinux_*",
+] #, "cp311-musllinux_*", "cp312-musllinux_*", "cp313-musllinux_*", "cp314-musllinux_*"]
 
 [tool.cibuildwheel.windows]
 archs = ["auto64"]
@@ -139,7 +142,6 @@ before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y; rustup target add 
 
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.12"
-
 
 [dependency-groups]
 dev = [
