@@ -284,6 +284,81 @@ async with Connection(conn_str, pool_config=high) as conn:
 Default pool (if omitted): `max_size=10`, `min_idle=2`.
 
 
+### Transactions
+
+For workloads that require SQL Server transactions with guaranteed connection isolation, use the `Transaction` class. Unlike `Connection` (which uses connection pooling), `Transaction` maintains a dedicated, non-pooled connection for the lifetime of the transaction. This ensures all operations within the transaction run on the same connection, preventing connection-switching issues.
+
+#### Automatic transaction control (recommended)
+
+Use the context manager for automatic `BEGIN`, `COMMIT`, and `ROLLBACK`:
+
+```python
+import asyncio
+from fastmssql import Transaction
+
+async def main():
+    conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
+    
+    async with Transaction(conn_str) as trans:
+        # Automatically calls BEGIN
+        await trans.execute(
+            "INSERT INTO orders (customer_id, total) VALUES (@P1, @P2)",
+            [123, 99.99]
+        )
+        await trans.execute(
+            "INSERT INTO order_items (order_id, product_id, qty) VALUES (@P1, @P2, @P3)",
+            [1, 456, 2]
+        )
+        # Automatically calls COMMIT on successful exit
+        # or ROLLBACK if an exception occurs
+
+asyncio.run(main())
+```
+
+#### Manual transaction control
+
+For more control, explicitly call `begin()`, `commit()`, and `rollback()`:
+
+```python
+import asyncio
+from fastmssql import Transaction
+
+async def main():
+    conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
+    trans = Transaction(conn_str)
+    
+    try:
+        await trans.begin()
+        
+        result = await trans.query("SELECT @@VERSION as version")
+        print(result.rows()[0]['version'])
+        
+        await trans.execute("UPDATE accounts SET balance = balance - @P1 WHERE id = @P2", [50, 1])
+        await trans.execute("UPDATE accounts SET balance = balance + @P1 WHERE id = @P2", [50, 2])
+        
+        await trans.commit()
+    except Exception as e:
+        await trans.rollback()
+        raise
+    finally:
+        await trans.close()
+
+asyncio.run(main())
+```
+
+#### Key differences: Transaction vs Connection
+
+| Feature | Transaction | Connection |
+|---------|-------------|------------|
+| Connection | Dedicated, non-pooled | Pooled (bb8) |
+| Use case | SQL transactions, ACID operations | General queries, connection reuse |
+| Isolation | Single connection per instance | Connection may vary per operation |
+| Pooling | None (direct TcpStream) | Configurable pool settings |
+| Lifecycle | Held until `.close()` or context exit | Released to pool after each operation |
+
+Choose `Transaction` when you need guaranteed transaction isolation; use `Connection` for typical queries and high-concurrency workloads with connection pooling.
+
+
 ### SSL/TLS
 
 For `Required` and `LoginOnly` encryption, you must specify how to validate the server certificate:

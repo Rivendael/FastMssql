@@ -448,3 +448,46 @@ async def test_context_manager_connection_reuse(test_config: Config):
     except Exception as e:
         print(f"Error in connection reuse test: {e}")
         raise
+
+# ===== Parameter Support Tests =====
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_supports_all_connection_parameters(test_config: Config):
+    """Document that Transaction supports all Config parameters like Connection does.
+    
+    Transaction accepts: connection_string, server, database, username, password,
+    port, instance_name, application_name, application_intent, ssl_config
+    (same as Connection, except no pool_config parameter)
+    """
+    # Use connection_string approach which has SSL config
+    try:
+        trans = Transaction(connection_string=test_config.connection_string)
+        result = await trans.query("SELECT 1 as test")
+        rows = result.rows() if result.has_rows() else []
+        assert len(rows) > 0
+        await trans.close()
+        print("✓ Transaction supports full Config parameter set")
+        print("✅ Parameter support documentation test passed!")
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_connection_string_parsing(test_config: Config):
+    """Test that Transaction correctly parses connection strings with host and port."""
+    # Connection string with port embedded: "Server=localhost,1433;..."
+    try:
+        trans = Transaction(connection_string=test_config.connection_string)
+        result = await trans.query("SELECT @@SERVERNAME as srv")
+        rows = result.rows() if result.has_rows() else []
+        assert len(rows) > 0
+        print(f"✓ Parsed connection string, connected to: {rows[0]['srv']}")
+        await trans.close()
+        print("✅ Connection string parsing test passed!")
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
+

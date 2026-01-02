@@ -23,6 +23,8 @@ type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 pub struct PySingleConnection {
     conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
     config: Arc<Config>,
+    host: String,
+    port: u16,
     _ssl_config: Option<PySslConfig>,
     connected: Arc<SyncMutex<bool>>,
 }
@@ -43,9 +45,35 @@ impl PySingleConnection {
         instance_name: Option<String>,
         application_name: Option<String>,
     ) -> PyResult<Self> {
-        let config = if let Some(conn_str) = connection_string {
-            Config::from_ado_string(&conn_str)
-                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
+        let (config, host, port) = if let Some(conn_str) = connection_string {
+            // Parse connection string
+            let config = Config::from_ado_string(&conn_str)
+                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
+            
+            // Extract host and port from connection string
+            // Format: "Server=hostname[,port];Database=db;User Id=user;Password=pass"
+            let server_part = conn_str
+                .split("Server=")
+                .nth(1)
+                .and_then(|s| s.split(';').next())
+                .map(|s| s.trim())
+                .unwrap_or("localhost");
+            
+            let (host, port) = if let Some(port_str) = server_part.split(',').nth(1) {
+                // Format: "hostname,port"
+                let host = server_part.split(',').next().unwrap_or("localhost").to_string();
+                let port = port_str.trim().parse::<u16>().unwrap_or(1433);
+                (host, port)
+            } else if server_part.contains('\\') {
+                // Format: "hostname\\instance"
+                let host = server_part.split('\\').next().unwrap_or("localhost").to_string();
+                (host, 1433u16)
+            } else {
+                // Format: "hostname"
+                (server_part.to_string(), 1433u16)
+            };
+            
+            (config, host, port)
         } else if let Some(srv) = server {
             let mut config = Config::new();
             config.host(&srv);
@@ -82,7 +110,9 @@ impl PySingleConnection {
             if let Some(ref ssl_cfg) = ssl_config {
                 ssl_cfg.apply_to_config(&mut config);
             }
-            config
+            
+            let resolved_port = port.unwrap_or(1433);
+            (config, srv, resolved_port)
         } else {
             return Err(PyValueError::new_err(
                 "Either connection_string or server must be provided",
@@ -92,6 +122,8 @@ impl PySingleConnection {
         Ok(PySingleConnection {
             conn: Arc::new(AsyncMutex::new(None)),
             config: Arc::new(config),
+            host,
+            port,
             _ssl_config: ssl_config,
             connected: Arc::new(SyncMutex::new(false)),
         })
@@ -110,6 +142,8 @@ impl PySingleConnection {
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
         let connected = Arc::clone(&self.connected);
+        let host = self.host.clone();
+        let port = self.port;
 
         future_into_py(py, async move {
             // Ensure connection is established
@@ -117,9 +151,6 @@ impl PySingleConnection {
                 let mut conn_guard = conn.lock().await;
                 if conn_guard.is_none() {
                     // Create a direct TCP connection to the server
-                    let host = "localhost".to_string();
-                    let port = 1433u16;
-                    
                     let tcp_stream = TcpStream::connect((host.as_str(), port))
                         .await
                         .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to server: {}", e)))?;
@@ -183,6 +214,8 @@ impl PySingleConnection {
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
         let connected = Arc::clone(&self.connected);
+        let host = self.host.clone();
+        let port = self.port;
 
         future_into_py(py, async move {
             // Ensure connection is established
@@ -190,9 +223,6 @@ impl PySingleConnection {
                 let mut conn_guard = conn.lock().await;
                 if conn_guard.is_none() {
                     // Create a direct TCP connection to the server
-                    let host = "localhost".to_string();
-                    let port = 1433u16;
-                    
                     let tcp_stream = TcpStream::connect((host.as_str(), port))
                         .await
                         .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to server: {}", e)))?;
