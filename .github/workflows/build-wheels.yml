@@ -11,23 +11,24 @@ permissions:
 
 jobs:
   build-wheels:
-    name: Build wheels on ${{ matrix.os }} (${{ matrix.arch }} - ${{ matrix.manylinux || 'auto' }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            arch: x86_64
-            platform: linux
+    name: Build wheels on ubuntu-latest # ${{ matrix.os }} (${{ matrix.arch }} - ${{ matrix.manylinux || 'auto' }})
+    runs-on: ubuntu-latest
+    # runs-on: ${{ matrix.os }}
+    # strategy:
+    #   fail-fast: false
+    #   matrix:
+    #     include:
+    #       - os: ubuntu-latest
+    #         arch: x86_64
+    #         platform: linux
 
-          - os: windows-latest
-            arch: x64
-            platform: windows
+    #       - os: windows-latest
+    #         arch: x64
+    #         platform: windows
 
-          - os: macos-latest
-            arch: universal2
-            platform: macos
+    #       - os: macos-latest
+    #         arch: universal2
+    #         platform: macos
 
     steps:
       - name: Move temp (Windows only)
