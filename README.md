@@ -299,13 +299,13 @@ from fastmssql import Transaction
 async def main():
     conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
     
-    async with Transaction(conn_str) as trans:
+    async with Transaction(conn_str) as transaction:
         # Automatically calls BEGIN
-        await trans.execute(
+        await transaction.execute(
             "INSERT INTO orders (customer_id, total) VALUES (@P1, @P2)",
             [123, 99.99]
         )
-        await trans.execute(
+        await transaction.execute(
             "INSERT INTO order_items (order_id, product_id, qty) VALUES (@P1, @P2, @P3)",
             [1, 456, 2]
         )
@@ -325,23 +325,23 @@ from fastmssql import Transaction
 
 async def main():
     conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
-    trans = Transaction(conn_str)
+    transaction = Transaction(conn_str)
     
     try:
-        await trans.begin()
+        await transaction.begin()
         
-        result = await trans.query("SELECT @@VERSION as version")
+        result = await transaction.query("SELECT @@VERSION as version")
         print(result.rows()[0]['version'])
         
-        await trans.execute("UPDATE accounts SET balance = balance - @P1 WHERE id = @P2", [50, 1])
-        await trans.execute("UPDATE accounts SET balance = balance + @P1 WHERE id = @P2", [50, 2])
+        await transaction.execute("UPDATE accounts SET balance = balance - @P1 WHERE id = @P2", [50, 1])
+        await transaction.execute("UPDATE accounts SET balance = balance + @P1 WHERE id = @P2", [50, 2])
         
-        await trans.commit()
+        await transaction.commit()
     except Exception as e:
-        await trans.rollback()
+        await transaction.rollback()
         raise
     finally:
-        await trans.close()
+        await transaction.close()
 
 asyncio.run(main())
 ```
