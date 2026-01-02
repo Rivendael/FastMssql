@@ -13,8 +13,8 @@ class TestPoolConfigConstructor:
     def test_default_constructor(self):
         """Test creating PoolConfig with default values."""
         config = PoolConfig()
-        assert config.max_size == 10
-        assert config.min_idle == 1
+        assert config.max_size == 20
+        assert config.min_idle == 2
         assert config.max_lifetime_secs is None
         assert config.idle_timeout_secs is None
         assert config.connection_timeout_secs == 30

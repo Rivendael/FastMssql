@@ -19,6 +19,7 @@ use crate::types::PyFastExecutionResult;
 pub struct PyConnection {
     pool: Arc<OnceCell<ConnectionPool>>,
     pool_guard: Arc<RwLock<()>>,  // For disconnect synchronization
+    connected: Arc<RwLock<bool>>,  // Track explicit disconnect
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>,
@@ -170,6 +171,7 @@ impl PyConnection {
         Ok(PyConnection {
             pool: Arc::new(OnceCell::new()),
             pool_guard: Arc::new(RwLock::new(())),
+            connected: Arc::new(RwLock::new(false)),
             config: Arc::new(config),
             pool_config,
             _ssl_config: ssl_config,
@@ -235,9 +237,10 @@ impl PyConnection {
     /// Check if connected to the database
     pub fn is_connected<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
+        let connected = self.connected.clone();
 
         future_into_py(py, async move {
-            let is_connected = pool.get().is_some();
+            let is_connected = *connected.read().await && pool.get().is_some();
             Ok(is_connected)
         })
     }
@@ -309,13 +312,16 @@ impl PyConnection {
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
+        let connected = Arc::clone(&self.connected);
 
         future_into_py(py, async move {
             if pool.get().is_some() {
+                *connected.write().await = true;
                 return Ok(true);
             }
 
             let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
+            *connected.write().await = true;
             Ok(true)
         })
     }
@@ -324,13 +330,16 @@ impl PyConnection {
     pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
         let guard = self.pool_guard.clone();
+        let connected = Arc::clone(&self.connected);
 
         future_into_py(py, async move {
             let _write_guard = guard.write().await;
+            let was_connected = *connected.read().await;
+            *connected.write().await = false;
             if pool.get().is_some() {
                 // OnceCell doesn't support clearing, but this is fine for disconnect semantics
                 // New connections will need a new Connection object
-                Ok(true)
+                Ok(was_connected)
             } else {
                 Ok(false)
             }
