@@ -38,6 +38,13 @@ jobs:
             arch: universal2
 
     steps:
+      - name: Move temp (Windows only)
+        if: runner.os == 'windows-latest'
+        run: |
+          echo "TEMP=D:\temp" >> $GITHUB_ENV
+          echo "TMP=D:\temp" >> $GITHUB_ENV
+          mkdir D:\temp
+
       - uses: actions/checkout@v4
 
       - name: Set up Cargo registry cache
