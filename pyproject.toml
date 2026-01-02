@@ -14,6 +14,7 @@ authors = [
     { name = "Rivendael", email = "riverb514@gmail.com" },
     { name = "gsmith077", email = "gsmith077@smithproblems.us" },
 ]
+
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -61,6 +62,7 @@ keywords = [
     "data-ingestion",
     "low-latency",
 ]
+
 dependencies = [
     "maturin==1.10.2",
     "python-dotenv==1.2.1",
@@ -78,7 +80,6 @@ features = ["pyo3/abi3-py310"]
 module-name = "fastmssql"
 python-source = "python"
 include = ["fastmssql.pyi"]
-
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -112,13 +113,42 @@ filterwarnings = [
 ]
 
 [tool.uv]
-required-version = ">=0.9.21"
+required-version = ">=0.9.7"
+
+[tool.cibuildwheel]
+build-frontend = "build[uv]"
+build = "cp310-* cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
+manylinux-aarch64-image = "manylinux_2_34"
+enable = ["cpython-freethreading"]
+skip = [
+    "cp310-musllinux_*",
+] #, "cp311-musllinux_*", "cp312-musllinux_*", "cp313-musllinux_*", "cp314-musllinux_*"]
+
+[tool.cibuildwheel.windows]
+archs = ["auto64"]
+
+[tool.cibuildwheel.linux]
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
+archs = ["auto64"]
+before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y"
+
+[tool.cibuildwheel.linux.environment]
+CIBW_ENVIRONMENT_LINUX = "PATH=$HOME/.cargo/bin:$PATH"
+
+[tool.cibuildwheel.macos]
+repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
+archs = ["universal2"]
+before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y; rustup target add x86_64-apple-darwin"
+
+[tool.cibuildwheel.macos.environment]
+MACOSX_DEPLOYMENT_TARGET = "10.12"
 
 [dependency-groups]
 dev = [
     "ruff>=0.14.10",
     "pytest==8.4.2",
     "pytest-asyncio==1.3.0",
-    "psutil==7.2.0",         # For memory and process monitoring in stress tests
+    "psutil==7.2.0",            # For memory and process monitoring in stress tests
     "pytest-xdist==3.8.0",
+    "cibuildwheel[uv]>=2.23.3",
 ]
