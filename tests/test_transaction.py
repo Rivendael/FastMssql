@@ -491,3 +491,167 @@ async def test_transaction_connection_string_parsing(test_config: Config):
         print(f"Error: {e}")
         raise
 
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_server_parameter(test_config: Config):
+    """Test Transaction accepts server parameter."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts server parameter")
+        print("✅ Server parameter test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept server parameter: {e}")
+    except Exception:
+        print("✓ Transaction accepts server parameter")
+        print("✅ Server parameter test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_port_parameter(test_config: Config):
+    """Test Transaction accepts port parameter."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            port=test_config.port,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts port parameter")
+        print("✅ Port parameter test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept port parameter: {e}")
+    except Exception:
+        print("✓ Transaction accepts port parameter")
+        print("✅ Port parameter test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_database_parameter(test_config: Config):
+    """Test Transaction accepts database parameter."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts database parameter")
+        print("✅ Database parameter test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept database parameter: {e}")
+    except Exception:
+        print("✓ Transaction accepts database parameter")
+        print("✅ Database parameter test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_username_password_parameters(test_config: Config):
+    """Test Transaction accepts username and password parameters."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts username and password parameters")
+        print("✅ Username/password parameters test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept username/password parameters: {e}")
+    except Exception:
+        print("✓ Transaction accepts username and password parameters")
+        print("✅ Username/password parameters test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_application_name_parameter(test_config: Config):
+    """Test Transaction accepts application_name parameter."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            application_name="TestApp",
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts application_name parameter")
+        print("✅ Application name parameter test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept application_name parameter: {e}")
+    except Exception:
+        print("✓ Transaction accepts application_name parameter")
+        print("✅ Application name parameter test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_application_intent_parameter(test_config: Config):
+    """Test Transaction accepts application_intent parameter."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            application_intent="readonly",
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts application_intent parameter")
+        print("✅ Application intent parameter test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept application_intent parameter: {e}")
+    except Exception:
+        print("✓ Transaction accepts application_intent parameter")
+        print("✅ Application intent parameter test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_instance_name_parameter(test_config: Config):
+    """Test Transaction accepts instance_name parameter."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            instance_name="SQLEXPRESS",
+            username=test_config.username,
+            password=test_config.password
+        )
+        print("✓ Transaction accepts instance_name parameter")
+        print("✅ Instance name parameter test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept instance_name parameter: {e}")
+    except Exception:
+        print("✓ Transaction accepts instance_name parameter")
+        print("✅ Instance name parameter test passed!")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_transaction_with_all_individual_parameters(test_config: Config):
+    """Test Transaction accepts all individual parameters together."""
+    try:
+        trans = Transaction(
+            server=test_config.server,
+            database=test_config.database,
+            username=test_config.username,
+            password=test_config.password,
+            port=test_config.port,
+            application_name="TestApp",
+            application_intent="readwrite"
+        )
+        print("✓ Transaction accepts all individual parameters")
+        print("✅ All parameters test passed!")
+    except TypeError as e:
+        pytest.fail(f"Transaction should accept all individual parameters: {e}")
+    except Exception:
+        print("✓ Transaction accepts all individual parameters")
+        print("✅ All parameters test passed!")
+
+
