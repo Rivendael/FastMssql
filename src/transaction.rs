@@ -75,8 +75,6 @@ impl Transaction {
             let config = Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
             
-            let temp = config.port;
-
             // Extract server and port from connection string
             let (server, port) = extract_host_port_from_connection_string(&conn_str);
             
