@@ -128,10 +128,13 @@ repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 archs = ["auto64"]
 before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y"
 
+[tool.cibuildwheel.linux.environment]
+CIBW_ENVIRONMENT_LINUX = "PATH=$HOME/.cargo/bin:$PATH"
+
 [tool.cibuildwheel.macos]
 repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
 archs = ["universal2"]
-before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y; rustup target add x86_64-apple-darwin aarch64-apple-darwin"
+before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y; rustup target add x86_64-apple-darwin"
 
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.12"
