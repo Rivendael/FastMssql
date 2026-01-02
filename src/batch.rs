@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tiberius::Config;
 
 /// Parses batch items (SQL queries with parameters) from a Python list.
-fn parse_batch_items<'p>(
+pub fn parse_batch_items<'p>(
     items: &Bound<'p, PyList>,
     py: Python<'p>,
 ) -> PyResult<Vec<(String, SmallVec<[FastParameter; 16]>)>> {
@@ -58,6 +58,56 @@ fn parse_batch_items<'p>(
     Ok(batch_items)
 }
 
+/// Internal helper: Execute batch commands on an existing connection without transaction management.
+/// Used by both Connection (with automatic transaction) and Transaction (with manual control).
+pub async fn execute_batch_on_connection(
+    conn: &mut tiberius::Client<tokio_util::compat::Compat<tokio::net::TcpStream>>,
+    batch_commands: Vec<(String, SmallVec<[FastParameter; 16]>)>,
+) -> PyResult<Vec<u64>> {
+    let mut all_results = Vec::with_capacity(batch_commands.len());
+
+    for (sql, parameters) in batch_commands {
+        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
+            .iter()
+            .map(|p| p as &dyn tiberius::ToSql)
+            .collect();
+
+        let result = conn.execute(sql, &tiberius_params).await
+            .map_err(|e| PyRuntimeError::new_err(format!("Batch item failed: {}", e)))?;
+
+        let affected: u64 = result.rows_affected().iter().sum();
+        all_results.push(affected);
+    }
+
+    Ok(all_results)
+}
+
+/// Internal helper: Execute batch queries on an existing connection.
+/// Used by both Connection and Transaction classes.
+pub async fn query_batch_on_connection(
+    conn: &mut tiberius::Client<tokio_util::compat::Compat<tokio::net::TcpStream>>,
+    batch_queries: Vec<(String, SmallVec<[FastParameter; 16]>)>,
+) -> PyResult<Vec<Vec<tiberius::Row>>> {
+    let mut all_results = Vec::with_capacity(batch_queries.len());
+
+    for (query, parameters) in batch_queries {
+        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
+            .iter()
+            .map(|p| p as &dyn tiberius::ToSql)
+            .collect();
+
+        let stream = conn.query(&query, &tiberius_params).await
+            .map_err(|e| PyRuntimeError::new_err(format!("Batch query execution failed: {}", e)))?;
+
+        let rows = stream.into_first_result().await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get batch results: {}", e)))?;
+
+        all_results.push(rows);
+    }
+
+    Ok(all_results)
+}
+
 pub fn execute_batch<'p>(
     pool: Arc<OnceCell<ConnectionPool>>,
     config: Arc<Config>,
@@ -81,38 +131,24 @@ pub fn execute_batch<'p>(
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Pool error: {}", e)))?;
 
-        let mut all_results = Vec::with_capacity(batch_commands.len());
-
         conn.simple_query("BEGIN TRANSACTION")
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to start transaction: {}", e)))?;
 
-        for (sql, parameters) in batch_commands {
-            let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-                .iter()
-                .map(|p| p as &dyn tiberius::ToSql)
-                .collect();
-
-            match conn.execute(sql, &tiberius_params).await {
-                Ok(result) => {
-                    let affected: u64 = result.rows_affected().iter().sum();
-                    all_results.push(affected);
-                }
-                Err(e) => {
-                    match conn.simple_query("ROLLBACK TRANSACTION").await {
-                        Ok(_) => {
-                            return Err(PyRuntimeError::new_err(format!("Batch item failed: {}", e)));
-                        }
-                        Err(rollback_err) => {
-                            return Err(PyRuntimeError::new_err(format!(
-                                "Batch item failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
-                                e, rollback_err
-                            )));
-                        }
+        let all_results = match execute_batch_on_connection(&mut conn, batch_commands).await {
+            Ok(results) => results,
+            Err(e) => {
+                match conn.simple_query("ROLLBACK TRANSACTION").await {
+                    Ok(_) => return Err(e),
+                    Err(rollback_err) => {
+                        return Err(PyRuntimeError::new_err(format!(
+                            "Batch execution failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
+                            e, rollback_err
+                        )));
                     }
                 }
             }
-        }
+        };
 
         conn.simple_query("COMMIT TRANSACTION")
             .await
@@ -143,28 +179,11 @@ pub fn query_batch<'p>(
     future_into_py(py, async move {
         let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
 
-        let mut all_results = Vec::with_capacity(batch_queries.len());
-        
-        for (query, parameters) in batch_queries {
-            let mut conn = pool_ref.get().await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
-            })?;
+        let mut conn = pool_ref.get().await.map_err(|e| {
+            PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+        })?;
 
-            let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-                .iter()
-                .map(|p| p as &dyn tiberius::ToSql)
-                .collect();
-
-            let stream = conn.query(&query, &tiberius_params).await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Batch query execution failed: {}", e))
-            })?;
-
-            let rows = stream.into_first_result().await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to get batch results: {}", e))
-            })?;
-
-            all_results.push(rows);
-        }
+        let all_results = query_batch_on_connection(&mut conn, batch_queries).await?;
 
         Python::attach(|py| -> PyResult<Py<PyAny>> {
             let mut py_results = Vec::with_capacity(all_results.len());

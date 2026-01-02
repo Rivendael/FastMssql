@@ -2,6 +2,7 @@ use parking_lot::Mutex as SyncMutex;
 use tokio::sync::Mutex as AsyncMutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use tokio::net::TcpStream;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::parameter_conversion::convert_parameters_to_fast;
+use crate::batch::{parse_batch_items, execute_batch_on_connection, query_batch_on_connection};
 use crate::ssl_config::PySslConfig;
 use crate::types::PyFastExecutionResult;
 
@@ -215,6 +217,81 @@ impl Transaction {
             };
 
             Ok(affected)
+        })
+    }
+
+    /// Execute multiple batch commands on the transaction connection.
+    /// Does NOT wrap in automatic transaction - use begin/commit/rollback manually.
+    /// Returns list of row counts affected by each command.
+    #[pyo3(signature = (commands))]
+    pub fn execute_batch<'p>(
+        &self,
+        py: Python<'p>,
+        commands: &Bound<'p, PyList>,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let batch_commands = parse_batch_items(commands, py)?;
+        let conn = Arc::clone(&self.conn);
+        let config = Arc::clone(&self.config);
+        let connected = Arc::clone(&self.connected);
+        let server = self.server.clone();
+        let port = self.port;
+
+        future_into_py(py, async move {
+            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+
+            let all_results = {
+                let mut conn_guard = conn.lock().await;
+                let conn_ref = conn_guard
+                    .as_mut()
+                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                
+                execute_batch_on_connection(conn_ref, batch_commands).await?
+            };
+
+            Python::attach(|py| {
+                let py_list = PyList::new(py, all_results)?;
+                Ok(py_list.into_any().unbind())
+            })
+        })
+    }
+
+    /// Execute multiple batch queries on the transaction connection.
+    /// Returns list of PyFastExecutionResult objects, one per query.
+    #[pyo3(signature = (queries))]
+    pub fn query_batch<'p>(
+        &self,
+        py: Python<'p>,
+        queries: &Bound<'p, PyList>,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let batch_queries = parse_batch_items(queries, py)?;
+        let conn = Arc::clone(&self.conn);
+        let config = Arc::clone(&self.config);
+        let connected = Arc::clone(&self.connected);
+        let server = self.server.clone();
+        let port = self.port;
+
+        future_into_py(py, async move {
+            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+
+            let all_results = {
+                let mut conn_guard = conn.lock().await;
+                let conn_ref = conn_guard
+                    .as_mut()
+                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                
+                query_batch_on_connection(conn_ref, batch_queries).await?
+            };
+
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let mut py_results = Vec::with_capacity(all_results.len());
+                for result in all_results {
+                    let fast_result = PyFastExecutionResult::with_rows(result, py)?;
+                    let py_result = Py::new(py, fast_result)?;
+                    py_results.push(py_result.into_any());
+                }
+                let py_list = PyList::new(py, py_results)?;
+                Ok(py_list.into_any().unbind())
+            })
         })
     }
 

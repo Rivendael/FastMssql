@@ -539,6 +539,41 @@ class Transaction:
         """Execute an INSERT/UPDATE/DELETE/DDL command."""
         ...
     
+    def execute_batch(
+        self,
+        commands: List[tuple[str, Optional[List[Any]]]],
+    ) -> Coroutine[Any, Any, List[int]]:
+        """
+        Execute multiple commands in a batch on the transaction connection.
+        
+        Does NOT automatically wrap in transaction - use begin/commit/rollback manually.
+        Returns a list of row counts affected by each command.
+        
+        Args:
+            commands: List of (sql, parameters) tuples
+        
+        Returns:
+            List of integers, one per command, indicating rows affected
+        """
+        ...
+    
+    def query_batch(
+        self,
+        queries: List[tuple[str, Optional[List[Any]]]],
+    ) -> Coroutine[Any, Any, List[FastExecutionResult]]:
+        """
+        Execute multiple queries in a batch on the transaction connection.
+        
+        Returns a list of FastExecutionResult objects, one per query.
+        
+        Args:
+            queries: List of (sql, parameters) tuples
+        
+        Returns:
+            List of FastExecutionResult objects
+        """
+        ...
+    
     async def begin(self) -> None:
         """Begin a transaction."""
         ...
