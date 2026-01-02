@@ -551,10 +551,6 @@ class Transaction:
         """Rollback the current transaction."""
         ...
     
-    def transaction(self) -> Any:
-        """Return an async context manager for transactions."""
-        ...
-    
     async def close(self) -> None:
         """Close the connection."""
         ...

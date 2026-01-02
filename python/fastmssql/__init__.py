@@ -63,8 +63,7 @@ class Transaction:
     
     Example:
         async with Transaction(server="localhost", database="mydb") as conn:
-            async with conn.transaction():
-                await conn.execute("INSERT INTO ...")
+            await conn.execute("INSERT INTO ...")
     """
     
     def __init__(self, connection_string=None, ssl_config=None,
@@ -95,33 +94,15 @@ class Transaction:
     
     async def begin(self):
         """Begin a transaction."""
-        try:
-            await self._rust_conn.query("BEGIN TRANSACTION")
-        except RuntimeError:
-            pass  # Expected: tiberius throws error but transaction opens successfully
+        await self._rust_conn.begin()
     
     async def commit(self):
         """Commit the current transaction."""
-        try:
-            await self._rust_conn.query("COMMIT TRANSACTION")
-        except RuntimeError:
-            pass  # Expected: tiberius throws error but transaction commits successfully
+        await self._rust_conn.commit()
     
     async def rollback(self):
         """Rollback the current transaction."""
-        try:
-            await self._rust_conn.query("ROLLBACK TRANSACTION")
-        except RuntimeError:
-            pass  # Expected: tiberius throws error but transaction rolls back successfully
-    
-    def transaction(self):
-        """Return an async context manager for transactions.
-        
-        Usage:
-            async with conn.transaction():
-                await conn.execute("INSERT INTO ...")
-        """
-        return _TransactionContextManager(self)
+        await self._rust_conn.rollback()
     
     async def close(self):
         """Close the connection."""
@@ -152,41 +133,6 @@ class Transaction:
                 pass
         
         return False  # Don't suppress exceptions
-
-
-class _TransactionContextManager:
-    """Helper for transaction() context manager."""
-    
-    def __init__(self, conn):
-        self._conn = conn
-        self._started = False
-    
-    async def __aenter__(self):
-        """Begin transaction."""
-        await self._conn.begin()
-        self._started = True
-        return self._conn
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Commit or rollback."""
-        if not self._started:
-            return False
-        
-        try:
-            if exc_type is not None:
-                try:
-                    await self._conn.rollback()
-                except Exception:
-                    pass
-            else:
-                await self._conn.commit()
-        except Exception:
-            try:
-                await self._conn.rollback()
-            except Exception:
-                pass
-        
-        return False
 
 
 __all__ = [

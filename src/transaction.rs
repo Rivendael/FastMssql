@@ -139,28 +139,7 @@ impl Transaction {
         let port = self.port;
 
         future_into_py(py, async move {
-            // Ensure connection is established
-            {
-                let mut conn_guard = conn.lock().await;
-                if conn_guard.is_none() {
-                    // Create a direct TCP connection to the server
-                    let tcp_stream = TcpStream::connect((server.as_str(), port))
-                        .await
-                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to server: {}", e)))?;
-                    
-                    let compat_stream = tcp_stream.compat();
-                    let new_conn: SingleConnectionType = Client::connect((*config).clone(), compat_stream)
-                        .await
-                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to database: {}", e)))?;
-                    *conn_guard = Some(new_conn);
-                }
-            }
-
-            // Mark as connected
-            {
-                let mut connected_guard = connected.lock();
-                *connected_guard = true;
-            }
+            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
 
             // Execute query on the held connection
             let execution_result = {
@@ -211,28 +190,7 @@ impl Transaction {
         let port = self.port;
 
         future_into_py(py, async move {
-            // Ensure connection is established
-            {
-                let mut conn_guard = conn.lock().await;
-                if conn_guard.is_none() {
-                    // Create a direct TCP connection to the server
-                    let tcp_stream = TcpStream::connect((server.as_str(), port))
-                        .await
-                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to server: {}", e)))?;
-                    
-                    let compat_stream = tcp_stream.compat();
-                    let new_conn: SingleConnectionType = Client::connect((*config).clone(), compat_stream)
-                        .await
-                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to database: {}", e)))?;
-                    *conn_guard = Some(new_conn);
-                }
-            }
-
-            // Mark as connected
-            {
-                let mut connected_guard = connected.lock();
-                *connected_guard = true;
-            }
+            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
 
             // Execute command on the held connection
             let affected = {
@@ -257,6 +215,79 @@ impl Transaction {
             };
 
             Ok(affected)
+        })
+    }
+
+    /// Begin a transaction
+    pub fn begin<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let conn = Arc::clone(&self.conn);
+        let config = Arc::clone(&self.config);
+        let connected = Arc::clone(&self.connected);
+        let server = self.server.clone();
+        let port = self.port;
+
+        future_into_py(py, async move {
+            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+
+            // Execute BEGIN TRANSACTION
+            {
+                let mut conn_guard = conn.lock().await;
+                let conn_ref = conn_guard
+                    .as_mut()
+                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?
+                    ;
+                
+                conn_ref
+                    .simple_query("BEGIN TRANSACTION")
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to begin transaction: {}", e)))?;
+                
+                drop(conn_guard);
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Commit the current transaction
+    pub fn commit<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let conn = Arc::clone(&self.conn);
+
+        future_into_py(py, async move {
+            let mut conn_guard = conn.lock().await;
+            let conn_ref = conn_guard
+                .as_mut()
+                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?
+                ;
+            
+            conn_ref
+                .simple_query("COMMIT TRANSACTION")
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to commit transaction: {}", e)))?;
+            
+            drop(conn_guard);
+            Ok(())
+        })
+    }
+
+    /// Rollback the current transaction
+    pub fn rollback<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        let conn = Arc::clone(&self.conn);
+
+        future_into_py(py, async move {
+            let mut conn_guard = conn.lock().await;
+            let conn_ref = conn_guard
+                .as_mut()
+                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?
+                ;
+            
+            conn_ref
+                .simple_query("ROLLBACK TRANSACTION")
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to rollback transaction: {}", e)))?;
+            
+            drop(conn_guard);
+            Ok(())
         })
     }
 
@@ -285,5 +316,41 @@ impl Transaction {
     /// Check if connected
     pub fn is_connected(&self) -> bool {
         *self.connected.lock()
+    }
+}
+
+impl Transaction {
+    /// Ensure connection is established. Initializes connection if needed.
+    /// Returns error if connection fails.
+    async fn ensure_connected(
+        conn: &Arc<AsyncMutex<Option<SingleConnectionType>>>,
+        config: &Arc<Config>,
+        server: &str,
+        port: u16,
+        connected: &Arc<SyncMutex<bool>>,
+    ) -> PyResult<()> {
+        // Establish connection if not already connected
+        {
+            let mut conn_guard = conn.lock().await;
+            if conn_guard.is_none() {
+                let tcp_stream = TcpStream::connect((server, port))
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to server: {}", e)))?;
+                
+                let compat_stream = tcp_stream.compat();
+                let new_conn: SingleConnectionType = Client::connect((**config).clone(), compat_stream)
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to database: {}", e)))?;
+                *conn_guard = Some(new_conn);
+            }
+        }
+
+        // Mark as connected
+        {
+            let mut connected_guard = connected.lock();
+            *connected_guard = true;
+        }
+
+        Ok(())
     }
 }
