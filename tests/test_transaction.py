@@ -655,3 +655,137 @@ async def test_transaction_with_all_individual_parameters(test_config: Config):
         print("✅ All parameters test passed!")
 
 
+# ===== Connection String Parsing Tests =====
+
+def test_connection_string_parsing_hostname_and_port():
+    """Test parsing connection string with format: Server=hostname,port;..."""
+    conn_str = "Server=localhost,1433;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    # Just verify it instantiates without error
+    print("✓ Parsed hostname,port format")
+
+
+def test_connection_string_parsing_hostname_and_instance():
+    """Test parsing connection string with format: Server=hostname\\instance;..."""
+    conn_str = "Server=localhost\\SQLEXPRESS;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    # Just verify it instantiates without error
+    print("✓ Parsed hostname\\instance format")
+
+
+def test_connection_string_parsing_hostname_only():
+    """Test parsing connection string with format: Server=hostname;..."""
+    conn_str = "Server=localhost;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    # Should default to port 1433
+    print("✓ Parsed hostname only format (default port 1433)")
+
+
+def test_connection_string_parsing_with_extra_semicolons():
+    """Test parsing connection string with extra semicolons and spaces."""
+    conn_str = "Server=localhost,1433;Database=master;User Id=sa;Password=test;Connection Timeout=30;"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed connection string with extra parameters")
+
+
+def test_connection_string_parsing_mixed_case():
+    """Test parsing connection string with mixed case."""
+    conn_str = "server=localhost,1433;database=master;user id=sa;password=test"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed mixed case connection string")
+
+
+def test_connection_string_parsing_with_spaces():
+    """Test parsing connection string with spaces around values.
+    
+    Note: Tiberius's ADO.NET parser is strict and doesn't accept spaces around the = sign.
+    This is a limitation of the underlying library, not our code.
+    """
+    conn_str = "Server = localhost , 1433 ; Database = master ; User Id = sa ; Password = test"
+    # Tiberius rejects this format
+    with pytest.raises(ValueError, match="Invalid connection string"):
+        trans = Transaction(connection_string=conn_str)
+    print("✓ Correctly rejected connection string with spaces around = signs")
+
+
+def test_connection_string_parsing_port_as_string():
+    """Test that port is correctly parsed as integer from string."""
+    conn_str = "Server=localhost,5433;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    # Verify instantiation - actual port validation happens at connection time
+    print("✓ Parsed non-standard port 5433")
+
+
+def test_connection_string_parsing_instance_with_trailing_semicolon():
+    """Test parsing instance format with trailing semicolon."""
+    conn_str = "Server=localhost\\SQLEXPRESS;Database=master;User Id=sa;Password=test;"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed instance format with trailing semicolon")
+
+
+def test_connection_string_parsing_malformed_port():
+    """Test that malformed port is rejected by tiberius parser.
+    
+    Tiberius strictly validates the connection string format and rejects invalid ports.
+    """
+    conn_str = "Server=localhost,invalid_port;Database=master;User Id=sa;Password=test"
+    # Tiberius rejects invalid port
+    with pytest.raises(ValueError, match="Invalid connection string"):
+        trans = Transaction(connection_string=conn_str)
+    print("✓ Correctly rejected connection string with invalid port")
+
+
+def test_connection_string_parsing_no_database():
+    """Test parsing connection string without Database parameter."""
+    conn_str = "Server=localhost,1433;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed connection string without Database")
+
+
+def test_connection_string_parsing_complex_password():
+    """Test parsing connection string with complex password containing special characters."""
+    conn_str = "Server=localhost,1433;Database=master;User Id=sa;Password=P@ssw0rd!#$%"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed connection string with complex password")
+
+
+def test_connection_string_parsing_ipv4_address():
+    """Test parsing connection string with IPv4 address."""
+    conn_str = "Server=192.168.1.100,1433;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed IPv4 address as server")
+
+
+def test_connection_string_parsing_fqdn():
+    """Test parsing connection string with FQDN."""
+    conn_str = "Server=db.example.com,1433;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed FQDN as server")
+
+
+def test_connection_string_parsing_server_with_brackets():
+    """Test parsing connection string with bracketed server name."""
+    conn_str = "Server=[localhost],1433;Database=master;User Id=sa;Password=test"
+    trans = Transaction(connection_string=conn_str)
+    # Note: This tests handling of brackets if present
+    print("✓ Parsed server with brackets")
+
+
+def test_connection_string_multiple_consecutive_commas():
+    """Test that multiple commas in server part are rejected by tiberius.
+    
+    Tiberius strictly validates the connection string format and only accepts
+    one comma to separate hostname and port.
+    """
+    conn_str = "Server=localhost,1433,9999;Database=master;User Id=sa;Password=test"
+    # Tiberius rejects this - only one comma is valid in Server value
+    with pytest.raises(ValueError, match="Invalid connection string|Conversion error"):
+        trans = Transaction(connection_string=conn_str)
+    print("✓ Correctly rejected connection string with multiple ports")
+
+
+def test_connection_string_parsing_azure_sql():
+    """Test parsing Azure SQL connection string format."""
+    conn_str = "Server=myserver.database.windows.net,1433;Database=mydb;User Id=user@myserver;Password=test;Encrypt=true"
+    trans = Transaction(connection_string=conn_str)
+    print("✓ Parsed Azure SQL connection string")

@@ -13,6 +13,31 @@ use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
 use crate::types::PyFastExecutionResult;
 
+/// Extract host and port from connection string
+fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
+    let server_part = conn_str
+        .split("Server=")
+        .nth(1)
+        .and_then(|s| s.split(';').next())
+        .map(|s| s.trim())
+        .unwrap_or("localhost");
+
+    
+    if let Some(port_str) = server_part.split(',').nth(1) {
+        // Format: "hostname,port"
+        let srv = server_part.split(',').next().unwrap_or("localhost").to_string();
+        let p = port_str.trim().parse::<u16>().unwrap_or(1433);
+        (srv, p)
+    } else if server_part.contains('\\') {
+        // Format: "hostname\\instance"
+        let srv = server_part.split('\\').next().unwrap_or("localhost").to_string();
+        (srv, 1433u16)
+    } else {
+        // Format: "hostname"
+        (server_part.to_string(), 1433u16)
+    }
+}
+
 /// Type for a single direct connection (not pooled)
 type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 
@@ -46,12 +71,16 @@ impl Transaction {
         application_name: Option<String>,
     ) -> PyResult<Self> {
         let (config, server, port) = if let Some(conn_str) = connection_string {
+            
             let config = Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
             
-            // Config already has server/port internally; use defaults for TCP connection
-            // since Client::connect() will use the Config's parsed details
-            (config, "localhost".to_string(), 1433)
+            let temp = config.port;
+
+            // Extract server and port from connection string
+            let (server, port) = extract_host_port_from_connection_string(&conn_str);
+            
+            (config, server, port)
         } else if let Some(srv) = server {
             let mut config = Config::new();
             config.host(&srv);
