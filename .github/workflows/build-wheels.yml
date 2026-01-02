@@ -43,7 +43,6 @@ jobs:
 
       - uses: pypa/cibuildwheel@v2.22.0
         with:
-          # Install the 'uv' extra to make uv available
           extras: "uv"
 
 

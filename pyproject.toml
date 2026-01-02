@@ -119,6 +119,12 @@ build-frontend = "build[uv]"
 build = "*"
 archs = ["auto"]
 
+[tool.cibuildwheel.linux]
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.macos]
+repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
+
 [dependency-groups]
 dev = [
     "ruff>=0.14.10",
