@@ -3,7 +3,7 @@ name: Build and publish wheels
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
             arch: x86_64
           - os: ubuntu-latest
             arch: aarch64
-          
+
           - os: ubuntu-latest
             arch: x86_64
             manylinux: musllinux_1_1
@@ -38,17 +38,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Cargo registry cache
+        uses: actions/cache@v3
         with:
-          python-version: '3.12'
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Set up Cargo build cache
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
+
+      - name: Install uv and set the Python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: 3.12
+          enable-cache: true
+
+      - name: Build wheels
+        run: |
+          uv build --wheel
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.arch == 'universal2' && 'universal2-apple-darwin' || matrix.arch }}
           args: --release --out dist --find-interpreter ${{ (matrix.arch == 'aarch64' || matrix.manylinux == 'musllinux_1_1') && '--zig' || '' }}
-          sccache: 'true'
+          sccache: "true"
           manylinux: ${{ matrix.manylinux || 'auto' }}
 
       - name: Upload wheels
@@ -62,11 +83,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build sdist
-        uses: PyO3/maturin-action@v1
+
+      - name: Install uv and set the Python version
+        uses: astral-sh/setup-uv@v7
         with:
-          command: sdist
-          args: --out dist
+          python-version: 3.12
+          enable-cache: true
+
+      - name: Build sdist
+        run: uv build --sdist
+
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -81,7 +107,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -90,7 +116,11 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Install uv and set the Python version
+        uses: astral-sh/setup-uv@v7
         with:
-          packages-dir: dist/
+          python-version: 3.12
+          enable-cache: true
+
+      - name: Publish
+        run: uv publish --dry-run dist/*
