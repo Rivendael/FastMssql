@@ -13,7 +13,6 @@ use crate::parameter_conversion::{convert_parameters_to_fast, FastParameter};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ensure_pool_initialized, ConnectionPool};
 use crate::ssl_config::PySslConfig;
-use crate::types::PyFastExecutionResult;
 
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
@@ -179,7 +178,7 @@ impl PyConnection {
     }
 
     /// Execute a SQL query that returns rows (SELECT statements)
-    /// Returns rows as PyFastExecutionResult
+    /// Returns rows as PyQueryStream
     #[pyo3(signature = (query, parameters=None))]
     pub fn query<'p>(
         &self,
@@ -200,8 +199,8 @@ impl PyConnection {
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let fast_result = PyFastExecutionResult::with_rows(execution_result, py)?;
-                let py_result = Py::new(py, fast_result)?;
+                let query_stream = crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
+                let py_result = Py::new(py, query_stream)?;
                 Ok(py_result.into_any())
             })
         })

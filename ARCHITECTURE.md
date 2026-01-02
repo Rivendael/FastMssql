@@ -116,7 +116,7 @@ src/
 ├── type_mapping.rs             # SQL Server ↔ Python type conversions
 ├── ssl_config.rs               # SSL/TLS configuration
 ├── pool_config.rs              # Connection pool configuration
-└── types.rs                    # PyFastRow, PyFastExecutionResult result types
+└── types.rs                    # PyFastRow, PyQueryStream result types
 
 python/
 └── fastmssql/
@@ -409,11 +409,11 @@ Rust (Type Conversion):
        - For each column:
          - Use type_mapping to convert to PyObject
        - Store in PyFastRow
-    10. Wrap in PyFastExecutionResult
+    10. Wrap in PyQueryStream
                 ↓
 Python:
-    11. Await future, get PyFastExecutionResult
-    12. Call .rows() to get list of PyFastRow dicts
+    11. Await future, get PyQueryStream
+    12. Iterate using async for or call .rows() to get list of PyFastRow dicts
 ```
 
 ### 2. Batch Execution
@@ -656,9 +656,9 @@ type_mapping::convert_row_to_pydict()
     ↓
 PyFastRow: ordered dict of column → value
     ↓
-PyFastExecutionResult: list of PyFastRow
+PyQueryStream: async iterator over list of PyFastRow
     ↓
-Python user receives result.rows() → List[Dict[str, Any]]
+Python user receives result via async iteration or result.rows() → List[Dict[str, Any]]
 ```
 
 ---

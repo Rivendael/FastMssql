@@ -1,7 +1,6 @@
 use crate::parameter_conversion::{convert_parameters_to_fast, python_to_fast_parameter, FastParameter};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ensure_pool_initialized, ConnectionPool};
-use crate::types::PyFastExecutionResult;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -188,8 +187,8 @@ pub fn query_batch<'p>(
         Python::attach(|py| -> PyResult<Py<PyAny>> {
             let mut py_results = Vec::with_capacity(all_results.len());
             for result in all_results {
-                let fast_result = PyFastExecutionResult::with_rows(result, py)?;
-                let py_result = Py::new(py, fast_result)?;
+                let query_stream = crate::types::PyQueryStream::from_tiberius_rows(result, py)?;
+                let py_result = Py::new(py, query_stream)?;
                 py_results.push(py_result.into_any());
             }
             let py_list = PyList::new(py, py_results)?;

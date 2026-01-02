@@ -13,7 +13,6 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::batch::{parse_batch_items, execute_batch_on_connection, query_batch_on_connection};
 use crate::ssl_config::PySslConfig;
-use crate::types::PyFastExecutionResult;
 
 /// Extract host and port from connection string
 fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
@@ -125,7 +124,7 @@ impl Transaction {
     }
 
     /// Execute a SQL query that returns rows (SELECT statements)
-    /// Returns rows as PyFastExecutionResult
+    /// Returns rows as QueryStream
     #[pyo3(signature = (query, parameters=None))]
     pub fn query<'p>(
         &self,
@@ -168,8 +167,8 @@ impl Transaction {
             };
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let fast_result = PyFastExecutionResult::with_rows(execution_result, py)?;
-                let py_result = Py::new(py, fast_result)?;
+                let query_stream = crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
+                let py_result = Py::new(py, query_stream)?;
                 Ok(py_result.into_any())
             })
         })
@@ -256,7 +255,7 @@ impl Transaction {
     }
 
     /// Execute multiple batch queries on the transaction connection.
-    /// Returns list of PyFastExecutionResult objects, one per query.
+    /// Returns list of QueryStream objects, one per query.
     #[pyo3(signature = (queries))]
     pub fn query_batch<'p>(
         &self,
@@ -285,8 +284,8 @@ impl Transaction {
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let mut py_results = Vec::with_capacity(all_results.len());
                 for result in all_results {
-                    let fast_result = PyFastExecutionResult::with_rows(result, py)?;
-                    let py_result = Py::new(py, fast_result)?;
+                    let query_stream = crate::types::PyQueryStream::from_tiberius_rows(result, py)?;
+                    let py_result = Py::new(py, query_stream)?;
                     py_results.push(py_result.into_any());
                 }
                 let py_list = PyList::new(py, py_results)?;
