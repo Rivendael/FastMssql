@@ -25,7 +25,7 @@ jobs:
             arch: aarch64
             python: 3.12
 
-          - os: ubuntu-la
+          - os: ubuntu-latest
             arch: x86_64
             manylinux: musllinux_1_1
             python: pypy@3.12
