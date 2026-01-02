@@ -1,30 +1,50 @@
 # Getting Started: Developing FastMSSQL
 
-This guide walks you through setting up your local development environment to build, test, and contribute to FastMSSQL—an async Python library for Microsoft SQL Server, built with Rust and PyO3.
+This guide walks you through setting up your local development environment to
+build, test, and contribute to FastMSSQL—an async Python library for Microsoft
+SQL Server, built with Rust and PyO3.
 
-## Prerequisites
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Prerequisites: Quick Setup](#prerequisites-quick-setup)
+- [Quick Start: One-Command Setup](#quick-start-one-command-setup)
+- [Manual Setup (Step by Step)](#manual-setup-step-by-step)
+- [Running Tests](#running-tests)
+- [Development Workflow](#development-workflow)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [CI/CD Reference](#cicd-reference)
+- [Next Steps](#next-steps)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
+## Prerequisites: Quick Setup
 
 You'll need to have the following tools installed:
 
-- **Python** (3.10+) — Check with `python --version`
+- [**uv**](https://docs.astral.sh/uv/): Project manager for Python that is built
+    in Rust. Very fast, very capable. Manages Virtual Environments and Python
+    versions for you.
 - **Rust** — Install from [https://rustup.rs](https://rustup.rs)
-- **Docker** — For running Microsoft SQL Server locally. Install from [https://www.docker.com](https://www.docker.com)
+- **Docker** — For running Microsoft SQL Server locally. Install from
+    [https://www.docker.com](https://www.docker.com)
 
 ## Quick Start: One-Command Setup
 
-Run the setup script to configure everything automatically:
+From repo root, run the setup script to configure everything automatically:
 
 ```bash
-bash ./scripts/setup.sh
+./scripts/setup.sh
 ```
 
 This will:
-1. Check for Python and Rust
-2. Create and activate a Python virtual environment
-3. Install Python dependencies from `requirements.txt`
-4. Install maturin (if needed)
-5. Build the Rust extension in release mode
-6. Run test database setup
+
+1. Check for UV and Rust
+2. Run a `uv sync`, which will create a Python virtual environment and install
+     dependancies.
+3. Build the Rust extension in release mode
+4. Run test database setup
 
 **Done!** Your development environment is ready.
 
@@ -35,7 +55,11 @@ If you prefer to set up manually or encounter issues, follow these steps:
 ### 1. Install System Dependencies
 
 #### macOS & Linux
+
 ```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Install Rust (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
@@ -44,58 +68,61 @@ source "$HOME/.cargo/env"
 rustc --version
 ```
 
-#### Windows (Git Bash/MSYS2)
+You may also need to ensure that GCC is avialable. On a Debian system,
+
 ```bash
+sudo apt-get install build-essentials
+```
+
+> You may need to search for your architecture.
+
+#### Windows (Git Bash/MSYS2)
+
+```pwsh
+#Download and install the uv installer from
+# Or use Invoke-RestMethod:
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
 # Download and run the Rust installer from https://rustup.rs
 # Or use winget:
 winget install Rustlang.Rust.MSVC
 ```
 
-### 2. Create a Python Virtual Environment
+### 2. Configure Python environment
+
+To prepare your python environment, run
 
 ```bash
-# Create the virtual environment
-python -m venv .venv
-
-# Activate it
-# On macOS/Linux:
-source .venv/bin/activate
-
-# On Windows (Git Bash):
-source .venv/Scripts/activate
+uv sync
 ```
 
-### 3. Install Python Dependencies
+This will:
+
+- Configure an isolated instance of Python
+- Create a virtualenv as `.venv`
+- Install packages from the `pyproject.toml` to that virtual environment
+
+### 3. Build the Rust Extension with Maturin
 
 ```bash
-# Upgrade pip
-python -m pip install --upgrade pip
-
-# Install requirements
-pip install -r requirements.txt
+# Build in release mode for performance, using the `uv` installed instance
+uv run maturin develop --release
 ```
 
-### 4. Build the Rust Extension with Maturin
+**Note:** The first build may take a few minutes as Rust compiles all
+dependencies.
 
-```bash
-# Install maturin if you don't have it
-pip install maturin
+### 4. Set Up the Test Database
 
-# Build in release mode for performance
-maturin develop --release
-```
-
-**Note:** The first build may take a few minutes as Rust compiles all dependencies.
-
-### 5. Set Up the Test Database
-
-The library includes a test database setup script that pulls and runs the official Microsoft SQL Server Docker image:
+The library includes a test database setup script that pulls and runs the
+official Microsoft SQL Server Docker image:
 
 ```bash
 bash ./scripts/unittest_setup.sh
 ```
 
 This script will:
+
 - Check that Docker is installed
 - Pull the latest Microsoft SQL Server 2022 Express image
 - Start a SQL Server container on port 1433
@@ -114,7 +141,11 @@ docker run \
   -d mcr.microsoft.com/mssql/server:2022-latest
 ```
 
-This pulls the official Microsoft SQL Server image from `mcr.microsoft.com` and starts a containerized SQL Server instance with:
+> ⚠️: Depending on your terminal, you may need to escape the `!` character: `\!`
+
+This pulls the official Microsoft SQL Server image from `mcr.microsoft.com` and
+starts a containerized SQL Server instance with:
+
 - **Port**: 1433 (standard SQL Server port, exposed on localhost)
 - **SA Password**: `StrongPassword123!`
 - **Edition**: Express (free, fully-featured for development)
@@ -129,7 +160,7 @@ If you prefer to start the container manually:
 docker pull mcr.microsoft.com/mssql/server:2022-latest
 
 # Run the container
-docker run \
+docker run --rm \
   -e "ACCEPT_EULA=Y" \
   -e "MSSQL_SA_PASSWORD=StrongPassword123!" \
   -p 1433:1433 \
@@ -142,6 +173,8 @@ sleep 10
 # Verify it's running
 docker ps | grep sqlserver
 ```
+
+> ⚠️: Depending on your terminal, you may need to escape the `!` character: `\!`
 
 #### Verify SQL Server is Running
 
@@ -158,46 +191,54 @@ sqlcmd -S localhost,1433 -U SA -P "StrongPassword123!" -Q "SELECT 1"
 ```bash
 # Stop the container
 docker stop sqlserver
-
-# Remove the container completely
-docker rm sqlserver
 ```
 
-### 6. Configure the Environment
+> ℹ️: If you used the command above, the container will auto-remove after being
+> stopped.
 
-Create a `.env` file in the project root with your SQL Server connection string:
+### 5. Configure the Environment
+
+Create a `.env` file in the project root, and populate it with the following
+contents:
 
 ```bash
 # .env
 FASTMSSQL_TEST_CONNECTION_STRING="Server=localhost,1433;Database=master;User Id=SA;Password=StrongPassword123!;TrustServerCertificate=yes"
+FAST_MSSQL_TEST_DB_USER="SA"
+FAST_MSSQL_TEST_DB_PASSWORD="StrongPassword123!"
+FAST_MSSQL_TEST_SERVER="localhost"
+FAST_MSSQL_TEST_PORT="1433"
+FAST_MSSQL_TEST_DATABASE="master"
 ```
 
-Or if using different credentials, adjust the connection string accordingly.
+Or if using different credentials, adjust the variables accordingly.
 
 ## Running Tests
 
 Once your environment is set up, run the test suite:
 
 ```bash
-# Activate your virtual environment first
-source .venv/bin/activate  # macOS/Linux
-# or
-source .venv/Scripts/activate  # Windows Git Bash
-
 # Run all tests
-pytest tests/
+uv run pytest tests/
 
 # Run a specific test file
-pytest tests/test_basic.py
+uv run pytest tests/test_basic.py
 
 # Run tests with verbose output
-pytest tests/ -v
+uv run pytest tests/ -v
 
 # Run tests with coverage
-pytest tests/ --cov=fastmssql
+uv run pytest tests/ --cov=fastmssql
+
+# Run tests with multiple worker threads
+uv run pytest tests/ -n {auto|#}
 ```
 
-**Important:** Make sure your SQL Server Docker container is running before you run tests.
+**Important:** Make sure your SQL Server Docker container is running before you
+run tests.
+
+> ℹ️: Please note that using multiple workers may interfere with test
+> performance. If oyu experience problems, adjust your call accordingly.
 
 ## Development Workflow
 
@@ -206,10 +247,11 @@ pytest tests/ --cov=fastmssql
 When you modify Rust code in `src/`, rebuild the extension:
 
 ```bash
-maturin develop --release
+uv run maturin develop --release
 ```
 
-This recompiles the Rust code and reinstalls the Python package in development mode.
+This recompiles the Rust code and reinstalls the Python package in development
+mode.
 
 ### Run Benchmarks
 
@@ -217,22 +259,23 @@ The project includes performance benchmarks in the `benchmarks/` folder:
 
 ```bash
 # Run a simple load test
-python benchmarks/simple_load_test.py
+uv run benchmarks/simple_load_test.py
 
 # Run memory profiling
-python benchmarks/memory_benchmark.py
+uv run benchmarks/memory_benchmark.py
 
 # Run profiling
-python benchmarks/profile_test.py
+uv run benchmarks/profile_test.py
 ```
 
 ### Type Checking
 
-The project includes a `fastmssql.pyi` stub file for type hints. Ensure your IDE recognizes it for better autocomplete and type checking.
+The project includes a `fastmssql.pyi` stub file for type hints. Ensure your IDE
+recognizes it for better autocomplete and type checking.
 
 ## Project Structure
 
-```
+```bash
 FastMssql/
 ├── python/              # Python package source
 │   └── fastmssql/
@@ -255,16 +298,18 @@ FastMssql/
 
 ### "Docker is not installed"
 
-Install Docker from [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+Install Docker using [Docker Desktop](https://www.docker.com/products/docker-desktop)
 
 ### "SQL Server failed to start"
 
 Check Docker logs:
+
 ```bash
 docker logs sqlserver
 ```
 
 Common issues:
+
 - Not enough disk space
 - Port 1433 already in use by another application
 - Insufficient system memory
@@ -272,21 +317,24 @@ Common issues:
 ### "maturin: command not found"
 
 Ensure maturin is installed:
+
 ```bash
-pip install maturin
+uv pip install maturin
 ```
 
 ### Tests fail with "connection refused"
 
 Make sure:
+
 1. SQL Server container is running: `docker ps | grep sqlserver`
 2. `.env` file has the correct connection string
 3. Container has fully started (may take 10-15 seconds)
 
 Wait and retry:
+
 ```bash
 sleep 10
-pytest tests/
+uv run pytest tests/
 ```
 
 ### Rebuild everything from scratch
@@ -304,7 +352,9 @@ bash setup.sh
 
 ## CI/CD Reference
 
-The project uses GitHub Actions for continuous integration. The workflow in `.github/workflows/unittests.yml`:
+The project uses GitHub Actions for continuous integration. The workflow in
+`.github/workflows/unittests.yml`:
+
 - Tests against Python 3.10, 3.11, 3.12, 3.13, and 3.14
 - Spins up a SQL Server 2022 Express container using the same image as above
 - Installs dependencies and builds with maturin

@@ -1,15 +1,32 @@
 # Security Policy
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Reporting Security Vulnerabilities](#reporting-security-vulnerabilities)
+- [Security Best Practices for Users](#security-best-practices-for-users)
+- [Known Security Considerations](#known-security-considerations)
+- [Security for Contributors](#security-for-contributors)
+- [Security Checklist for Deployment](#security-checklist-for-deployment)
+- [Additional Resources](#additional-resources)
+- [Acknowledgments](#acknowledgments)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability in FastMSSQL, please **do not** open a public GitHub issue. Instead, email your report to [riverb514@gmail.com](mailto:riverb514@gmail.com) with:
+If you discover a security vulnerability in FastMSSQL, please **do not** open a
+public GitHub issue. Instead, email your report to
+[riverb514@gmail.com](mailto:riverb514@gmail.com) with:
 
 - A clear description of the vulnerability
 - Steps to reproduce (if applicable)
 - Potential impact
 - Any suggested fixes (if you have them)
 
-Please allow reasonable time for a response and remediation before public disclosure. Security researchers are appreciated, and we'll acknowledge your contribution in release notes if you wish.
+Please allow reasonable time for a response and remediation before public
+disclosure. Security researchers are appreciated, and we'll acknowledge your
+contribution in release notes if you wish.
 
 ---
 
@@ -17,7 +34,8 @@ Please allow reasonable time for a response and remediation before public disclo
 
 ### 1. Connection Encryption
 
-**Always use encryption in production environments.** FastMSSQL provides multiple encryption levels through `SslConfig`:
+**Always use encryption in production environments.** FastMSSQL provides
+multiple encryption levels through `SslConfig`:
 
 ```python
 from fastmssql import Connection, SslConfig, EncryptionLevel
@@ -48,7 +66,8 @@ async with Connection("Server=...", ssl_config=ssl_config) as conn:
 
 ### 2. Certificate Validation
 
-When using `EncryptionLevel.Required`, you must validate the server's certificate. Choose one of two approaches:
+When using `EncryptionLevel.Required`, you must validate the server's
+certificate. Choose one of two approaches:
 
 #### Option A: Trust the Server Certificate (Use Cautiously)
 
@@ -62,11 +81,14 @@ ssl_config = SslConfig(
 ```
 
 **When to use:**
+
 - Development/testing environments
 - Self-signed certificates you control
 - Internal corporate networks with trusted infrastructure
 
-**⚠️ Security Risk:** This disables certificate validation, making you vulnerable to man-in-the-middle (MITM) attacks. Only use if you fully understand the risks.
+**⚠️ Security Risk:** This disables certificate validation, making you
+vulnerable to man-in-the-middle (MITM) attacks. Only use if you fully understand
+the risks.
 
 #### Option B: Validate Against a CA Certificate (Recommended)
 
@@ -80,11 +102,13 @@ ssl_config = SslConfig(
 ```
 
 **Supported certificate formats:**
+
 - `.pem` — PEM-encoded (most common)
 - `.crt` — DER or PEM-encoded
 - `.der` — DER binary format
 
 **How to obtain a CA certificate:**
+
 - From your database administrator
 - From your cloud provider (AWS, Azure, GCP)
 - From the certificate authority that issued the server certificate
@@ -116,6 +140,7 @@ ssl_config = SslConfig(
 ```
 
 **When to enable:**
+
 - Cloud databases (Azure SQL, AWS RDS, etc.)
 - Reverse proxies or load balancers
 - Any environment where IP != hostname in the certificate
@@ -127,6 +152,7 @@ ssl_config = SslConfig(
 #### ✅ Recommended Approaches
 
 **Environment Variables:**
+
 ```python
 import os
 from fastmssql import Connection
@@ -141,6 +167,7 @@ async with Connection(conn_str) as conn:
 ```
 
 **.env File (Development Only):**
+
 ```bash
 # .env
 DB_SERVER=localhost,1433
@@ -158,6 +185,7 @@ conn_str = os.getenv("DB_CONNECTION_STRING")
 ```
 
 **Cloud Secrets Management:**
+
 - AWS Secrets Manager
 - Azure Key Vault
 - HashiCorp Vault
@@ -166,6 +194,7 @@ conn_str = os.getenv("DB_CONNECTION_STRING")
 #### Password Requirements
 
 For SQL Server:
+
 - Minimum 8 characters
 - Must contain uppercase, lowercase, numbers, and special characters
 - Use strong, randomly generated passwords
@@ -189,21 +218,25 @@ async with Connection(conn_str, pool_config=pool_config) as conn:
 ```
 
 **Security Considerations:**
+
 - Connections are properly closed and cleaned up
 - Connection objects are not reused across security contexts
 - Each connection uses the credentials provided at creation time
 
 ### 6. SQL Injection Prevention
 
-Always use **parameterized queries**. Never concatenate user input into SQL strings.
+Always use **parameterized queries**. Never concatenate user input into SQL
+strings.
 
 #### ❌ UNSAFE
+
 ```python
 user_id = request.args.get('user_id')
 result = await conn.query(f"SELECT * FROM users WHERE id = {user_id}")
 ```
 
 #### ✅ SAFE
+
 ```python
 user_id = request.args.get('user_id')
 result = await conn.query(
@@ -212,7 +245,8 @@ result = await conn.query(
 )
 ```
 
-FastMSSQL handles parameter escaping and type conversion automatically. All user input should go through parameters, never into the SQL string.
+FastMSSQL handles parameter escaping and type conversion automatically. All user
+input should go through parameters, never into the SQL string.
 
 ### 7. Input Validation
 
@@ -249,6 +283,7 @@ except ValueError as e:
 Avoid exposing sensitive information in error messages:
 
 #### ❌ UNSAFE
+
 ```python
 try:
     result = await conn.query("SELECT * FROM users WHERE id = @P1", [user_id])
@@ -257,6 +292,7 @@ except Exception as e:
 ```
 
 #### ✅ SAFE
+
 ```python
 import logging
 from fastmssql import FastMssqlError
@@ -271,6 +307,7 @@ except FastMssqlError as e:
 ```
 
 **Guidelines:**
+
 - Log detailed errors server-side for debugging
 - Return generic error messages to clients
 - Never expose connection strings, table names, or query details
@@ -298,7 +335,8 @@ ssl_config = SslConfig(
 
 #### Connection Strings in URLs
 
-If you must pass connection details in URLs (not recommended), use POST data with HTTPS, never URL parameters:
+If you must pass connection details in URLs (not recommended), use POST data
+with HTTPS, never URL parameters:
 
 ```python
 # ❌ UNSAFE - credentials in query string
@@ -341,7 +379,8 @@ cargo update
 
 ### 1. TrustServerCertificate Flag
 
-The `trust_server_certificate` flag bypasses certificate validation. This is convenient for development but creates a vulnerability in production:
+The `trust_server_certificate` flag bypasses certificate validation. This is
+convenient for development but creates a vulnerability in production:
 
 - **Risk:** Man-in-the-middle attacks
 - **When safe:** Controlled networks, self-signed certs you own
@@ -349,7 +388,8 @@ The `trust_server_certificate` flag bypasses certificate validation. This is con
 
 ### 2. Self-Signed Certificates
 
-Self-signed certificates are useful for testing but offer no protection against MITM attacks:
+Self-signed certificates are useful for testing but offer no protection against
+MITM attacks:
 
 ```bash
 # Generate a self-signed certificate for testing
@@ -375,7 +415,8 @@ But once deployed to staging or production, always use encryption.
 
 ### 4. Connection String Encoding
 
-Connection strings support special characters. Ensure special characters are properly handled:
+Connection strings support special characters. Ensure special characters are
+properly handled:
 
 ```python
 # Passwords with special characters should be stored securely
@@ -390,6 +431,7 @@ password = os.getenv("DB_PASSWORD")  # "P@ssw0rd!#$%"
 ### Code Review
 
 All contributions are reviewed for security issues:
+
 - Input validation and output encoding
 - Proper error handling (no sensitive info leakage)
 - Secure defaults
@@ -422,7 +464,8 @@ pytest tests/test_error_handling.py
 Use this checklist before deploying to production:
 
 - [ ] Enable encryption: `EncryptionLevel.Required`
-- [ ] Validate certificates: Use `ca_certificate_path` (not `trust_server_certificate=True`)
+- [ ] Validate certificates: Use `ca_certificate_path` (not
+    `trust_server_certificate=True`)
 - [ ] Enable SNI: `enable_sni=True` for cloud databases
 - [ ] Rotate credentials: Use strong, unique passwords
 - [ ] Secure storage: Credentials in environment variables or vault
@@ -447,6 +490,7 @@ Use this checklist before deploying to production:
 
 ## Acknowledgments
 
-Thank you to all security researchers who responsibly disclose vulnerabilities. Your contributions help keep FastMSSQL secure for everyone.
+Thank you to all security researchers who responsibly disclose vulnerabilities.
+Your contributions help keep FastMSSQL secure for everyone.
 
 Last updated: December 2025
