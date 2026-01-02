@@ -496,33 +496,75 @@ class Connection:
 
 class Transaction:
     """
-    Async context manager for managing database transactions.
+    Single dedicated connection for SQL Server transactions.
     
-    Executes BEGIN TRANSACTION on entry and commits or rolls back on exit
-    based on whether an exception occurred.
+    Provides a non-pooled connection where all operations happen on the same
+    underlying connection, ensuring transaction safety for BEGIN/COMMIT/ROLLBACK.
     
     Example:
-        async with Connection("Server=localhost;Database=mydb") as conn:
-            async with Transaction(conn):
+        async with Transaction(server="localhost", database="mydb") as conn:
+            async with conn.transaction():
                 await conn.execute("INSERT INTO users VALUES (@P1)", ["Alice"])
-                result = await conn.query("SELECT * FROM users")
     """
     
-    def __init__(self, conn: Connection) -> None:
-        """
-        Initialize a transaction for the given connection.
-        
-        Args:
-            conn: An active Connection object
-        """
+    def __init__(
+        self,
+        connection_string: Optional[str] = None,
+        ssl_config: Optional[SslConfig] = None,
+        server: Optional[str] = None,
+        database: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        application_intent: Optional[ApplicationIntent | str] = None,
+        port: Optional[int] = None,
+        instance_name: Optional[str] = None,
+        application_name: Optional[str] = None,
+    ) -> None:
+        """Initialize a dedicated non-pooled connection for transactions."""
+        ...
+    
+    def query(
+        self,
+        sql: str,
+        params: Optional[List[Any]] = None,
+    ) -> Coroutine[Any, Any, FastExecutionResult]:
+        """Execute a SELECT query that returns rows."""
+        ...
+    
+    def execute(
+        self,
+        sql: str,
+        params: Optional[List[Any]] = None,
+    ) -> Coroutine[Any, Any, int]:
+        """Execute an INSERT/UPDATE/DELETE/DDL command."""
+        ...
+    
+    async def begin(self) -> None:
+        """Begin a transaction."""
+        ...
+    
+    async def commit(self) -> None:
+        """Commit the current transaction."""
+        ...
+    
+    async def rollback(self) -> None:
+        """Rollback the current transaction."""
+        ...
+    
+    def transaction(self) -> Any:
+        """Return an async context manager for transactions."""
+        ...
+    
+    async def close(self) -> None:
+        """Close the connection."""
         ...
     
     async def __aenter__(self) -> Transaction:
-        """Async context manager entry (executes BEGIN TRANSACTION)."""
+        """Async context manager entry (begins transaction)."""
         ...
     
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Async context manager exit (commits or rolls back the transaction)."""
+        """Async context manager exit (commits or rolls back)."""
         ...
 
 def version() -> str: ...

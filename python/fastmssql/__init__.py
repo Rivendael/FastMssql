@@ -56,64 +56,22 @@ class Connection:
 
 
 class Transaction:
-    """Single dedicated connection (non-pooled) for transaction support.
+    """Single dedicated connection for SQL Server transactions.
     
-    This class wraps a direct connection that is NOT pooled, allowing SQL Server
-    transactions (BEGIN/COMMIT/ROLLBACK) to work correctly since all operations
-    happen on the same connection.
+    Provides a non-pooled connection where all operations happen on the same
+    underlying connection, ensuring transaction safety for BEGIN/COMMIT/ROLLBACK.
     
-    Usage:
-        async with Transaction(connection_string) as conn:
+    Example:
+        async with Transaction(server="localhost", database="mydb") as conn:
             async with conn.transaction():
-                result = await conn.query("SELECT ...")
                 await conn.execute("INSERT INTO ...")
-    
-    Or explicitly with convenience methods:
-        async with Transaction(connection_string) as conn:
-            await conn.begin()
-            try:
-                await conn.query("SELECT ...")
-                await conn.execute("INSERT INTO ...")
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-    
-    Or manually (less convenient):
-        conn = Transaction(
-            server="localhost",
-            database="mydb",
-            username="sa",
-            password="password"
-        )
-        
-        try:
-            await conn.query("BEGIN TRANSACTION")
-            await conn.query("SELECT ...")
-            await conn.query("COMMIT TRANSACTION")
-        except Exception:
-            await conn.query("ROLLBACK TRANSACTION")
-        finally:
-            await conn.close()
     """
     
     def __init__(self, connection_string=None, ssl_config=None,
                  server=None, database=None, username=None, password=None,
                  application_intent=None, port=None, instance_name=None,
                  application_name=None):
-        """Initialize a single dedicated connection (non-pooled).
-        
-        Args:
-            connection_string: ADO.NET connection string
-            server: Server hostname
-            database: Database name
-            username: SQL Server username
-            password: SQL Server password
-            ssl_config: SslConfig for encryption
-            application_intent: "ReadOnly" or "ReadWrite"
-            port: Server port (default 1433)
-            instance_name: SQL Server instance name
-            application_name: Application name for server tracking
-        """
+        """Initialize a dedicated non-pooled connection for transactions."""
         self._rust_conn = _RustTransaction(
             connection_string=connection_string,
             ssl_config=ssl_config,
@@ -128,68 +86,29 @@ class Transaction:
         )
     
     async def query(self, sql, params=None):
-        """Execute a query that returns rows.
-        
-        All queries on this connection use the same underlying connection,
-        making transactions safe.
-        
-        Args:
-            sql: SQL query string with @P1, @P2, etc. placeholders
-            params: Optional list or Parameters object
-            
-        Returns:
-            FastExecutionResult with query results
-        """
+        """Execute a SELECT query that returns rows."""
         return await self._rust_conn.query(sql, params)
     
     async def execute(self, sql, params=None):
-        """Execute a command that doesn't return rows.
-        
-        Args:
-            sql: SQL command string with @P1, @P2, etc. placeholders
-            params: Optional list or Parameters object
-            
-        Returns:
-            Number of affected rows
-        """
+        """Execute an INSERT/UPDATE/DELETE/DDL command."""
         return await self._rust_conn.execute(sql, params)
     
     async def begin(self):
-        """Begin a transaction.
-        
-        Note: Tiberius throws a RuntimeError for transaction commands, but they
-        actually execute successfully. This method handles that internally.
-        
-        Usage:
-            await conn.begin()
-            try:
-                await conn.execute("INSERT INTO ...")
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-        """
+        """Begin a transaction."""
         try:
             await self._rust_conn.query("BEGIN TRANSACTION")
         except RuntimeError:
             pass  # Expected: tiberius throws error but transaction opens successfully
     
     async def commit(self):
-        """Commit the current transaction.
-        
-        Note: Tiberius throws a RuntimeError for transaction commands, but they
-        actually execute successfully. This method handles that internally.
-        """
+        """Commit the current transaction."""
         try:
             await self._rust_conn.query("COMMIT TRANSACTION")
         except RuntimeError:
             pass  # Expected: tiberius throws error but transaction commits successfully
     
     async def rollback(self):
-        """Rollback the current transaction.
-        
-        Note: Tiberius throws a RuntimeError for transaction commands, but they
-        actually execute successfully. This method handles that internally.
-        """
+        """Rollback the current transaction."""
         try:
             await self._rust_conn.query("ROLLBACK TRANSACTION")
         except RuntimeError:
