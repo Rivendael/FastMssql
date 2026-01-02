@@ -20,14 +20,14 @@ jobs:
           - os: ubuntu-latest
             arch: x86_64
 
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             arch: aarch64
 
           - os: ubuntu-latest
             arch: x86_64
             manylinux: musllinux_1_1
 
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             arch: aarch64
             manylinux: musllinux_1_1
 
@@ -113,7 +113,6 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: wheels-*
           path: dist
           merge-multiple: true
 
