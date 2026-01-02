@@ -18,7 +18,7 @@ mod transaction;
 
 pub use connection::PyConnection;
 pub use transaction::Transaction;
-pub use types::{PyFastRow, PyFastExecutionResult};
+pub use types::{PyFastRow, PyQueryStream};
 pub use py_parameters::{Parameter, Parameters};
 pub use pool_config::PyPoolConfig;
 pub use ssl_config::{PySslConfig, EncryptionLevel};
@@ -50,7 +50,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyConnection>()?;
     m.add_class::<Transaction>()?;
     m.add_class::<PyFastRow>()?;
-    m.add_class::<PyFastExecutionResult>()?;
+    m.add_class::<PyQueryStream>()?;
     m.add_class::<Parameter>()?;
     m.add_class::<Parameters>()?;
     m.add_class::<PyPoolConfig>()?;

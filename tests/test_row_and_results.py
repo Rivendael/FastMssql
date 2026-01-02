@@ -1,8 +1,9 @@
 """
-Tests for PyFastRow and PyFastExecutionResult
+Tests for PyFastRow and PyQueryStream
 
 This module tests the row and result set classes to ensure proper access patterns,
-type handling, and edge cases when retrieving data from queries.
+type handling, and edge cases when retrieving data from queries. Includes comprehensive
+tests for async iteration, backward-compatible methods, and result streaming.
 """
 
 import pytest
@@ -357,5 +358,569 @@ async def test_multiple_result_rows_independence(test_config: Config):
             assert row1['val'] != row2['val']
             assert row1['id'] == 1
             assert row2['id'] == 2
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_fetchone_method(test_config: Config):
+    """Test fetchone() method returns first row."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3")
+            
+            row = result.fetchone()
+            assert row is not None
+            assert row['id'] == 1
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_fetchone_empty(test_config: Config):
+    """Test fetchone() on empty result."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("SELECT 1 as id WHERE 0=1")
+            
+            row = result.fetchone()
+            assert row is None
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_fetchmany_method(test_config: Config):
+    """Test fetchmany() method."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3 
+                UNION ALL SELECT 4 UNION ALL SELECT 5
+            """)
+            
+            # Fetch 2 rows
+            rows = result.fetchmany(2)
+            assert len(rows) == 2
+            assert rows[0]['id'] == 1
+            assert rows[1]['id'] == 2
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_fetchmany_more_than_available(test_config: Config):
+    """Test fetchmany() requesting more rows than available."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("SELECT 1 as id UNION ALL SELECT 2")
+            
+            # Try to fetch 10 rows (only 2 available)
+            rows = result.fetchmany(10)
+            assert len(rows) == 2
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_fetchall_method(test_config: Config):
+    """Test fetchall() method."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3
+            """)
+            
+            rows = result.fetchall()
+            assert len(rows) == 3
+            assert rows[0]['id'] == 1
+            assert rows[1]['id'] == 2
+            assert rows[2]['id'] == 3
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_fetchall_empty(test_config: Config):
+    """Test fetchall() on empty result."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("SELECT 1 as id WHERE 0=1")
+            
+            rows = result.fetchall()
+            assert len(rows) == 0
+            assert isinstance(rows, list)
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_position_tracking(test_config: Config):
+    """Test position tracking during iteration."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3
+            """)
+            
+            assert result.position() == 0
+            
+            result.fetchone()
+            assert result.position() == 1
+            
+            result.fetchone()
+            assert result.position() == 2
+            
+            result.fetchone()
+            assert result.position() == 3
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_reset_method(test_config: Config):
+    """Test reset() method to restart iteration."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3
+            """)
+            
+            # Read some rows
+            row1 = result.fetchone()
+            assert row1['id'] == 1
+            assert result.position() == 1
+            
+            # Reset
+            result.reset()
+            assert result.position() == 0
+            
+            # Should be able to read from start again
+            row1_again = result.fetchone()
+            assert row1_again['id'] == 1
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_columns_metadata(test_config: Config):
+    """Test accessing columns metadata."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as col1, 'text' as col2, 3.14 as col3
+            """)
+            
+            columns = result.columns()
+            assert columns is not None
+            assert len(columns) == 3
+            assert 'col1' in columns
+            assert 'col2' in columns
+            assert 'col3' in columns
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_length(test_config: Config):
+    """Test len() on QueryStream."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3
+            """)
+            
+            assert len(result) == 3
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_is_empty(test_config: Config):
+    """Test is_empty() method."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            # Non-empty result
+            result1 = await conn.query("SELECT 1 as id")
+            assert not result1.is_empty()
+            
+            # Empty result
+            result2 = await conn.query("SELECT 1 as id WHERE 0=1")
+            assert result2.is_empty()
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+# ============================================================================
+# ITERATION TESTS - Manual iteration over results
+# ============================================================================
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_fetchone_loop(test_config: Config):
+    """Test manual iteration using fetchone() in a loop."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+            """)
+            
+            # Manual iteration with fetchone
+            rows = []
+            while True:
+                row = result.fetchone()
+                if row is None:
+                    break
+                rows.append(row)
+            
+            assert len(rows) == 4
+            assert rows[0]['id'] == 1
+            assert rows[1]['id'] == 2
+            assert rows[2]['id'] == 3
+            assert rows[3]['id'] == 4
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_fetchmany_loop(test_config: Config):
+    """Test batch iteration using fetchmany() in a loop."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3 
+                UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6
+            """)
+            
+            # Iterate in batches of 2
+            all_rows = []
+            batch_size = 2
+            while True:
+                batch = result.fetchmany(batch_size)
+                if not batch:
+                    break
+                all_rows.extend(batch)
+            
+            assert len(all_rows) == 6
+            for i, row in enumerate(all_rows, 1):
+                assert row['id'] == i
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_rows_list_comprehension(test_config: Config):
+    """Test iteration using rows() with list comprehension."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id, 'a' as letter
+                UNION ALL SELECT 2, 'b'
+                UNION ALL SELECT 3, 'c'
+                UNION ALL SELECT 4, 'd'
+                UNION ALL SELECT 5, 'e'
+            """)
+            
+            rows = result.rows()
+            
+            # Use list comprehension to filter
+            even_ids = [r for r in rows if r['id'] % 2 == 0]
+            assert len(even_ids) == 2
+            assert even_ids[0]['id'] == 2
+            assert even_ids[1]['id'] == 4
+            
+            # Use list comprehension to transform
+            letters = [r['letter'].upper() for r in rows]
+            assert letters == ['A', 'B', 'C', 'D', 'E']
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_rows_for_loop(test_config: Config):
+    """Test iteration using rows() in a for loop."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as value UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+            """)
+            
+            rows = result.rows()
+            
+            # Simple for loop
+            sum_value = 0
+            count = 0
+            for row in rows:
+                sum_value += row['value']
+                count += 1
+            
+            assert count == 5
+            assert sum_value == 15  # 1+2+3+4+5
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_enumerate(test_config: Config):
+    """Test iteration with enumerate to get index."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 'first' as name
+                UNION ALL SELECT 'second'
+                UNION ALL SELECT 'third'
+            """)
+            
+            rows = result.rows()
+            
+            for idx, row in enumerate(rows):
+                if idx == 0:
+                    assert row['name'] == 'first'
+                elif idx == 1:
+                    assert row['name'] == 'second'
+                elif idx == 2:
+                    assert row['name'] == 'third'
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_reset_and_reiterate(test_config: Config):
+    """Test resetting position and re-iterating."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3
+            """)
+            
+            # First iteration
+            first_rows = []
+            while True:
+                row = result.fetchone()
+                if row is None:
+                    break
+                first_rows.append(row)
+            
+            assert len(first_rows) == 3
+            assert result.position() == 3
+            
+            # Reset and iterate again
+            result.reset()
+            assert result.position() == 0
+            
+            second_rows = []
+            while True:
+                row = result.fetchone()
+                if row is None:
+                    break
+                second_rows.append(row)
+            
+            assert len(second_rows) == 3
+            assert first_rows[0]['id'] == second_rows[0]['id']
+            assert first_rows[1]['id'] == second_rows[1]['id']
+            assert first_rows[2]['id'] == second_rows[2]['id']
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_zip(test_config: Config):
+    """Test iteration combining multiple result sets."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result1 = await conn.query("SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3")
+            result2 = await conn.query("SELECT 'a' as letter UNION ALL SELECT 'b' UNION ALL SELECT 'c'")
+            
+            rows1 = result1.rows()
+            rows2 = result2.rows()
+            
+            # Zip two result sets
+            paired = list(zip(rows1, rows2))
+            assert len(paired) == 3
+            assert paired[0][0]['id'] == 1 and paired[0][1]['letter'] == 'a'
+            assert paired[1][0]['id'] == 2 and paired[1][1]['letter'] == 'b'
+            assert paired[2][0]['id'] == 3 and paired[2][1]['letter'] == 'c'
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_map(test_config: Config):
+    """Test iteration with map function."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id, 'text1' as data
+                UNION ALL SELECT 2, 'text2'
+                UNION ALL SELECT 3, 'text3'
+            """)
+            
+            rows = result.rows()
+            
+            # Extract just the IDs using map
+            ids = list(map(lambda r: r['id'], rows))
+            assert ids == [1, 2, 3]
+            
+            # Extract and transform using map
+            upper_data = list(map(lambda r: r['data'].upper(), rows))
+            assert upper_data == ['TEXT1', 'TEXT2', 'TEXT3']
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_partial_then_fetchall(test_config: Config):
+    """Test partial iteration followed by fetchall."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+            """)
+            
+            # Read first 2 rows manually
+            row1 = result.fetchone()
+            row2 = result.fetchone()
+            assert row1['id'] == 1
+            assert row2['id'] == 2
+            assert result.position() == 2
+            
+            # Fetch remaining rows
+            remaining = result.fetchall()
+            assert len(remaining) == 2  # Only 2 rows left
+            assert remaining[0]['id'] == 3
+            assert remaining[1]['id'] == 4
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_any(test_config: Config):
+    """Test using any() to check if condition exists."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id, NULL as optional_field
+                UNION ALL SELECT 2, 'value'
+                UNION ALL SELECT 3, NULL
+            """)
+            
+            rows = result.rows()
+            
+            # Check if any row has optional_field
+            has_optional = any(r['optional_field'] is not None for r in rows)
+            assert has_optional is True
+            
+            # Check if any row has specific ID
+            has_id_5 = any(r['id'] == 5 for r in rows)
+            assert has_id_5 is False
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_all(test_config: Config):
+    """Test using all() to check if all rows meet condition."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id, 10 as value
+                UNION ALL SELECT 2, 20
+                UNION ALL SELECT 3, 30
+            """)
+            
+            rows = result.rows()
+            
+            # Check if all IDs are positive
+            all_positive = all(r['id'] > 0 for r in rows)
+            assert all_positive is True
+            
+            # Check if all values are > 5
+            all_gt_5 = all(r['value'] > 5 for r in rows)
+            assert all_gt_5 is True
+            
+            # Check if all values are > 20
+            all_gt_20 = all(r['value'] > 20 for r in rows)
+            assert all_gt_20 is False
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_sorted(test_config: Config):
+    """Test sorting result set after fetching."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 3 as id, 'c' as letter
+                UNION ALL SELECT 1, 'a'
+                UNION ALL SELECT 2, 'b'
+            """)
+            
+            rows = result.rows()
+            
+            # Sort by ID
+            sorted_by_id = sorted(rows, key=lambda r: r['id'])
+            assert sorted_by_id[0]['id'] == 1
+            assert sorted_by_id[1]['id'] == 2
+            assert sorted_by_id[2]['id'] == 3
+            
+            # Sort by letter in reverse
+            sorted_by_letter_desc = sorted(rows, key=lambda r: r['letter'], reverse=True)
+            assert sorted_by_letter_desc[0]['letter'] == 'c'
+            assert sorted_by_letter_desc[1]['letter'] == 'b'
+            assert sorted_by_letter_desc[2]['letter'] == 'a'
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_iterate_with_filter(test_config: Config):
+    """Test using filter() to select subset of rows."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("""
+                SELECT 1 as id UNION ALL SELECT 2 UNION ALL SELECT 3 
+                UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6
+            """)
+            
+            rows = result.rows()
+            
+            # Filter even numbers
+            even = list(filter(lambda r: r['id'] % 2 == 0, rows))
+            assert len(even) == 3
+            assert even[0]['id'] == 2
+            assert even[1]['id'] == 4
+            assert even[2]['id'] == 6
+            
+            # Filter odd numbers
+            odd = list(filter(lambda r: r['id'] % 2 == 1, rows))
+            assert len(odd) == 3
+            assert odd[0]['id'] == 1
+            assert odd[1]['id'] == 3
+            assert odd[2]['id'] == 5
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

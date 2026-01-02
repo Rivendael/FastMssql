@@ -173,44 +173,72 @@ class FastRow:
         """Convert row to dictionary mapping column names to values."""
         ...
 
-class FastExecutionResult:
+class QueryStream:
     """
-    Result object for query execution containing rows or affected count.
+    Async iterator for streaming query results row-by-row.
     
-    Provides both immediate and streaming access to result rows, with support for
-    affected row counts from INSERT/UPDATE/DELETE operations.
+    Enables memory-efficient processing of large result sets by fetching rows
+    on-demand instead of loading all rows into memory at once.
+    
+    Example:
+        stream = await conn.query("SELECT * FROM large_table")
+        async for row in stream:
+            process(row)
+        
+        # Or fetch all remaining rows at once
+        remaining = await stream.all()
     """
     
-    def rows(self) -> List[FastRow] | None:
-        """Get all rows if this is a SELECT result, or None if this is an update result."""
+    async def __anext__(self) -> FastRow:
+        """Get the next row in the stream (for async iteration)."""
         ...
     
-    def affected_rows(self) -> int | None:
-        """Get number of affected rows for INSERT/UPDATE/DELETE operations, or None for SELECT."""
+    async def all(self) -> List[FastRow]:
+        """Load and return all remaining rows at once."""
+        ...
+    
+    async def fetch(self, n: int) -> List[FastRow]:
+        """Fetch the next n rows as a batch."""
+        ...
+    
+    def columns(self) -> List[str]:
+        """Get list of all column names in the result set."""
+        ...
+    
+    def reset(self) -> None:
+        """Reset iteration to the beginning of the stream."""
+        ...
+    
+    def position(self) -> int:
+        """Get the current position in the stream (number of rows iterated)."""
+        ...
+    
+    def len(self) -> int:
+        """Get the total number of rows in the stream."""
+        ...
+    
+    def is_empty(self) -> bool:
+        """Check if the stream is empty."""
         ...
     
     def has_rows(self) -> bool:
-        """Check if this result contains any rows."""
+        """Check if stream has rows."""
         ...
     
-    def has_affected_count(self) -> bool:
-        """Check if this result contains an affected row count."""
+    def rows(self) -> List[FastRow]:
+        """Get all rows at once (resets to beginning)."""
         ...
     
-    def row_count(self) -> int:
-        """Get the number of rows in this result set."""
+    def fetchone(self) -> Optional[FastRow]:
+        """Fetch the next single row."""
         ...
     
-    def fetchone(self) -> FastRow | None:
-        """Fetch the next row from the result set, or None if no more rows."""
-        ...
-    
-    def fetchmany(self, size: int = 1) -> List[FastRow]:
-        """Fetch up to `size` rows from the result set."""
+    def fetchmany(self, n: int) -> List[FastRow]:
+        """Fetch the next n rows."""
         ...
     
     def fetchall(self) -> List[FastRow]:
-        """Fetch all remaining rows from the result set."""
+        """Fetch all remaining rows."""
         ...
 
 class Parameter:
@@ -392,16 +420,17 @@ class Connection:
         self,
         sql: str,
         params: Optional[List[Any]] = None,
-    ) -> Coroutine[Any, Any, FastExecutionResult]:
+    ) -> Coroutine[Any, Any, QueryStream]:
         """
-        Execute SELECT query that returns rows.
+        Execute SELECT query that returns rows as an async stream.
+        
+        Returns a QueryStream for memory-efficient iteration over large result sets.
         
         Args:
             sql: SQL query with @P1, @P2, etc. placeholders for parameters
             params: List of parameter values in order
-            
         Returns:
-            FastExecutionResult containing the query rows
+            QueryStream for iterating over result rows
         """
         ...
     
@@ -456,7 +485,7 @@ class Connection:
     def query_batch(
         self,
         queries: List[str] | List[Tuple[str, Optional[List[Any]]]],
-    ) -> Coroutine[Any, Any, List[FastExecutionResult]]:
+    ) -> Coroutine[Any, Any, List[QueryStream]]:
         """
         Execute multiple SELECT queries in a single batch.
         
@@ -464,7 +493,7 @@ class Connection:
             queries: List of (sql, params) tuples or just sql strings
             
         Returns:
-            List of FastExecutionResult objects for each query
+            List of QueryStream objects for each query
         """
         ...
     
@@ -527,8 +556,8 @@ class Transaction:
         self,
         sql: str,
         params: Optional[List[Any]] = None,
-    ) -> Coroutine[Any, Any, FastExecutionResult]:
-        """Execute a SELECT query that returns rows."""
+    ) -> Coroutine[Any, Any, QueryStream]:
+        """Execute a SELECT query that returns rows as a stream."""
         ...
     
     def execute(
@@ -537,6 +566,41 @@ class Transaction:
         params: Optional[List[Any]] = None,
     ) -> Coroutine[Any, Any, int]:
         """Execute an INSERT/UPDATE/DELETE/DDL command."""
+        ...
+    
+    def execute_batch(
+        self,
+        commands: List[tuple[str, Optional[List[Any]]]],
+    ) -> Coroutine[Any, Any, List[int]]:
+        """
+        Execute multiple commands in a batch on the transaction connection.
+        
+        Does NOT automatically wrap in transaction - use begin/commit/rollback manually.
+        Returns a list of row counts affected by each command.
+        
+        Args:
+            commands: List of (sql, parameters) tuples
+        
+        Returns:
+            List of integers, one per command, indicating rows affected
+        """
+        ...
+    
+    def query_batch(
+        self,
+        queries: List[tuple[str, Optional[List[Any]]]],
+    ) -> Coroutine[Any, Any, List[QueryStream]]:
+        """
+        Execute multiple queries in a batch on the transaction connection.
+        
+        Returns a list of QueryStream objects, one per query.
+        
+        Args:
+            queries: List of (sql, parameters) tuples
+        
+        Returns:
+            List of QueryStream objects
+        """
         ...
     
     async def begin(self) -> None:
@@ -549,10 +613,6 @@ class Transaction:
     
     async def rollback(self) -> None:
         """Rollback the current transaction."""
-        ...
-    
-    def transaction(self) -> Any:
-        """Return an async context manager for transactions."""
         ...
     
     async def close(self) -> None:
