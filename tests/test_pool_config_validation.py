@@ -43,8 +43,8 @@ def test_pool_config_default_values():
     config = PoolConfig()
     
     # Check defaults (from code: max_size=10, min_idle=Some(1), connection_timeout_secs=Some(30))
-    assert config.max_size == 10
-    assert config.min_idle == 1
+    assert config.max_size == 20
+    assert config.min_idle == 2
     assert config.connection_timeout_secs == 30
 
 

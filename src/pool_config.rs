@@ -17,7 +17,7 @@ pub struct PyPoolConfig {
 #[pymethods]
 impl PyPoolConfig {
     #[new]
-    #[pyo3(signature = (max_size = 10, min_idle = Some(1), max_lifetime_secs = None, idle_timeout_secs = None, connection_timeout_secs = Some(30), test_on_check_out = None, retry_connection = None))]
+    #[pyo3(signature = (max_size = 20, min_idle = Some(2), max_lifetime_secs = None, idle_timeout_secs = None, connection_timeout_secs = Some(30), test_on_check_out = None, retry_connection = None))]
     pub fn new(
         max_size: u32,
         min_idle: Option<u32>,

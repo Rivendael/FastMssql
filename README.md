@@ -40,7 +40,7 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 - High performance: optimized for very high RPS and low overhead
 - Rust core: memory‑safe and reliable, tuned Tokio runtime
 - No ODBC: native SQL Server client, no external drivers needed
-- Connection pooling: bb8‑based, smart defaults (default max_size=10, min_idle=2)
+- Connection pooling: bb8‑based, smart defaults (default max_size=20, min_idle=2)
 - Async first: clean async/await API with `async with` context managers
 - Strong typing: fast conversions for common SQL Server types
 - Thread‑safe: safe to use in concurrent apps
@@ -297,7 +297,7 @@ async with Connection(conn_str, pool_config=high) as conn:
     rows = (await conn.query("SELECT 1 AS ok")).rows()
 ```
 
-Default pool (if omitted): `max_size=10`, `min_idle=2`.
+Default pool (if omitted): `max_size=20`, `min_idle=2`.
 
 
 ### Transactions
