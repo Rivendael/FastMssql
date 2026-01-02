@@ -23,5 +23,6 @@ def test_config():
 
 def pytest_configure(config):
     """Configure pytest settings globally."""
-    config.option.timeout = 1
+    # Set timeout to 30 seconds for integration tests (database operations can be slow)
+    config.option.timeout = 30
 

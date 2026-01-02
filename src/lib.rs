@@ -14,8 +14,10 @@ mod pool_manager;
 mod parameter_conversion;
 mod batch;
 mod type_mapping;
+mod transaction;
 
 pub use connection::PyConnection;
+pub use transaction::Transaction;
 pub use types::{PyFastRow, PyFastExecutionResult};
 pub use py_parameters::{Parameter, Parameters};
 pub use pool_config::PyPoolConfig;
@@ -46,6 +48,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     pyo3_async_runtimes::tokio::init(builder);
     
     m.add_class::<PyConnection>()?;
+    m.add_class::<Transaction>()?;
     m.add_class::<PyFastRow>()?;
     m.add_class::<PyFastExecutionResult>()?;
     m.add_class::<Parameter>()?;
