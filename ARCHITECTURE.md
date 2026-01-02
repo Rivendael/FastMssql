@@ -327,19 +327,27 @@ fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 
 **Supported SQL Server Types:**
 
-| SQL Server Type     | Python Type | Notes                                |
-|---------------------|-------------|--------------------------------------|
-| INT, BIGINT         | int         | 32/64-bit signed integers            |
-| FLOAT, REAL         | float       | IEEE 754 floating point              |
-| VARCHAR, NVARCHAR   | str         | UTF-8 strings                        |
-| CHAR, NCHAR         | str         | Fixed-width strings                  |
-| BIT                 | int         | 0 or 1                               |
-| BINARY, VARBINARY   | bytes       | Raw bytes                            |
-| DECIMAL, NUMERIC    | str         | High-precision (converted to string) |
-| DATETIME, DATETIME2 | str         | ISO 8601 format                      |
-| DATE, TIME          | str         | Specialized formats                  |
-| UNIQUEIDENTIFIER    | str         | UUID as string                       |
-| NULL                | None        | Python None                          |
+| SQL Server Type          | Python Type  | Notes                                         |
+|--------------------------|--------------|-----------------------------------------------|
+| INT, BIGINT, SMALLINT    | int          | 8/16/32/64-bit signed integers (INT1-INT8)   |
+| TINYINT                  | int          | Unsigned 8-bit integer                        |
+| FLOAT, REAL              | float        | IEEE 754 floating point (FLOAT4, FLOAT8)      |
+| NUMERIC, DECIMAL         | Decimal      | High-precision numeric (via decimal module)   |
+| VARCHAR, NVARCHAR        | str          | UTF-8 strings (variable-length)               |
+| CHAR, NCHAR              | str          | Fixed-width strings                           |
+| TEXT, NTEXT              | str          | Legacy large text types                       |
+| BIT                      | int          | 0 or 1 boolean values                         |
+| BINARY, VARBINARY        | bytes        | Raw bytes (BIGVARBINARY, BIGBINARY)           |
+| IMAGE                    | bytes        | Legacy binary type                            |
+| MONEY, SMALLMONEY        | Decimal      | Financial data (via decimal module)           |
+| DATETIME, DATETIME2      | datetime     | Date and time values                          |
+| DATETIME4                | datetime     | 32-bit datetime                               |
+| DATE                     | date         | Date only values                              |
+| TIME                     | time         | Time only values                              |
+| DATETIMEOFFSET           | datetime     | DateTime with timezone offset                 |
+| UNIQUEIDENTIFIER         | str          | UUID as string                                |
+| XML                      | str          | XML data as string                            |
+| NULL                     | None         | Python None                                   |
 
 **Optimization Strategy:**
 
