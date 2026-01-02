@@ -114,7 +114,9 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: 3.12
-          enable-cache: true
+          # No caching needed for publish step
+          enable-cache: false
+
 
       - name: Publish
         run: uv publish --dry-run dist/*
