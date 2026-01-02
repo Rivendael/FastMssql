@@ -117,7 +117,7 @@ required-version = ">=0.9.7"
 [tool.cibuildwheel]
 build-frontend = "build[uv]"
 build = "*"
-archs = ["auto"]
+archs = ["x86_64", "aarch64", "arm64", "universal2", "AMD64", "ARM64"]
 
 [tool.cibuildwheel.linux]
 repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
