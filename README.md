@@ -16,6 +16,25 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![Rust Backend](https://img.shields.io/badge/backend-rust-orange)](https://github.com/Rivendael/pymssql-rs)
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Features](#features)
+- [Key API methods](#key-api-methods)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Explicit Connection Management](#explicit-connection-management)
+- [Usage](#usage)
+- [Performance tips](#performance-tips)
+- [Examples & benchmarks](#examples--benchmarks)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Third‑party attributions](#third%E2%80%91party-attributions)
+- [Acknowledgments](#acknowledgments)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Features
 
 - High performance: optimized for very high RPS and low overhead
@@ -27,7 +46,6 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 - Thread‑safe: safe to use in concurrent apps
 - Cross‑platform: Windows, macOS, Linux
 - Batch operations: high-performance bulk inserts and batch query execution
-
 
 ## Key API methods
 
@@ -44,7 +62,6 @@ rows = result.rows()
 # Use execute() for data modification
 affected = await conn.execute("INSERT INTO users (name) VALUES (@P1)", ["John"])
 ```
-
 
 ## Installation
 
@@ -84,8 +101,8 @@ asyncio.run(main())
 
 ## Explicit Connection Management
 
-When not utilizing Python's context manager (async with), **FastMssql** uses *lazy connection initialization*:  
-if you call `query()` or `execute()` on a new `Connection`, the underlying pool is created if not already present. 
+When not utilizing Python's context manager (async with), **FastMssql** uses *lazy connection initialization*:
+if you call `query()` or `execute()` on a new `Connection`, the underlying pool is created if not already present.
 
 For more control, you can explicitly connect and disconnect:
 
@@ -108,9 +125,10 @@ async def main():
     # Explicitly disconnect
     await conn.disconnect()
     assert not await conn.is_connected()
-    
+
 asyncio.run(main())
 ```
+
 ## Usage
 
 ### Connection options
@@ -132,7 +150,7 @@ async def main():
 asyncio.run(main())
 ```
 
-2) Individual parameters
+1) Individual parameters
 
 ```python
 import asyncio
@@ -152,7 +170,6 @@ asyncio.run(main())
 ```
 
 Note: Windows authentication (Trusted Connection) is currently not supported. Use SQL authentication (username/password).
-
 
 ### Working with data
 
@@ -187,7 +204,6 @@ asyncio.run(main())
 
 Parameters use positional placeholders: `@P1`, `@P2`, ... Provide values as a list in the same order.
 
-
 ### Batch operations
 
 For high-throughput scenarios, use batch methods to reduce network round-trips:
@@ -199,7 +215,7 @@ from fastmssql import Connection
 async def main_fetching():
     # Replace with your actual connection string
     async with Connection("Server=.;Database=MyDB;User Id=sa;Password=StrongPwd;") as conn:
-        
+
         # --- 1. Prepare Data for Demonstration ---
         columns = ["name", "email", "age"]
         data_rows = [
@@ -213,23 +229,23 @@ async def main_fetching():
 
         # --- 2. Execute Query and Retrieve the Result Object ---
         print("\n--- Result Object Fetching (fetchone, fetchmany, fetchall) ---")
-        
+
         # The Result object is returned after the awaitable query executes.
         result = await conn.query("SELECT name, age FROM users ORDER BY age DESC")
-        
+
         # fetchone(): Retrieves the next single row synchronously.
-        oldest_user = result.fetchone() 
+        oldest_user = result.fetchone()
         if oldest_user:
             print(f"1. fetchone: Oldest user is {oldest_user['name']} (Age: {oldest_user['age']})")
-        
+
         # fetchmany(2): Retrieves the next set of rows synchronously.
         next_two_users = result.fetchmany(2)
         print(f"2. fetchmany: Retrieved {len(next_two_users)} users: {[r['name'] for r in next_two_users]}.")
-        
+
         # fetchall(): Retrieves all remaining rows synchronously.
         remaining_users = result.fetchall()
         print(f"3. fetchall: Retrieved all {len(remaining_users)} remaining users: {[r['name'] for r in remaining_users]}.")
-        
+
         # Exhaustion Check: Subsequent calls return None/[]
         print(f"4. Exhaustion Check (fetchone): {result.fetchone()}")
         print(f"5. Exhaustion Check (fetchmany): {result.fetchmany(1)}")
@@ -240,10 +256,10 @@ async def main_fetching():
             ("UPDATE users SET last_login = GETDATE() WHERE name = @P1", ["Alice Johnson"]),
             ("INSERT INTO user_logs (action, user_name) VALUES (@P1, @P2)", ["login", "Alice Johnson"])
         ]
-        
+
         affected_counts = await conn.execute_batch(commands)
         print(f"Updated {affected_counts[0]} users, inserted {affected_counts[1]} logs")
-        
+
 asyncio.run(main_fetching())
 ```
 
@@ -364,6 +380,7 @@ Choose `Transaction` when you need guaranteed transaction isolation; use `Connec
 For `Required` and `LoginOnly` encryption, you must specify how to validate the server certificate:
 
 **Option 1: Trust Server Certificate** (development/self-signed certs):
+
 ```python
 from fastmssql import SslConfig, EncryptionLevel, Connection
 
@@ -377,6 +394,7 @@ async with Connection(conn_str, ssl_config=ssl) as conn:
 ```
 
 **Option 2: Custom CA Certificate** (production):
+
 ```python
 from fastmssql import SslConfig, EncryptionLevel, Connection
 
@@ -397,7 +415,6 @@ Helpers:
 - `SslConfig.with_ca_certificate(path)` – use custom CA
 - `SslConfig.login_only()` / `SslConfig.disabled()` – legacy modes
 - `SslConfig.disabled()` – no encryption (not recommended)
-
 
 ## Performance tips
 
@@ -420,12 +437,10 @@ async def main():
 asyncio.run(main())
 ```
 
-
 ## Examples & benchmarks
 
 - Examples: `examples/comprehensive_example.py`
 - Benchmarks: `benchmarks/`
-
 
 ## Troubleshooting
 
@@ -434,11 +449,9 @@ asyncio.run(main())
 - Timeouts: increase pool size or tune `connection_timeout_secs`
 - Parameters: use `@P1, @P2, ...` and pass a list of values
 
-
 ## Contributing
 
 Contributions are welcome. Please open an issue or PR.
-
 
 ## License
 
@@ -449,7 +462,6 @@ See the [LICENSE](LICENSE) file for details.
 ## Third‑party attributions
 
 Built on excellent open source projects: Tiberius, PyO3, pyo3‑asyncio, bb8, tokio, serde, pytest, maturin, and more. See `licenses/NOTICE.txt` for the full list. The full texts of Apache‑2.0 and MIT are in `licenses/`.
-
 
 ## Acknowledgments
 
