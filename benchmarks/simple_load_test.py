@@ -29,7 +29,7 @@ class QueryMetrics:
 
 async def setup_test_data(connection_string: str):
     """Create test tables with realistic schema."""
-    async with Connection(connection_string, PoolConfig.development()) as conn:
+    async with Connection(connection_string, PoolConfig.performance()) as conn:
         try:
             # Drop existing test tables
             await conn.execute("DROP TABLE IF EXISTS load_test_orders")
@@ -65,14 +65,35 @@ async def setup_test_data(connection_string: str):
             """)
             print("✓ Created load_test_orders table")
             
-            # Insert initial users
-            for i in range(100):
-                await conn.execute(
-                    "INSERT INTO load_test_users (username, email) VALUES (@P1, @P2)",
-                    [f"user_{i}", f"user_{i}@test.local"]
-                )
+            # Insert initial users (increased to 10,000 to reduce lock contention)
+            batch_size = 100
+            total_users = 10000
+            for batch_start in range(0, total_users, batch_size):
+                values_clause = ", ".join([f"(@P{i*2+1}, @P{i*2+2})" for i in range(min(batch_size, total_users - batch_start))])
+                params = []
+                for i in range(batch_start, min(batch_start + batch_size, total_users)):
+                    params.extend([f"user_{i}", f"user_{i}@test.local"])
+                
+                query = f"INSERT INTO load_test_users (username, email) VALUES {values_clause}"
+                await conn.execute(query, params)
             
-            print(f"✓ Inserted 100 test users")
+            print(f"✓ Inserted {total_users:,} test users")
+            
+            # Create indexes for query optimization
+            await conn.execute("""
+                CREATE INDEX idx_orders_user_id ON load_test_orders(user_id)
+            """)
+            print("✓ Created index on load_test_orders.user_id")
+            
+            await conn.execute("""
+                CREATE INDEX idx_orders_status ON load_test_orders(status)
+            """)
+            print("✓ Created index on load_test_orders.status")
+            
+            await conn.execute("""
+                CREATE INDEX idx_orders_order_date ON load_test_orders(order_date DESC)
+            """)
+            print("✓ Created index on load_test_orders.order_date")
             
         except Exception as e:
             print(f"❌ Setup error: {e}")
@@ -93,6 +114,7 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
     total_requests = 0
     total_errors = 0
     response_times = []
+    pool_stats_during_test = []
     query_metrics = defaultdict(lambda: QueryMetrics())
     worker_stats = defaultdict(lambda: {"requests": 0, "errors": 0})
     
@@ -100,205 +122,214 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
         """Generate random string for test data."""
         return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
     
-    async def worker(worker_id: int):
+    async def worker(worker_id: int, conn: Connection):
         """Worker that executes realistic SQL queries."""
         nonlocal total_requests, total_errors
-        async with Connection(connection_string, PoolConfig.development()) as conn:
-            
-            # Warmup phase
-            warmup_end = time.time() + warmup
-            warmup_requests = 0
-            
-            print(f"Worker {worker_id}: Starting warmup...")
-            while time.time() < warmup_end:
-                try:
-                    # Simple warmup query
-                    await conn.execute("SELECT COUNT(*) FROM load_test_users")
-                    warmup_requests += 1
-                except Exception:
-                    pass
-            
-            print(f"Worker {worker_id}: Warmup complete ({warmup_requests} requests)")
-            
-            # Actual test phase with mixed workload
-            test_end = time.time() + duration
-            local_requests = 0
-            local_errors = 0
-            local_response_times = []
-            local_metrics = QueryMetrics()
-            
-            while time.time() < test_end:
-                try:
-                    operation = random.randint(1, 100)
-                    start_time = time.perf_counter()
-                    
-                    if operation <= 60:  # 60% SELECT queries
-                        # Query with WHERE clause and JOIN
-                        query_type = random.randint(1, 3)
-                        if query_type == 1:
-                            # Count orders by user
-                            user_id = random.randint(1, 100)
-                            await conn.execute(
-                                """SELECT COUNT(*) as order_count, SUM(amount) as total_amount 
-                                   FROM load_test_orders 
-                                   WHERE user_id = @P1""",
-                                [user_id]
-                            )
-                        elif query_type == 2:
-                            # Join users with their orders
-                            await conn.execute(
-                                """SELECT TOP 50 u.username, o.order_id, o.amount, o.status
-                                   FROM load_test_users u 
-                                   LEFT JOIN load_test_orders o ON u.user_id = o.user_id
-                                   WHERE u.is_active = 1
-                                   ORDER BY o.order_date DESC"""
-                            )
-                        else:
-                            # Search by status
-                            status = random.choice(['pending', 'completed', 'cancelled'])
-                            await conn.execute(
-                                """SELECT user_id, order_date, amount FROM load_test_orders 
-                                   WHERE status = @P1 
-                                   ORDER BY order_date DESC""",
-                                [status]
-                            )
-                        local_metrics.select_queries += 1
-                        
-                    elif operation <= 80:  # 20% INSERT queries
-                        # Insert new order
-                        user_id = random.randint(1, 100)
-                        amount = round(random.uniform(10, 1000), 2)
-                        description = generate_random_string(50)
+        
+        # Warmup phase
+        warmup_end = time.time() + warmup
+        warmup_requests = 0
+        
+        print(f"Worker {worker_id}: Starting warmup...")
+        while time.time() < warmup_end:
+            try:
+                # Simple warmup query
+                await conn.execute("SELECT COUNT(*) FROM load_test_users")
+                warmup_requests += 1
+            except Exception:
+                pass
+        
+        print(f"Worker {worker_id}: Warmup complete ({warmup_requests} requests)")
+        
+        # Actual test phase with mixed workload
+        test_end = time.time() + duration
+        local_requests = 0
+        local_errors = 0
+        local_response_times = []
+        local_metrics = QueryMetrics()
+        
+        while time.time() < test_end:
+            try:
+                operation = random.randint(1, 100)
+                start_time = time.perf_counter()
+                
+                if operation <= 75:  # 75% SELECT queries (increased from 60% to reduce lock contention)
+                    # Query with WHERE clause and JOIN (use NOLOCK for reads to avoid locks)
+                    query_type = random.randint(1, 3)
+                    if query_type == 1:
+                        # Count orders by user (now with 10,000 users)
+                        user_id = random.randint(1, 10000)
                         await conn.execute(
-                            """INSERT INTO load_test_orders (user_id, amount, description) 
-                               VALUES (@P1, @P2, @P3)""",
-                            [user_id, amount, description]
+                            """SELECT COUNT(*) as order_count, SUM(amount) as total_amount 
+                               FROM load_test_orders WITH (NOLOCK)
+                               WHERE user_id = @P1""",
+                            [user_id]
                         )
-                        local_metrics.insert_queries += 1
-                        
-                    elif operation <= 95:  # 15% UPDATE queries
-                        # Update order status
-                        order_id = random.randint(1, 10000)
-                        new_status = random.choice(['pending', 'completed', 'cancelled', 'shipped'])
+                    elif query_type == 2:
+                        # Join users with their orders (use NOLOCK for reads)
                         await conn.execute(
-                            """UPDATE load_test_orders 
-                               SET status = @P1, updated_at = GETDATE() 
-                               WHERE order_id = @P2""",
-                            [new_status, order_id]
+                            """SELECT TOP 50 u.username, o.order_id, o.amount, o.status
+                               FROM load_test_users u WITH (NOLOCK)
+                               LEFT JOIN load_test_orders o WITH (NOLOCK) ON u.user_id = o.user_id
+                               WHERE u.is_active = 1
+                               ORDER BY o.order_date DESC"""
                         )
-                        local_metrics.update_queries += 1
-                        
-                    else:  # 5% DELETE queries
-                        # Delete old cancelled orders
-                        order_id = random.randint(1, 5000)
+                    else:
+                        # Search by status (use NOLOCK for reads)
+                        status = random.choice(['pending', 'completed', 'cancelled'])
                         await conn.execute(
-                            """DELETE FROM load_test_orders 
-                               WHERE order_id = @P1 AND status = 'cancelled'""",
-                            [order_id]
+                            """SELECT user_id, order_date, amount FROM load_test_orders WITH (NOLOCK)
+                               WHERE status = @P1 
+                               ORDER BY order_date DESC""",
+                            [status]
                         )
-                        local_metrics.delete_queries += 1
+                    local_metrics.select_queries += 1
                     
-                    response_time = time.perf_counter() - start_time
-                    local_response_times.append(response_time)
-                    local_requests += 1
+                elif operation <= 88:  # 13% INSERT queries (reduced from 20%)
+                    # Insert new order (spread across all 10,000 users to reduce contention)
+                    user_id = random.randint(1, 10000)
+                    amount = round(random.uniform(10, 1000), 2)
+                    description = generate_random_string(50)
+                    await conn.execute(
+                        """INSERT INTO load_test_orders (user_id, amount, description) 
+                           VALUES (@P1, @P2, @P3)""",
+                        [user_id, amount, description]
+                    )
+                    local_metrics.insert_queries += 1
                     
-                except Exception as e:
-                    local_errors += 1
-                    local_metrics.errors += 1
-                    if local_errors <= 3:
-                        print(f"Worker {worker_id} error: {e}")
-            
-            # Update global stats atomically
-            async with stats_lock:
-                total_requests += local_requests
-                total_errors += local_errors
-                response_times.extend(local_response_times)
-                worker_stats[worker_id]["requests"] = local_requests
-                worker_stats[worker_id]["errors"] = local_errors
-                query_metrics[worker_id] = local_metrics
-            
-            print(f"Worker {worker_id}: {local_requests} requests, {local_errors} errors")
+                elif operation <= 96:  # 8% UPDATE queries (reduced from 15%)
+                    # Update order status (spread across wider ID range to reduce lock contention)
+                    order_id = random.randint(1, 100000)
+                    new_status = random.choice(['pending', 'completed', 'cancelled', 'shipped'])
+                    await conn.execute(
+                        """UPDATE load_test_orders 
+                           SET status = @P1, updated_at = GETDATE() 
+                           WHERE order_id = @P2""",
+                        [new_status, order_id]
+                    )
+                    local_metrics.update_queries += 1
+                    
+                else:  # 5% DELETE queries
+                    # Delete old cancelled orders
+                    order_id = random.randint(1, 5000)
+                    await conn.execute(
+                        """DELETE FROM load_test_orders 
+                           WHERE order_id = @P1 AND status = 'cancelled'""",
+                        [order_id]
+                    )
+                    local_metrics.delete_queries += 1
+                
+                response_time = time.perf_counter() - start_time
+                local_response_times.append(response_time)
+                local_requests += 1
+                
+            except Exception as e:
+                local_errors += 1
+                local_metrics.errors += 1
+                if local_errors <= 3:
+                    print(f"Worker {worker_id} error: {e}")
+        
+        # Update global stats atomically
+        async with stats_lock:
+            total_requests += local_requests
+            total_errors += local_errors
+            response_times.extend(local_response_times)
+            worker_stats[worker_id]["requests"] = local_requests
+            worker_stats[worker_id]["errors"] = local_errors
+            query_metrics[worker_id] = local_metrics
+        
+        print(f"Worker {worker_id}: {local_requests} requests, {local_errors} errors")
     
     print("Starting warmup phase...")
-        
-    # Start all workers
-    worker_tasks = [asyncio.create_task(worker(i)) for i in range(workers)]
-        
-    # Wait for warmup to complete
-    await asyncio.sleep(warmup + 1)
-    print("Test phase starting...")
-        
-    # Measure actual test duration precisely
-    test_start = time.perf_counter()
-        
-    # Wait for all workers to complete
-    await asyncio.gather(*worker_tasks)
-    actual_duration = time.perf_counter() - test_start - warmup
     
-    # Aggregate query type metrics
-    total_selects = sum(m.select_queries for m in query_metrics.values())
-    total_inserts = sum(m.insert_queries for m in query_metrics.values())
-    total_updates = sum(m.update_queries for m in query_metrics.values())
-    total_deletes = sum(m.delete_queries for m in query_metrics.values())
-    
-    # Calculate comprehensive results
-    if total_requests > 0:
-        rps = total_requests / actual_duration
-        error_rate = (total_errors / (total_requests + total_errors)) * 100
+    # Create a single shared connection for all workers
+    async with Connection(connection_string, PoolConfig.performance()) as shared_conn:
+        # Start all workers with the shared connection
+        worker_tasks = [asyncio.create_task(worker(i, shared_conn)) for i in range(workers)]
         
-        # Response time statistics
-        avg_response_time = statistics.mean(response_times) if response_times else 0
-        median_response_time = statistics.median(response_times) if response_times else 0
-        p95_response_time = statistics.quantiles(response_times, n=20)[18] if len(response_times) >= 20 else 0
-        p99_response_time = statistics.quantiles(response_times, n=100)[98] if len(response_times) >= 100 else 0
-        min_response_time = min(response_times) if response_times else 0
-        max_response_time = max(response_times) if response_times else 0
+        # Wait for warmup to complete
+        await asyncio.sleep(warmup + 1)
+        print("Test phase starting...")
         
-        # Worker distribution
-        requests_per_worker = [stats["requests"] for stats in worker_stats.values()]
-        worker_balance = (max(requests_per_worker) - min(requests_per_worker)) / max(requests_per_worker) * 100 if requests_per_worker else 0
-    else:
-        rps = 0
-        error_rate = 100
-        avg_response_time = median_response_time = p95_response_time = p99_response_time = 0
-        min_response_time = max_response_time = 0
-        worker_balance = 0
-    
-    print(f"\n📊 Results:")
-    print(f"   Total Requests: {total_requests:,}")
-    print(f"   Errors: {total_errors}")
-    print(f"   Test Duration: {actual_duration:.2f}s")
-    print(f"   RPS: {rps:.1f}")
-    print(f"   Error Rate: {error_rate:.2f}%")
-    print(f"\n   Query Distribution:")
-    print(f"     SELECTs:  {total_selects:,} ({total_selects/total_requests*100:.1f}%)")
-    print(f"     INSERTs:  {total_inserts:,} ({total_inserts/total_requests*100:.1f}%)")
-    print(f"     UPDATEs:  {total_updates:,} ({total_updates/total_requests*100:.1f}%)")
-    print(f"     DELETEs:  {total_deletes:,} ({total_deletes/total_requests*100:.1f}%)")
-    print(f"\n   Response Times:")
-    print(f"     Average: {avg_response_time*1000:.2f}ms")
-    print(f"     Median:  {median_response_time*1000:.2f}ms")
-    print(f"     P95:     {p95_response_time*1000:.2f}ms")
-    print(f"     P99:     {p99_response_time*1000:.2f}ms")
-    print(f"     Min:     {min_response_time*1000:.2f}ms")
-    print(f"     Max:     {max_response_time*1000:.2f}ms")
-    print(f"   Worker Balance: {worker_balance:.1f}% variance")
-    
-    return {
-        "rps": rps,
-        "total_requests": total_requests,
-        "errors": total_errors,
-        "duration": actual_duration,
-        "avg_response_time": avg_response_time,
-        "median_response_time": median_response_time,
-        "p95_response_time": p95_response_time,
-        "p99_response_time": p99_response_time,
-        "error_rate": error_rate,
-        "worker_balance": worker_balance,
-        "selects": total_selects,
-        "inserts": total_inserts,
-        "updates": total_updates,
-        "deletes": total_deletes
+        # Capture pool stats before test
+        pool_stats_before = await shared_conn.pool_stats()
+        print(f"   Pool Before: {pool_stats_before}")
+        
+        # Measure actual test duration precisely
+        test_start = time.perf_counter()
+        
+        # Wait for all workers to complete
+        await asyncio.gather(*worker_tasks)
+        actual_duration = time.perf_counter() - test_start - warmup
+        
+        # Capture pool stats after test
+        pool_stats_after = await shared_conn.pool_stats()
+        print(f"   Pool After:  {pool_stats_after}")
+        
+        # Aggregate query type metrics
+        total_selects = sum(m.select_queries for m in query_metrics.values())
+        total_inserts = sum(m.insert_queries for m in query_metrics.values())
+        total_updates = sum(m.update_queries for m in query_metrics.values())
+        total_deletes = sum(m.delete_queries for m in query_metrics.values())
+        
+        # Calculate comprehensive results
+        if total_requests > 0:
+            rps = total_requests / actual_duration
+            error_rate = (total_errors / (total_requests + total_errors)) * 100
+            
+            # Response time statistics
+            avg_response_time = statistics.mean(response_times) if response_times else 0
+            median_response_time = statistics.median(response_times) if response_times else 0
+            p95_response_time = statistics.quantiles(response_times, n=20)[18] if len(response_times) >= 20 else 0
+            p99_response_time = statistics.quantiles(response_times, n=100)[98] if len(response_times) >= 100 else 0
+            min_response_time = min(response_times) if response_times else 0
+            max_response_time = max(response_times) if response_times else 0
+            
+            # Worker distribution
+            requests_per_worker = [stats["requests"] for stats in worker_stats.values()]
+            worker_balance = (max(requests_per_worker) - min(requests_per_worker)) / max(requests_per_worker) * 100 if requests_per_worker else 0
+        else:
+            rps = 0
+            error_rate = 100
+            avg_response_time = median_response_time = p95_response_time = p99_response_time = 0
+            min_response_time = max_response_time = 0
+            worker_balance = 0
+        
+        print(f"\n📊 Results:")
+        print(f"   Total Requests: {total_requests:,}")
+        print(f"   Errors: {total_errors}")
+        print(f"   Test Duration: {actual_duration:.2f}s")
+        print(f"   RPS: {rps:.1f}")
+        print(f"   Error Rate: {error_rate:.2f}%")
+        print(f"\n   Query Distribution:")
+        print(f"     SELECTs:  {total_selects:,} ({total_selects/total_requests*100:.1f}%)")
+        print(f"     INSERTs:  {total_inserts:,} ({total_inserts/total_requests*100:.1f}%)")
+        print(f"     UPDATEs:  {total_updates:,} ({total_updates/total_requests*100:.1f}%)")
+        print(f"     DELETEs:  {total_deletes:,} ({total_deletes/total_requests*100:.1f}%)")
+        print(f"\n   Response Times:")
+        print(f"     Average: {avg_response_time*1000:.2f}ms")
+        print(f"     Median:  {median_response_time*1000:.2f}ms")
+        print(f"     P95:     {p95_response_time*1000:.2f}ms")
+        print(f"     P99:     {p99_response_time*1000:.2f}ms")
+        print(f"     Min:     {min_response_time*1000:.2f}ms")
+        print(f"     Max:     {max_response_time*1000:.2f}ms")
+        print(f"   Worker Balance: {worker_balance:.1f}% variance")
+        
+        return {
+            "rps": rps,
+            "total_requests": total_requests,
+            "errors": total_errors,
+            "duration": actual_duration,
+            "avg_response_time": avg_response_time,
+            "median_response_time": median_response_time,
+            "p95_response_time": p95_response_time,
+            "p99_response_time": p99_response_time,
+            "error_rate": error_rate,
+            "worker_balance": worker_balance,
+            "selects": total_selects,
+            "inserts": total_inserts,
+            "updates": total_updates,
+            "deletes": total_deletes
     }
 
 

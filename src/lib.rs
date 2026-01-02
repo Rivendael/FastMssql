@@ -14,8 +14,10 @@ mod pool_manager;
 mod parameter_conversion;
 mod batch;
 mod type_mapping;
+mod transaction;
 
 pub use connection::PyConnection;
+pub use transaction::Transaction;
 pub use types::{PyFastRow, PyFastExecutionResult};
 pub use py_parameters::{Parameter, Parameters};
 pub use pool_config::PyPoolConfig;
@@ -36,7 +38,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     
     builder
         .enable_all()
-        .worker_threads((cpu_count / 2).max(1).min(8))  // Fewer workers = less contention at high RPS
+        .worker_threads((cpu_count).max(1).min(256))  // Scale with CPU count for I/O-heavy workloads
         .max_blocking_threads((cpu_count * 32).min(512)) // More blocking threads for DB I/O surge capacity
         .thread_keep_alive(std::time::Duration::from_secs(900)) // 15 minutes to avoid thrashing
         .thread_stack_size(4 * 1024 * 1024)  // Smaller stack = more threads, better for high concurrency
@@ -46,6 +48,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     pyo3_async_runtimes::tokio::init(builder);
     
     m.add_class::<PyConnection>()?;
+    m.add_class::<Transaction>()?;
     m.add_class::<PyFastRow>()?;
     m.add_class::<PyFastExecutionResult>()?;
     m.add_class::<Parameter>()?;
