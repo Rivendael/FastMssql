@@ -110,6 +110,9 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: List artifacts
+        run: ls -l dist
+
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
@@ -117,6 +120,5 @@ jobs:
           # No caching needed for publish step
           enable-cache: false
 
-
       - name: Publish
-        run: uv publish --dry-run dist/*
+        run: uv publish --dry-run
