@@ -19,29 +19,15 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: x86_64
-            python: 3.12
-
-          - os: ubuntu-24.04-arm
-            arch: aarch64
-            python: 3.12
-
-          - os: ubuntu-latest
-            arch: x86_64
-            manylinux: musllinux_1_1
-            python: pypy@3.12
-
-          - os: ubuntu-24.04-arm
-            arch: aarch64
-            manylinux: musllinux_1_1
-            python: pypy@3.12
+            platform: linux
 
           - os: windows-latest
             arch: x64
-            python: 3.12
+            platform: windows
 
           - os: macos-latest
             arch: universal2
-            python: 3.12
+            platform: macos
 
     steps:
       - name: Move temp (Windows only)
@@ -72,17 +58,17 @@ jobs:
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: ${{ matrix.python }}
+          python-version: 3.12
           enable-cache: true
 
       - name: Build wheels
         run: |
-          uv build --wheel
+          uvx cibuildwheel --platform ${{ matrix.platform }} \
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.manylinux || 'manylinux' }}
+          name: wheels-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.platform }}
           path: dist/*.whl
 
   build-sdist:
@@ -94,7 +80,7 @@ jobs:
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: ${{ matrix.python }}
+          python-version: 3.12
           enable-cache: true
 
       - name: Build sdist
