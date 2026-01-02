@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Move temp (Windows only)
-        if: runner.os == 'windows-latest'
+        if: runner.os == 'Windows'
         run: |
           echo "TEMP=D:\temp" >> $GITHUB_ENV
           echo "TMP=D:\temp" >> $GITHUB_ENV
