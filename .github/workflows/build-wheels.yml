@@ -19,23 +19,29 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: x86_64
+            python: 3.12
 
           - os: ubuntu-24.04-arm
             arch: aarch64
+            python: 3.12
 
-          - os: ubuntu-latest
+          - os: ubuntu-la
             arch: x86_64
             manylinux: musllinux_1_1
+            python: pypy@3.12
 
           - os: ubuntu-24.04-arm
             arch: aarch64
             manylinux: musllinux_1_1
+            python: pypy@3.12
 
           - os: windows-latest
             arch: x64
+            python: 3.12
 
           - os: macos-latest
             arch: universal2
+            python: 3.12
 
     steps:
       - name: Move temp (Windows only)
@@ -66,7 +72,7 @@ jobs:
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: 3.12
+          python-version: ${{ matrix.python }}
           enable-cache: true
 
       - name: Build wheels
@@ -88,7 +94,7 @@ jobs:
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: 3.12
+          python-version: ${{ matrix.python }}
           enable-cache: true
 
       - name: Build sdist
