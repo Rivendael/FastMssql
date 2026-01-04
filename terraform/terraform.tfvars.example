@@ -1,0 +1,29 @@
+# Example terraform.tfvars for FastMssql Azure SQL setup
+
+# REQUIRED: Change these for your environment
+# az account show --query id -o tsv
+subscription_id = "Your Subscription ID"
+
+sql_admin_password        = "YourComplexPassword123!"  # Must be complex: 8+ chars with upper, lower, number, special
+azuread_admin_username    = "Your Email"
+
+# Use: az ad signed-in-user show --query id -o tsv
+# Or:  az ad user show --id <email> --query id -o tsv
+azuread_admin_object_id   = "Your Object ID"
+
+location                  = "eastus"
+resource_group_name       = "fastmssql-dev-rg"
+sql_server_name           = "fastmssql-dev-srv-002"
+database_name             = "devdb"
+database_sku              = "Basic"
+max_size_gb               = 2
+
+
+# Find your IP: curl https://api.ipify.org
+my_local_ip = "Your IP Address"
+
+tags = {
+  Environment = "dev"
+  Project     = "fastmssql"
+  ManagedBy   = "terraform"
+}
