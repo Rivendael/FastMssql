@@ -9,7 +9,8 @@ High-performance Rust-backed Python driver for SQL Server with:
 - Memory-efficient result handling
 """
 
-from typing import Any, List, Dict, Optional, Tuple, Coroutine
+from typing import Any, Coroutine, Dict, List, Optional, Tuple
+
 try:
     from enum import StrEnum
 except ImportError:

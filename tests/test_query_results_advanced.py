@@ -6,7 +6,6 @@ special column names, result set variations, and complex data retrieval patterns
 """
 
 import pytest
-
 from conftest import Config
 
 try:
@@ -21,8 +20,10 @@ async def test_empty_result_set(test_config: Config):
     """Test handling of empty result sets."""
     try:
         async with Connection(test_config.connection_string) as conn:
-            result = await conn.query("SELECT * FROM (SELECT 1 as val WHERE 0=1) as empty")
-            
+            result = await conn.query(
+                "SELECT * FROM (SELECT 1 as val WHERE 0=1) as empty"
+            )
+
             assert not result.has_rows()
             rows = result.rows()
             assert rows == [] or len(rows) == 0
@@ -37,11 +38,11 @@ async def test_single_row_result(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 42 as answer")
-            
+
             assert result.has_rows()
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['answer'] == 42
+            assert rows[0]["answer"] == 42
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -63,14 +64,14 @@ async def test_large_result_set(test_config: Config):
                 )
                 SELECT n1.num * 5 + n2.num as num FROM Numbers n1, Numbers n2 WHERE n1.num <= 5
             """)
-            
+
             assert result.has_rows()
             rows = result.rows()
             assert len(rows) > 20  # At least 25 rows
-            
+
             # Verify we can iterate through all
             for row in rows:
-                assert row['num'] is not None
+                assert row["num"] is not None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -82,12 +83,12 @@ async def test_single_column_result(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             result = await conn.query("SELECT 1 as value")
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Access the single column
-            assert row['value'] == 1
+            assert row["value"] == 1
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -105,13 +106,13 @@ async def test_many_columns_result(test_config: Config):
                     11 as col11, 12 as col12, 13 as col13, 14 as col14, 15 as col15,
                     16 as col16, 17 as col17, 18 as col18, 19 as col19, 20 as col20
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Access all columns
             for i in range(1, 21):
-                assert row[f'col{i}'] == i
+                assert row[f"col{i}"] == i
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -128,16 +129,16 @@ async def test_column_alias_names(test_config: Config):
                     2 as [Another Alias],
                     3 as simple_name
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Access with aliases
             # Exact column names depend on how aliases are handled
             assert row is not None
             # Try different possible column names
             try:
-                value = row['Custom Alias']
+                value = row["Custom Alias"]
                 assert value == 1
             except (KeyError, TypeError):
                 pass
@@ -159,16 +160,16 @@ async def test_column_reserved_words(test_config: Config):
                     4 as [order],
                     5 as [group]
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Access reserved word columns
-            assert row['select'] == 1
-            assert row['from'] == 2
-            assert row['where'] == 3
-            assert row['order'] == 4
-            assert row['group'] == 5
+            assert row["select"] == 1
+            assert row["from"] == 2
+            assert row["where"] == 3
+            assert row["order"] == 4
+            assert row["group"] == 5
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -185,14 +186,14 @@ async def test_column_with_spaces(test_config: Config):
                     2 as [Last Name],
                     3 as [Email Address]
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Access columns with spaces
-            assert row['First Name'] == 1
-            assert row['Last Name'] == 2
-            assert row['Email Address'] == 3
+            assert row["First Name"] == 1
+            assert row["Last Name"] == 2
+            assert row["Email Address"] == 3
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -206,14 +207,14 @@ async def test_result_duplicate_column_names(test_config: Config):
             result = await conn.query("""
                 SELECT 1 as value, 2 as value
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Accessing duplicate column name might return first or raise error
             # Behavior depends on implementation
             try:
-                value = row['value']
+                value = row["value"]
                 assert value in [1, 2]
             except (KeyError, TypeError):
                 # Implementation might not support duplicate names
@@ -234,14 +235,14 @@ async def test_result_all_null_values(test_config: Config):
                     CAST(NULL AS VARCHAR(50)) as col2,
                     CAST(NULL AS FLOAT) as col3
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # All values should be None
-            assert row['col1'] is None
-            assert row['col2'] is None
-            assert row['col3'] is None
+            assert row["col1"] is None
+            assert row["col2"] is None
+            assert row["col3"] is None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -255,15 +256,15 @@ async def test_result_mixed_null_and_values(test_config: Config):
             result = await conn.query("""
                 SELECT 1 as col1, NULL as col2, 'test' as col3, NULL as col4, 42 as col5
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
-            assert row['col1'] == 1
-            assert row['col2'] is None
-            assert row['col3'] == 'test'
-            assert row['col4'] is None
-            assert row['col5'] == 42
+
+            assert row["col1"] == 1
+            assert row["col2"] is None
+            assert row["col3"] == "test"
+            assert row["col4"] is None
+            assert row["col5"] == 42
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -277,14 +278,14 @@ async def test_result_column_ordering(test_config: Config):
             result = await conn.query("""
                 SELECT 'z' as z_col, 'a' as a_col, 'm' as m_col
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Verify values are correct
-            assert row['z_col'] == 'z'
-            assert row['a_col'] == 'a'
-            assert row['m_col'] == 'm'
+            assert row["z_col"] == "z"
+            assert row["a_col"] == "a"
+            assert row["m_col"] == "m"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -303,18 +304,18 @@ async def test_result_with_computed_columns(test_config: Config):
                     (5 * 3) as product_result,
                     CAST(5 AS FLOAT) / 3 as division_result
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
-            assert row['num1'] == 5
-            assert row['num2'] == 3
-            assert row['sum_result'] == 8
-            assert row['product_result'] == 15
-            
-            div_result = row['division_result']
+
+            assert row["num1"] == 5
+            assert row["num2"] == 3
+            assert row["sum_result"] == 8
+            assert row["product_result"] == 15
+
+            div_result = row["division_result"]
             if div_result is not None:
-                assert abs(div_result - (5.0/3.0)) < 0.1
+                assert abs(div_result - (5.0 / 3.0)) < 0.1
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -334,12 +335,12 @@ async def test_result_with_case_expression(test_config: Config):
                         ELSE 'equal'
                     END as case_comparison
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
-            assert row['case_result'] == 'true_case'
-            assert row['case_comparison'] == 'greater'
+
+            assert row["case_result"] == "true_case"
+            assert row["case_comparison"] == "greater"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -356,14 +357,14 @@ async def test_result_special_numeric_values(test_config: Config):
                     -1 as negative_one,
                     CAST(0 AS FLOAT) / 0 as nan_result
             """)
-            
+
             # NaN result might cause query to fail, so wrap in try-catch
             if result.has_rows():
                 row = result.rows()[0]
-                assert row['zero'] == 0
-                assert row['negative_one'] == -1
+                assert row["zero"] == 0
+                assert row["negative_one"] == -1
                 # NaN handling varies by implementation
-    except Exception as e:
+    except Exception:
         # Expected - division by zero might fail
         pass
 
@@ -379,17 +380,17 @@ async def test_result_string_concatenation(test_config: Config):
                     'Hello' + ' ' + 'World' as concat_result,
                     CONCAT('A', 'B', 'C') as concat_func_result
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
-            concat_val = row['concat_result']
+
+            concat_val = row["concat_result"]
             if concat_val is not None:
-                assert 'Hello' in concat_val and 'World' in concat_val
-            
-            concat_func = row['concat_func_result']
+                assert "Hello" in concat_val and "World" in concat_val
+
+            concat_func = row["concat_func_result"]
             if concat_func is not None:
-                assert concat_func == 'ABC'
+                assert concat_func == "ABC"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -404,11 +405,11 @@ async def test_result_multiple_result_sets(test_config: Config):
             result = await conn.query("""
                 SELECT 1 as first_set
             """)
-            
+
             assert result.has_rows()
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['first_set'] == 1
+            assert rows[0]["first_set"] == 1
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -424,14 +425,14 @@ async def test_result_with_subqueries(test_config: Config):
                     (SELECT COUNT(*) FROM (SELECT 1 as col UNION ALL SELECT 2) t) as count_result,
                     (SELECT MAX(val) FROM (SELECT 1 as val UNION ALL SELECT 5) t2) as max_result
             """)
-            
+
             assert result.has_rows()
             row = result.rows()[0]
-            
-            count_val = row['count_result']
+
+            count_val = row["count_result"]
             assert count_val == 2
-            
-            max_val = row['max_result']
+
+            max_val = row["max_result"]
             assert max_val == 5
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
@@ -451,11 +452,11 @@ async def test_result_distinct_values(test_config: Config):
                     UNION ALL SELECT 2
                 ) t
             """)
-            
+
             assert result.has_rows()
             rows = result.rows()
             # Should have only 2 distinct values
-            values = [row['num'] for row in rows]
+            values = [row["num"] for row in rows]
             assert len(set(values)) == 2
             assert 1 in values
             assert 2 in values
@@ -477,13 +478,13 @@ async def test_result_sorted_order(test_config: Config):
                 ) t
                 ORDER BY num
             """)
-            
+
             assert result.has_rows()
             rows = result.rows()
-            
+
             # Verify order
-            assert rows[0]['num'] == 1
-            assert rows[1]['num'] == 2
-            assert rows[2]['num'] == 3
+            assert rows[0]["num"] == 1
+            assert rows[1]["num"] == 2
+            assert rows[2]["num"] == 3
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

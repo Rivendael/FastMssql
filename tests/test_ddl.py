@@ -5,13 +5,13 @@ This module tests CREATE, ALTER, DROP operations for various database objects.
 """
 
 import pytest
-
 from conftest import Config
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -32,7 +32,7 @@ async def test_create_drop_table(test_config: Config):
                 )
             """
             await conn.execute(create_sql)
-            
+
             # Verify table exists
             check_sql = """
                 SELECT COUNT(*) as table_count 
@@ -42,8 +42,8 @@ async def test_create_drop_table(test_config: Config):
             result = await conn.query(check_sql)
             assert result.has_rows()
             rows = result.rows() if result.has_rows() else []
-            assert rows[0]['table_count'] == 1
-            
+            assert rows[0]["table_count"] == 1
+
             # Drop table
             await conn.execute("DROP TABLE test_ddl_table")
 
@@ -51,10 +51,11 @@ async def test_create_drop_table(test_config: Config):
             result = await conn.query(check_sql)
             assert result.has_rows()
             rows = result.rows() if result.has_rows() else []
-            assert rows[0]['table_count'] == 0
-            
+            assert rows[0]["table_count"] == 0
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -70,12 +71,16 @@ async def test_alter_table(test_config: Config):
                     name NVARCHAR(50)
                 )
             """)
-            
+
             # Add column
-            await conn.execute("ALTER TABLE test_alter_table ADD description NVARCHAR(255)")
+            await conn.execute(
+                "ALTER TABLE test_alter_table ADD description NVARCHAR(255)"
+            )
 
             # Modify column
-            await conn.execute("ALTER TABLE test_alter_table ALTER COLUMN name NVARCHAR(100)")
+            await conn.execute(
+                "ALTER TABLE test_alter_table ALTER COLUMN name NVARCHAR(100)"
+            )
 
             # Check column exists and has correct properties
             result = await conn.query("""
@@ -86,15 +91,16 @@ async def test_alter_table(test_config: Config):
             """)
             assert result.has_rows()
             rows = result.rows() if result.has_rows() else []
-            columns = {row.get('COLUMN_NAME'): row for row in rows}
-            assert 'description' in columns
-            assert columns['name']['CHARACTER_MAXIMUM_LENGTH'] == 100
-            
+            columns = {row.get("COLUMN_NAME"): row for row in rows}
+            assert "description" in columns
+            assert columns["name"]["CHARACTER_MAXIMUM_LENGTH"] == 100
+
             # Clean up
             await conn.execute("DROP TABLE test_alter_table")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -105,9 +111,9 @@ async def test_create_drop_index(test_config: Config):
             # Clean up any existing table first
             try:
                 await conn.execute("DROP TABLE IF EXISTS test_index_table")
-            except:
+            except Exception:
                 pass
-                
+
             # Create table first
             await conn.execute("""
                 CREATE TABLE test_index_table (
@@ -117,25 +123,25 @@ async def test_create_drop_index(test_config: Config):
                     category_id INT
                 )
             """)
-            
+
             # Create regular index
             await conn.execute("""
                 CREATE INDEX IX_test_index_table_name 
                 ON test_index_table (name)
             """)
-            
+
             # Create composite index
             await conn.execute("""
                 CREATE INDEX IX_test_index_table_category_name 
                 ON test_index_table (category_id, name)
             """)
-            
+
             # Create unique index
             await conn.execute("""
                 CREATE UNIQUE INDEX IX_test_index_table_email 
                 ON test_index_table (email)
             """)
-            
+
             # Verify indexes exist
             result = await conn.query("""
                 SELECT name FROM sys.indexes 
@@ -143,22 +149,29 @@ async def test_create_drop_index(test_config: Config):
                 AND name IS NOT NULL
                 AND name LIKE 'IX_test_index_table%'
             """)
-            
-            index_names = [row['name'] for row in result.rows()]
-            assert 'IX_test_index_table_name' in index_names
-            assert 'IX_test_index_table_category_name' in index_names
-            assert 'IX_test_index_table_email' in index_names
-            
+
+            index_names = [row["name"] for row in result.rows()]
+            assert "IX_test_index_table_name" in index_names
+            assert "IX_test_index_table_category_name" in index_names
+            assert "IX_test_index_table_email" in index_names
+
             # Drop indexes
-            await conn.execute("DROP INDEX IX_test_index_table_name ON test_index_table")
-            await conn.execute("DROP INDEX IX_test_index_table_category_name ON test_index_table")
-            await conn.execute("DROP INDEX IX_test_index_table_email ON test_index_table")
+            await conn.execute(
+                "DROP INDEX IX_test_index_table_name ON test_index_table"
+            )
+            await conn.execute(
+                "DROP INDEX IX_test_index_table_category_name ON test_index_table"
+            )
+            await conn.execute(
+                "DROP INDEX IX_test_index_table_email ON test_index_table"
+            )
 
             # Clean up table
             await conn.execute("DROP TABLE test_index_table")
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -168,21 +181,27 @@ async def test_create_drop_view(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Test if views are supported by trying to create a simple one
             try:
-                await conn.execute("CREATE VIEW test_feature_check AS SELECT 1 as test_col")
+                await conn.execute(
+                    "CREATE VIEW test_feature_check AS SELECT 1 as test_col"
+                )
                 await conn.execute("DROP VIEW test_feature_check")
             except Exception as e:
                 if "Incorrect syntax near the keyword 'VIEW'" in str(e):
                     pytest.skip("Views not supported in this SQL Server edition")
                 else:
                     raise
-            
+
             # Clean up any existing objects first
             try:
-                await conn.execute("IF OBJECT_ID('test_view_employees', 'V') IS NOT NULL DROP VIEW test_view_employees")
-                await conn.execute("IF OBJECT_ID('test_view_base', 'U') IS NOT NULL DROP TABLE test_view_base")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_view_employees', 'V') IS NOT NULL DROP VIEW test_view_employees"
+                )
+                await conn.execute(
+                    "IF OBJECT_ID('test_view_base', 'U') IS NOT NULL DROP TABLE test_view_base"
+                )
+            except Exception:
                 pass
-            
+
             # Create base table
             await conn.execute("""
                 CREATE TABLE test_view_base (
@@ -192,7 +211,7 @@ async def test_create_drop_view(test_config: Config):
                     department NVARCHAR(50)
                 )
             """)
-            
+
             # Insert test data
             await conn.execute("""
                 INSERT INTO test_view_base (name, salary, department) VALUES 
@@ -200,7 +219,7 @@ async def test_create_drop_view(test_config: Config):
                 ('Jane Smith', 60000.00, 'HR'),
                 ('Bob Johnson', 55000.00, 'IT')
             """)
-            
+
             # Create view
             await conn.execute("""
                 CREATE VIEW test_view_employees AS
@@ -212,22 +231,27 @@ async def test_create_drop_view(test_config: Config):
                 FROM test_view_base
                 WHERE department = 'IT'
             """)
-            
+
             # Test view
             result = await conn.query("SELECT * FROM test_view_employees ORDER BY name")
             assert result.has_rows() and len(result.rows()) == 2
-            assert result.rows()[0]['name'] == 'Bob Johnson'
-            assert result.rows()[1]['name'] == 'John Doe'
+            assert result.rows()[0]["name"] == "Bob Johnson"
+            assert result.rows()[1]["name"] == "John Doe"
 
             # Drop view and table
             try:
-                await conn.execute("IF OBJECT_ID('test_view_employees', 'V') IS NOT NULL DROP VIEW test_view_employees")
-                await conn.execute("IF OBJECT_ID('test_view_base', 'U') IS NOT NULL DROP TABLE test_view_base")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_view_employees', 'V') IS NOT NULL DROP VIEW test_view_employees"
+                )
+                await conn.execute(
+                    "IF OBJECT_ID('test_view_base', 'U') IS NOT NULL DROP TABLE test_view_base"
+                )
+            except Exception:
                 pass
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -237,20 +261,26 @@ async def test_create_drop_procedure(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Test if procedures are supported by trying to create a simple one
             try:
-                await conn.execute("CREATE PROCEDURE test_feature_check AS BEGIN SELECT 1 END")
+                await conn.execute(
+                    "CREATE PROCEDURE test_feature_check AS BEGIN SELECT 1 END"
+                )
                 await conn.execute("DROP PROCEDURE test_feature_check")
             except Exception as e:
                 if "Incorrect syntax near the keyword 'PROCEDURE'" in str(e):
-                    pytest.skip("Stored procedures not supported in this SQL Server edition")
+                    pytest.skip(
+                        "Stored procedures not supported in this SQL Server edition"
+                    )
                 else:
                     raise
-            
+
             # Clean up any existing procedure first
             try:
-                await conn.execute("IF OBJECT_ID('test_procedure', 'P') IS NOT NULL DROP PROCEDURE test_procedure")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_procedure', 'P') IS NOT NULL DROP PROCEDURE test_procedure"
+                )
+            except Exception:
                 pass
-            
+
             # Create procedure with proper syntax
             await conn.execute("""
                 CREATE PROCEDURE test_procedure
@@ -262,31 +292,34 @@ async def test_create_drop_procedure(test_config: Config):
                     SELECT @input_value as input, @output_value as output;
                 END
             """)
-            
+
             # Verify procedure exists
             result = await conn.query("""
                 SELECT COUNT(*) as proc_count
                 FROM INFORMATION_SCHEMA.ROUTINES
                 WHERE ROUTINE_NAME = 'test_procedure' AND ROUTINE_TYPE = 'PROCEDURE'
             """)
-            assert result.rows()[0]['proc_count'] == 1
-            
+            assert result.rows()[0]["proc_count"] == 1
+
             # Drop procedure
             try:
-                await conn.execute("IF OBJECT_ID('test_procedure', 'P') IS NOT NULL DROP PROCEDURE test_procedure")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_procedure', 'P') IS NOT NULL DROP PROCEDURE test_procedure"
+                )
+            except Exception:
                 pass
-            
+
             # Verify procedure is gone
             result = await conn.query("""
                 SELECT COUNT(*) as proc_count
                 FROM INFORMATION_SCHEMA.ROUTINES
                 WHERE ROUTINE_NAME = 'test_procedure' AND ROUTINE_TYPE = 'PROCEDURE'
             """)
-            assert result.rows()[0]['proc_count'] == 0
-            
+            assert result.rows()[0]["proc_count"] == 0
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -296,20 +329,26 @@ async def test_create_drop_function(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Test if functions are supported by trying to create a simple one
             try:
-                await conn.execute("CREATE FUNCTION test_feature_check() RETURNS INT AS BEGIN RETURN 1 END")
+                await conn.execute(
+                    "CREATE FUNCTION test_feature_check() RETURNS INT AS BEGIN RETURN 1 END"
+                )
                 await conn.execute("DROP FUNCTION test_feature_check")
             except Exception as e:
                 if "Incorrect syntax near the keyword 'FUNCTION'" in str(e):
-                    pytest.skip("User-defined functions not supported in this SQL Server edition")
+                    pytest.skip(
+                        "User-defined functions not supported in this SQL Server edition"
+                    )
                 else:
                     raise
-            
+
             # Clean up any existing function first
             try:
-                await conn.execute("IF OBJECT_ID('dbo.test_function', 'FN') IS NOT NULL DROP FUNCTION dbo.test_function")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('dbo.test_function', 'FN') IS NOT NULL DROP FUNCTION dbo.test_function"
+                )
+            except Exception:
                 pass
-            
+
             # Create scalar function with proper syntax
             await conn.execute("""
                 CREATE FUNCTION dbo.test_function(@input INT)
@@ -319,10 +358,10 @@ async def test_create_drop_function(test_config: Config):
                     RETURN @input * @input;
                 END
             """)
-            
+
             # Test function
             result = await conn.query("SELECT dbo.test_function(5) as result")
-            assert result.rows()[0]['result'] == 25
+            assert result.rows()[0]["result"] == 25
 
             # Drop function
             try:
@@ -330,11 +369,12 @@ async def test_create_drop_function(test_config: Config):
                     IF OBJECT_ID('dbo.test_function', 'FN') IS NOT NULL 
                     DROP FUNCTION dbo.test_function
                 """)
-            except:
+            except Exception:
                 pass
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -351,42 +391,53 @@ async def test_constraints(test_config: Config):
                     category_id INT
                 )
             """)
-            
+
             # Add primary key constraint
             await conn.execute("""
                 ALTER TABLE test_constraints 
                 ADD CONSTRAINT PK_test_constraints PRIMARY KEY (id)
             """)
-            
+
             # Add unique constraint
             await conn.execute("""
                 ALTER TABLE test_constraints 
                 ADD CONSTRAINT UQ_test_constraints_email UNIQUE (email)
             """)
-            
+
             # Add check constraint
             await conn.execute("""
                 ALTER TABLE test_constraints 
                 ADD CONSTRAINT CK_test_constraints_age CHECK (age >= 0 AND age <= 150)
             """)
-            
+
             # Test constraints work
-            await conn.execute("INSERT INTO test_constraints (email, age) VALUES ('test@example.com', 25)")
+            await conn.execute(
+                "INSERT INTO test_constraints (email, age) VALUES ('test@example.com', 25)"
+            )
 
             # This should fail due to check constraint
             with pytest.raises(Exception):
-                await conn.execute("INSERT INTO test_constraints (email, age) VALUES ('test2@example.com', 200)")
+                await conn.execute(
+                    "INSERT INTO test_constraints (email, age) VALUES ('test2@example.com', 200)"
+                )
 
             # Drop constraints
-            await conn.execute("ALTER TABLE test_constraints DROP CONSTRAINT CK_test_constraints_age")
-            await conn.execute("ALTER TABLE test_constraints DROP CONSTRAINT UQ_test_constraints_email")
-            await conn.execute("ALTER TABLE test_constraints DROP CONSTRAINT PK_test_constraints")
+            await conn.execute(
+                "ALTER TABLE test_constraints DROP CONSTRAINT CK_test_constraints_age"
+            )
+            await conn.execute(
+                "ALTER TABLE test_constraints DROP CONSTRAINT UQ_test_constraints_email"
+            )
+            await conn.execute(
+                "ALTER TABLE test_constraints DROP CONSTRAINT PK_test_constraints"
+            )
 
             # Clean up
             await conn.execute("DROP TABLE test_constraints")
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -403,22 +454,23 @@ async def test_async_ddl_operations(test_config: Config):
                     created_date DATETIME DEFAULT GETDATE()
                 )
             """)
-            
+
             # Insert data
             await conn.execute("""
                 INSERT INTO test_async_ddl (name) VALUES ('Async Test')
             """)
-            
+
             # Query data
             results = await conn.query("SELECT * FROM test_async_ddl")
             assert results.has_rows() and len(results.rows()) == 1
-            assert results.has_rows() and results.rows()[0]['name'] == 'Async Test'
+            assert results.has_rows() and results.rows()[0]["name"] == "Async Test"
 
             # Clean up
             await conn.execute("DROP TABLE test_async_ddl")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -435,17 +487,21 @@ async def test_schema_operations(test_config: Config):
                     pytest.skip("Schemas not supported in this SQL Server edition")
                 else:
                     raise
-            
+
             # Clean up any existing objects first
             try:
-                await conn.execute("IF OBJECT_ID('test_schema.test_table', 'U') IS NOT NULL DROP TABLE test_schema.test_table")
-                await conn.execute("IF SCHEMA_ID('test_schema') IS NOT NULL DROP SCHEMA test_schema")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_schema.test_table', 'U') IS NOT NULL DROP TABLE test_schema.test_table"
+                )
+                await conn.execute(
+                    "IF SCHEMA_ID('test_schema') IS NOT NULL DROP SCHEMA test_schema"
+                )
+            except Exception:
                 pass
-            
+
             # Create schema
             await conn.execute("CREATE SCHEMA test_schema")
-            
+
             # Create table in schema
             await conn.execute("""
                 CREATE TABLE test_schema.test_table (
@@ -453,14 +509,16 @@ async def test_schema_operations(test_config: Config):
                     name NVARCHAR(100)
                 )
             """)
-            
+
             # Insert data
-            await conn.execute("INSERT INTO test_schema.test_table (name) VALUES ('Schema Test')")
+            await conn.execute(
+                "INSERT INTO test_schema.test_table (name) VALUES ('Schema Test')"
+            )
 
             # Query data
             results = await conn.query("SELECT * FROM test_schema.test_table")
             assert results.has_rows() and len(results.rows()) == 1
-            assert results.has_rows() and results.rows()[0]['name'] == 'Schema Test'
+            assert results.has_rows() and results.rows()[0]["name"] == "Schema Test"
 
             # Clean up
             try:
@@ -472,8 +530,8 @@ async def test_schema_operations(test_config: Config):
                     IF SCHEMA_ID('test_schema') IS NOT NULL 
                     DROP SCHEMA test_schema
                 """)
-            except:
+            except Exception:
                 pass
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

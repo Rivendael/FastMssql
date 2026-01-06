@@ -6,7 +6,6 @@ This module tests INSERT, UPDATE, DELETE, and SELECT operations.
 
 import pytest
 import pytest_asyncio
-
 from conftest import Config
 
 try:
@@ -14,18 +13,19 @@ try:
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
+
 @pytest_asyncio.fixture(scope="function")
 async def setup_test_table(test_config: Config):
     """Setup and teardown test table for each test."""
     table_name = "test_dml_employees"
-    
+
     # Clean up any existing table first
     try:
         async with Connection(test_config.connection_string) as connection:
             await connection.execute("DROP TABLE IF EXISTS test_dml_employees")
-    except:
+    except Exception:
         pass  # Table might not exist
-    
+
     # Create the test table
     async with Connection(test_config.connection_string) as connection:
         await connection.execute("""
@@ -41,15 +41,16 @@ async def setup_test_table(test_config: Config):
                 created_at DATETIME DEFAULT GETDATE()
             )
         """)
-        
+
     yield table_name
-    
+
     # Clean up the table
     try:
         async with Connection(test_config.connection_string) as connection:
             await connection.execute("DROP TABLE IF EXISTS test_dml_employees")
-    except:
+    except Exception:
         pass  # Table might not exist
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -62,7 +63,9 @@ async def test_insert_operations(setup_test_table, test_config: Config):
             VALUES ('John', 'Doe', 'john.doe@example.com', 50000.00, 'IT', '2023-01-15')
         """)
         # Check if results has affected attribute, otherwise check rows_affected or similar
-        affected_count = getattr(results, 'affected', getattr(results, 'rows_affected', 1))
+        affected_count = getattr(
+            results, "affected", getattr(results, "rows_affected", 1)
+        )
         assert affected_count == 1
 
         # Multiple INSERT
@@ -72,7 +75,9 @@ async def test_insert_operations(setup_test_table, test_config: Config):
             ('Bob', 'Johnson', 'bob.johnson@example.com', 55000.00, 'IT', '2023-03-10'),
             ('Alice', 'Brown', 'alice.brown@example.com', 65000.00, 'Finance', '2023-04-05')
         """)
-        affected_count = getattr(results, 'affected', getattr(results, 'rows_affected', 3))
+        affected_count = getattr(
+            results, "affected", getattr(results, "rows_affected", 3)
+        )
         assert affected_count == 3
 
         # INSERT with DEFAULT values
@@ -80,13 +85,16 @@ async def test_insert_operations(setup_test_table, test_config: Config):
             INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date, is_active)
             VALUES ('Charlie', 'Wilson', 'charlie.wilson@example.com', 45000.00, 'IT', '2023-05-20', DEFAULT)
         """)
-        affected_count = getattr(results, 'affected', getattr(results, 'rows_affected', 1))
+        affected_count = getattr(
+            results, "affected", getattr(results, "rows_affected", 1)
+        )
         assert affected_count == 1
 
         # Verify total count - this is the real test
         results = await conn.query("SELECT COUNT(*) as total FROM test_dml_employees")
         assert results.has_rows()
-        assert results.has_rows() and results.rows()[0]['total'] == 5
+        assert results.has_rows() and results.rows()[0]["total"] == 5
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -103,20 +111,26 @@ async def test_select_operations(setup_test_table, test_config: Config):
                 ('Alice', 'Brown', 'alice.brown@example.com', 65000.00, 'Finance', '2023-04-05'),
                 ('Charlie', 'Wilson', 'charlie.wilson@example.com', 45000.00, 'IT', '2023-05-20')
             """)
-            
+
             # Simple SELECT
             results = await conn.query("SELECT * FROM test_dml_employees")
             assert results.has_rows() and len(results.rows()) == 5
 
             # SELECT with WHERE
-            results = await conn.query("SELECT * FROM test_dml_employees WHERE department = 'IT'")
+            results = await conn.query(
+                "SELECT * FROM test_dml_employees WHERE department = 'IT'"
+            )
             assert results.has_rows() and len(results.rows()) == 3
 
             # SELECT with ORDER BY
-            results = await conn.query("SELECT first_name, last_name FROM test_dml_employees ORDER BY salary DESC")
-            assert results.has_rows() and results.rows()[0]['first_name'] == 'Alice'# Highest salary
-            assert results.rows()[-1]['first_name'] == 'Charlie'  # Lowest salary
-            
+            results = await conn.query(
+                "SELECT first_name, last_name FROM test_dml_employees ORDER BY salary DESC"
+            )
+            assert (
+                results.has_rows() and results.rows()[0]["first_name"] == "Alice"
+            )  # Highest salary
+            assert results.rows()[-1]["first_name"] == "Charlie"  # Lowest salary
+
             # SELECT with aggregate functions
             results = await conn.query("""
                 SELECT 
@@ -130,11 +144,11 @@ async def test_select_operations(setup_test_table, test_config: Config):
                 ORDER BY department
             """)
 
-            dept_stats = {row['department']: row for row in results.rows()}
-            assert dept_stats['IT']['employee_count'] == 3
-            assert dept_stats['HR']['employee_count'] == 1
-            assert dept_stats['Finance']['employee_count'] == 1
-            
+            dept_stats = {row["department"]: row for row in results.rows()}
+            assert dept_stats["IT"]["employee_count"] == 3
+            assert dept_stats["HR"]["employee_count"] == 1
+            assert dept_stats["Finance"]["employee_count"] == 1
+
             # SELECT with JOIN (self-join example)
             results = await conn.query("""
                 SELECT DISTINCT e1.department
@@ -142,8 +156,10 @@ async def test_select_operations(setup_test_table, test_config: Config):
                 INNER JOIN test_dml_employees e2 ON e1.department = e2.department
                 WHERE e1.id != e2.id
             """)
-            assert results.has_rows() and len(results.rows()) == 1# Only IT department has multiple employees
-            assert results.has_rows() and results.rows()[0]['department'] == 'IT'
+            assert (
+                results.has_rows() and len(results.rows()) == 1
+            )  # Only IT department has multiple employees
+            assert results.has_rows() and results.rows()[0]["department"] == "IT"
 
             # SELECT with HAVING
             results = await conn.query("""
@@ -153,10 +169,11 @@ async def test_select_operations(setup_test_table, test_config: Config):
                 HAVING COUNT(*) > 1
             """)
             assert results.has_rows() and len(results.rows()) == 1
-            assert results.has_rows() and results.rows()[0]['department'] == 'IT'
+            assert results.has_rows() and results.rows()[0]["department"] == "IT"
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -171,42 +188,56 @@ async def test_update_operations(setup_test_table, test_config: Config):
                 ('Jane', 'Smith', 'jane.smith@example.com', 60000.00, 'HR', '2023-02-01'),
                 ('Bob', 'Johnson', 'bob.johnson@example.com', 55000.00, 'IT', '2023-03-10')
             """)
-            
+
             # Single row UPDATE
             result = await conn.execute("""
                 UPDATE test_dml_employees 
                 SET salary = 52000.00 
                 WHERE first_name = 'John' AND last_name = 'Doe'
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 1))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 1)
+            )
             assert affected_count == 1
-            
+
             # Multiple row UPDATE
             result = await conn.execute("""
                 UPDATE test_dml_employees 
                 SET salary = salary * 1.1 
                 WHERE department = 'IT'
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 2))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 2)
+            )
             assert affected_count == 2  # John and Bob
-            
+
             # UPDATE with calculated values
             result = await conn.execute("""
                 UPDATE test_dml_employees 
                 SET email = LOWER(first_name) + '.' + LOWER(last_name) + '@company.com'
                 WHERE email LIKE '%@example.com'
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 3))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 3)
+            )
             assert affected_count == 3
-            
+
             # Verify updates
-            results = await conn.query("SELECT first_name, salary, email FROM test_dml_employees WHERE first_name = 'John'")
+            results = await conn.query(
+                "SELECT first_name, salary, email FROM test_dml_employees WHERE first_name = 'John'"
+            )
             assert results.has_rows() and len(results.rows()) == 1
-            assert results.has_rows() and results.rows()[0]['salary'] == 57200.00# 52000 * 1.1
-            assert results.has_rows() and results.rows()[0]['email'] == 'john.doe@company.com'
+            assert (
+                results.has_rows() and results.rows()[0]["salary"] == 57200.00
+            )  # 52000 * 1.1
+            assert (
+                results.has_rows()
+                and results.rows()[0]["email"] == "john.doe@company.com"
+            )
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -223,21 +254,25 @@ async def test_delete_operations(setup_test_table, test_config: Config):
                 ('Alice', 'Brown', 'alice.brown@example.com', 65000.00, 'Finance', '2023-04-05'),
                 ('Charlie', 'Wilson', 'charlie.wilson@example.com', 45000.00, 'IT', '2023-05-20')
             """)
-            
+
             # Single row DELETE
             result = await conn.execute("""
                 DELETE FROM test_dml_employees 
                 WHERE first_name = 'John' AND last_name = 'Doe'
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 1))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 1)
+            )
             assert affected_count == 1
-            
+
             # Multiple row DELETE
             result = await conn.execute("""
                 DELETE FROM test_dml_employees 
                 WHERE salary < 50000.00
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 1))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 1)
+            )
             assert affected_count == 1  # Charlie
 
             # DELETE with JOIN-like subquery
@@ -252,15 +287,22 @@ async def test_delete_operations(setup_test_table, test_config: Config):
             """)
             # This should delete employees from departments with only 1 employee (HR, Finance, IT)
             # After deleting John and Charlie, all remaining departments have exactly 1 employee
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 3))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 3)
+            )
             assert affected_count == 3
 
             # Verify remaining data
-            results = await conn.query("SELECT COUNT(*) as remaining FROM test_dml_employees")
-            assert results.has_rows() and results.rows()[0]['remaining'] == 0# No employees should remain
+            results = await conn.query(
+                "SELECT COUNT(*) as remaining FROM test_dml_employees"
+            )
+            assert (
+                results.has_rows() and results.rows()[0]["remaining"] == 0
+            )  # No employees should remain
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -274,7 +316,7 @@ async def test_upsert_operations(setup_test_table, test_config: Config):
                 ('John', 'Doe', 'john.doe@example.com', 50000.00, 'IT', '2023-01-15'),
                 ('Jane', 'Smith', 'jane.smith@example.com', 60000.00, 'HR', '2023-02-01')
             """)
-            
+
             # MERGE operation (SQL Server's UPSERT)
             results = await conn.execute("""
                 WITH source AS (
@@ -290,24 +332,29 @@ async def test_upsert_operations(setup_test_table, test_config: Config):
                     INSERT (first_name, last_name, email, salary, department, hire_date)
                     VALUES (source.first_name, source.last_name, source.email, source.salary, source.department, '2023-06-01');
             """)
-            affected_count = getattr(results, 'affected', getattr(results, 'rows_affected', 2))
+            affected_count = getattr(
+                results, "affected", getattr(results, "rows_affected", 2)
+            )
             assert affected_count == 2  # 1 update, 1 insert
 
             # Verify results
-            results = await conn.query("SELECT * FROM test_dml_employees ORDER BY first_name")
+            results = await conn.query(
+                "SELECT * FROM test_dml_employees ORDER BY first_name"
+            )
             assert results.has_rows() and len(results.rows()) == 3
 
             # John should be updated
-            john = next(r for r in results.rows() if r['first_name'] == 'John')
-            assert john['email'] == 'john.doe@newcompany.com'
-            assert john['salary'] == 55000.00
-            
+            john = next(r for r in results.rows() if r["first_name"] == "John")
+            assert john["email"] == "john.doe@newcompany.com"
+            assert john["salary"] == 55000.00
+
             # Bob should be inserted
-            bob = next(r for r in results.rows() if r['first_name'] == 'Bob')
-            assert bob['email'] == 'bob.johnson@newcompany.com'
-            
+            bob = next(r for r in results.rows() if r["first_name"] == "Bob")
+            assert bob["email"] == "bob.johnson@newcompany.com"
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -317,15 +364,19 @@ async def test_bulk_operations(setup_test_table, test_config: Config):
             # Bulk INSERT using VALUES
             values = []
             for i in range(100):
-                values.append(f"('User{i}', 'LastName{i}', 'user{i}@example.com', {40000 + i * 100}, 'IT', '2023-01-{(i % 28) + 1:02d}')")
-            
+                values.append(
+                    f"('User{i}', 'LastName{i}', 'user{i}@example.com', {40000 + i * 100}, 'IT', '2023-01-{(i % 28) + 1:02d}')"
+                )
+
             bulk_insert_sql = f"""
                 INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date) VALUES 
-                {', '.join(values)}
+                {", ".join(values)}
             """
 
             result = await conn.execute(bulk_insert_sql)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 100))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 100)
+            )
             assert affected_count == 100
 
             # Bulk UPDATE
@@ -334,16 +385,23 @@ async def test_bulk_operations(setup_test_table, test_config: Config):
                 SET salary = salary + 1000 
                 WHERE department = 'IT'
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 100))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 100)
+            )
             assert affected_count == 100
-            
+
             # Verify bulk operations
-            results = await conn.query("SELECT COUNT(*) as total, AVG(salary) as avg_salary FROM test_dml_employees")
-            assert results.has_rows() and results.rows()[0]['total'] == 100
-            assert results.has_rows() and results.rows()[0]['avg_salary'] > 40000# Should be higher due to the +1000 update
-            
+            results = await conn.query(
+                "SELECT COUNT(*) as total, AVG(salary) as avg_salary FROM test_dml_employees"
+            )
+            assert results.has_rows() and results.rows()[0]["total"] == 100
+            assert (
+                results.has_rows() and results.rows()[0]["avg_salary"] > 40000
+            )  # Should be higher due to the +1000 update
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -354,10 +412,12 @@ async def test_async_dml_operations(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             try:
-                await conn.execute("IF OBJECT_ID('test_async_dml', 'U') IS NOT NULL DROP TABLE test_async_dml")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_async_dml', 'U') IS NOT NULL DROP TABLE test_async_dml"
+                )
+            except Exception:
                 pass
-            
+
             # Create temporary table for async testing
             await conn.execute("""
                 CREATE TABLE test_async_dml (
@@ -366,43 +426,52 @@ async def test_async_dml_operations(test_config: Config):
                     value INT
                 )
             """)
-            
+
             # Async INSERT
             result = await conn.execute("""
                 INSERT INTO test_async_dml (name, value) VALUES 
                 ('Async Test 1', 100),
                 ('Async Test 2', 200)
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 2))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 2)
+            )
             assert affected_count == 2
-            
+
             # Async SELECT
             results = await conn.query("SELECT * FROM test_async_dml ORDER BY value")
             assert results.has_rows() and len(results.rows()) == 2
-            assert results.has_rows() and results.rows()[0]['name'] == 'Async Test 1'
-            
+            assert results.has_rows() and results.rows()[0]["name"] == "Async Test 1"
+
             # Async UPDATE
             result = await conn.execute("""
                 UPDATE test_async_dml SET value = value * 2 WHERE id = 1
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 1))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 1)
+            )
             assert affected_count == 1
 
             # Async DELETE
             result = await conn.execute("""
                 DELETE FROM test_async_dml WHERE value > 150
             """)
-            affected_count = getattr(result, 'affected', getattr(result, 'rows_affected', 2))
+            affected_count = getattr(
+                result, "affected", getattr(result, "rows_affected", 2)
+            )
             assert affected_count == 2  # Both records after update
-            
+
             # Clean up
             try:
-                await conn.execute("IF OBJECT_ID('test_async_dml', 'U') IS NOT NULL DROP TABLE test_async_dml")
-            except:
+                await conn.execute(
+                    "IF OBJECT_ID('test_async_dml', 'U') IS NOT NULL DROP TABLE test_async_dml"
+                )
+            except Exception:
                 pass
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -412,16 +481,18 @@ async def test_transaction_rollback(setup_test_table, test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # This test demonstrates what happens when an error occurs
             # Note: Explicit transaction control would need to be added to the library
-            
+
             # Insert initial data
             await conn.execute("""
                 INSERT INTO test_dml_employees (first_name, last_name, email, salary, department, hire_date) VALUES 
                 ('John', 'Doe', 'john.doe@example.com', 50000.00, 'IT', '2023-01-15')
             """)
-            
+
             # Verify data exists
-            results = await conn.query("SELECT COUNT(*) as count FROM test_dml_employees")
-            assert results.has_rows() and results.rows()[0]['count'] == 1
+            results = await conn.query(
+                "SELECT COUNT(*) as count FROM test_dml_employees"
+            )
+            assert results.has_rows() and results.rows()[0]["count"] == 1
 
             # Attempt operation that should fail
             try:
@@ -430,12 +501,14 @@ async def test_transaction_rollback(setup_test_table, test_config: Config):
                     ('Jane', 'Smith', 'john.doe@example.com', 60000.00, 'HR', '2023-02-01')
                 """)
                 # This might fail due to unique constraint on email if we had one
-            except:
+            except Exception:
                 pass  # Expected to fail
-            
+
             # Data should still be there (this test would be more meaningful with explicit transactions)
-            results = await conn.query("SELECT COUNT(*) as count FROM test_dml_employees")
-            assert results.has_rows() and results.rows()[0]['count'] >= 1
+            results = await conn.query(
+                "SELECT COUNT(*) as count FROM test_dml_employees"
+            )
+            assert results.has_rows() and results.rows()[0]["count"] >= 1
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

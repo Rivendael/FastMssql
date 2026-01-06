@@ -6,7 +6,6 @@ and failure scenarios to ensure robust error handling.
 """
 
 import pytest
-
 from conftest import Config
 
 try:
@@ -14,7 +13,10 @@ try:
 except ImportError:
     pytest.fail("mssql wrapper not available - make sure mssql.py is importable")
 
-INVALID_CONNECTION_STRING = "Server=invalid_server;Database=invalid_db;User=invalid;Password=invalid"
+INVALID_CONNECTION_STRING = (
+    "Server=invalid_server;Database=invalid_db;User=invalid;Password=invalid"
+)
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -25,20 +27,23 @@ async def test_sql_syntax_errors(test_config: Config):
             # Invalid SQL syntax
             with pytest.raises(Exception):
                 await conn.execute("INVALID SQL STATEMENT")
-                
+
             with pytest.raises(Exception):
-                await conn.execute("SELECT * FORM invalid_table")  # FORM instead of FROM
-                
+                await conn.execute(
+                    "SELECT * FORM invalid_table"
+                )  # FORM instead of FROM
+
             with pytest.raises(Exception):
                 await conn.execute("INSERT INTO non_existent_table VALUES (1, 2, 3)")
-                
+
             # Connection should still be usable after errors
             result = await conn.query("SELECT 1 as recovery_test")
             if result and result.rows():
-                assert result.rows()[0]['recovery_test'] == 1
+                assert result.rows()[0]["recovery_test"] == 1
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -48,7 +53,7 @@ async def test_constraint_violations(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_constraints_error")
-            
+
             # Create test table with constraints
             await conn.execute("""
                 CREATE TABLE test_constraints_error (
@@ -58,46 +63,48 @@ async def test_constraint_violations(test_config: Config):
                     category VARCHAR(20) NOT NULL
                 )
             """)
-            
+
             try:
                 # Insert valid data first
                 await conn.execute("""
                     INSERT INTO test_constraints_error (email, age, category) 
                     VALUES ('valid@example.com', 25, 'A')
                 """)
-                
+
                 # Test primary key violation (duplicate)
                 with pytest.raises(Exception):
                     await conn.execute("""
                         INSERT INTO test_constraints_error (id, email, age, category) 
                         VALUES (1, 'another@example.com', 30, 'B')
                     """)
-                
+
                 # Test unique constraint violation
                 with pytest.raises(Exception):
                     await conn.execute("""
                         INSERT INTO test_constraints_error (email, age, category) 
                         VALUES ('valid@example.com', 35, 'C')
                     """)
-                
+
                 # Test check constraint violation
                 with pytest.raises(Exception):
                     await conn.execute("""
                         INSERT INTO test_constraints_error (email, age, category) 
                         VALUES ('test@example.com', 200, 'D')
                     """)
-                
+
                 # Test NOT NULL constraint violation
                 with pytest.raises(Exception):
                     await conn.execute("""
                         INSERT INTO test_constraints_error (email, age, category) 
                         VALUES (NULL, 25, 'E')
                     """)
-                
+
                 # Verify original data is still there
-                result = await conn.query("SELECT COUNT(*) as count FROM test_constraints_error")
+                result = await conn.query(
+                    "SELECT COUNT(*) as count FROM test_constraints_error"
+                )
                 assert result and result.rows()
-                assert result.rows()[0]['count'] == 1
+                assert result.rows()[0]["count"] == 1
 
             finally:
                 # Clean up - always execute this
@@ -105,6 +112,7 @@ async def test_constraint_violations(test_config: Config):
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -118,7 +126,9 @@ async def test_data_type_conversion_errors(test_config: Config):
 
             # Test numeric overflow
             with pytest.raises(Exception):
-                await conn.execute("SELECT CAST(9999999999999999999999999999999999999 AS INT)")
+                await conn.execute(
+                    "SELECT CAST(9999999999999999999999999999999999999 AS INT)"
+                )
 
             # Test invalid numeric conversion
             with pytest.raises(Exception):
@@ -128,7 +138,9 @@ async def test_data_type_conversion_errors(test_config: Config):
 
             # Test numeric overflow
             with pytest.raises(Exception):
-                await conn.execute("SELECT CAST(9999999999999999999999999999999999999 AS INT)")
+                await conn.execute(
+                    "SELECT CAST(9999999999999999999999999999999999999 AS INT)"
+                )
 
             # Test invalid numeric conversion
             with pytest.raises(Exception):
@@ -137,10 +149,11 @@ async def test_data_type_conversion_errors(test_config: Config):
             # Connection should still work after errors
             result = await conn.query("SELECT 'still working' as status")
             assert result and result.has_rows()
-            assert result.rows()[0]['status'] == 'still working'
+            assert result.rows()[0]["status"] == "still working"
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -153,14 +166,15 @@ async def test_connection_interruption(test_config: Config):
                 # Verify both work
                 result1 = await conn1.query("SELECT 1 as test")
                 assert result1 and result1.rows()
-                assert result1.rows()[0]['test'] == 1
-                
+                assert result1.rows()[0]["test"] == 1
+
                 result2 = await conn2.query("SELECT 2 as test")
                 assert result2 and result2.rows()
-                assert result2.rows()[0]['test'] == 2
+                assert result2.rows()[0]["test"] == 2
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -170,7 +184,7 @@ async def test_null_and_empty_values(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_null_empty")
-            
+
             # Create test table
             await conn.execute("""
                 CREATE TABLE test_null_empty (
@@ -180,7 +194,7 @@ async def test_null_and_empty_values(test_config: Config):
                     empty_string NVARCHAR(100) DEFAULT ''
                 )
             """)
-            
+
             try:
                 # Insert various NULL and empty combinations
                 await conn.execute("""
@@ -190,35 +204,36 @@ async def test_null_and_empty_values(test_config: Config):
                     ('text', 42, ''),
                     (NULL, 0, 'not empty')
                 """)
-                
+
                 # Query and verify NULL handling
                 result = await conn.query("SELECT * FROM test_null_empty ORDER BY id")
                 rows = result.rows() if result.has_rows() else []
                 assert len(rows) == 4
 
                 # First row - all nulls/empty
-                assert rows[0]['nullable_text'] is None
-                assert rows[0]['nullable_int'] is None
-                assert rows[0]['empty_string'] == ''
+                assert rows[0]["nullable_text"] is None
+                assert rows[0]["nullable_int"] is None
+                assert rows[0]["empty_string"] == ""
 
                 # Second row - empty string vs NULL
-                assert rows[1]['nullable_text'] == ''
-                assert rows[1]['nullable_int'] is None
-                
+                assert rows[1]["nullable_text"] == ""
+                assert rows[1]["nullable_int"] is None
+
                 # Third row - normal values
-                assert rows[2]['nullable_text'] == 'text'
-                assert rows[2]['nullable_int'] == 42
-                
+                assert rows[2]["nullable_text"] == "text"
+                assert rows[2]["nullable_int"] == 42
+
                 # Fourth row - zero vs NULL
-                assert rows[3]['nullable_text'] is None
-                assert rows[3]['nullable_int'] == 0
-                
+                assert rows[3]["nullable_text"] is None
+                assert rows[3]["nullable_int"] == 0
+
             finally:
                 # Clean up - always execute this
                 await conn.execute("DROP TABLE IF EXISTS test_null_empty")
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -228,7 +243,7 @@ async def test_special_characters(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_special_chars")
-            
+
             # Create test table
             await conn.execute("""
                 CREATE TABLE test_special_chars (
@@ -236,7 +251,7 @@ async def test_special_characters(test_config: Config):
                     text_data NVARCHAR(500)
                 )
             """)
-            
+
             try:
                 # Test various special characters
                 special_strings = [
@@ -249,32 +264,39 @@ async def test_special_characters(test_config: Config):
                     "SQL injection attempt: '; DROP TABLE test; --",
                     "Percent % and underscore _ wildcards",
                     "XML-like: <tag>content</tag>",
-                    "JSON-like: {\"key\": \"value\"}",
-                    "Emoji: 😀🎉📊"
+                    'JSON-like: {"key": "value"}',
+                    "Emoji: 😀🎉📊",
                 ]
-                
+
                 # Insert special character data
                 for i, special_str in enumerate(special_strings):
                     # Use parameterized query would be better, but test with string concatenation
                     escaped_str = special_str.replace("'", "''")  # Basic SQL escaping
-                    await conn.execute(f"INSERT INTO test_special_chars (text_data) VALUES (N'{escaped_str}')")
+                    await conn.execute(
+                        f"INSERT INTO test_special_chars (text_data) VALUES (N'{escaped_str}')"
+                    )
 
                 # Retrieve and verify
-                result = await conn.query("SELECT * FROM test_special_chars ORDER BY id")
+                result = await conn.query(
+                    "SELECT * FROM test_special_chars ORDER BY id"
+                )
 
                 assert result.has_rows() and len(result.rows()) == len(special_strings)
 
                 for i, row in enumerate(result.rows()):
                     expected = special_strings[i]
-                    actual = row['text_data']
-                    assert actual == expected, f"Mismatch at index {i}: expected '{expected}', got '{actual}'"
-            
+                    actual = row["text_data"]
+                    assert actual == expected, (
+                        f"Mismatch at index {i}: expected '{expected}', got '{actual}'"
+                    )
+
             finally:
                 # Clean up - always execute this
                 await conn.execute("DROP TABLE IF EXISTS test_special_chars")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -295,22 +317,23 @@ async def test_boundary_values(test_config: Config):
 
             assert result.has_rows() and len(result.rows()) == 1
             row = result.rows()[0] if result.has_rows() else {}
-            
-            assert row['min_int'] == -2147483648
-            assert row['max_int'] == 2147483647
-            assert row['min_tinyint'] == 0
-            assert row['max_tinyint'] == 255
-            assert row['min_smallint'] == -32768
-            assert row['max_smallint'] == 32767
-            
+
+            assert row["min_int"] == -2147483648
+            assert row["max_int"] == 2147483647
+            assert row["min_tinyint"] == 0
+            assert row["max_tinyint"] == 255
+            assert row["min_smallint"] == -32768
+            assert row["max_smallint"] == 32767
+
             # Test string length boundaries
-            max_varchar = 'A' * 8000  # Max for VARCHAR
+            max_varchar = "A" * 8000  # Max for VARCHAR
             result = await conn.query(f"SELECT '{max_varchar}' as max_varchar")
             if result.has_rows():
-                assert len(result.rows()[0]['max_varchar']) == 8000
+                assert len(result.rows()[0]["max_varchar"]) == 8000
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -321,10 +344,10 @@ async def test_async_error_handling(test_config: Config):
             # Test async syntax error
             with pytest.raises(Exception):
                 await conn.execute("INVALID ASYNC SQL")
-            
+
             # Connection should still work after error
             result = await conn.query("SELECT 'async recovery' as status")
-            assert result.rows()[0]['status'] == 'async recovery'
+            assert result.rows()[0]["status"] == "async recovery"
 
             # Clean up any existing table first
             await conn.execute("DROP TABLE IF EXISTS test_async_error")
@@ -336,20 +359,23 @@ async def test_async_error_handling(test_config: Config):
                     name NVARCHAR(50) NOT NULL
                 )
             """)
-            
+
             try:
                 await conn.execute("INSERT INTO test_async_error VALUES (1, 'test')")
-                
+
                 # This should fail due to duplicate key
                 with pytest.raises(Exception):
-                    await conn.execute("INSERT INTO test_async_error VALUES (1, 'duplicate')")
-            
+                    await conn.execute(
+                        "INSERT INTO test_async_error VALUES (1, 'duplicate')"
+                    )
+
             finally:
                 # Clean up - always execute this
                 await conn.execute("DROP TABLE IF EXISTS test_async_error")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -367,9 +393,10 @@ async def test_empty_result_sets(test_config: Config):
             assert result is not None
             assert not result.has_rows() and len(result.rows()) == 0
             assert isinstance(result.rows(), list)
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -386,18 +413,20 @@ async def test_multiple_result_sets(test_config: Config):
                     SELECT 2 as second_result;
                     SELECT 3 as third_result;
                 """)
-                
+
                 # We should get at least one result set
                 # The current implementation likely only returns the first result set
                 assert result is not None
                 assert result.has_rows() and len(result.rows()) >= 1
-                
+
                 # Check if we got the first result
                 if result.rows():
-                    assert result.rows()[0]['first_result'] == 1
-                
-                print("Multiple result sets test completed - library returns first result set")
-                
+                    assert result.rows()[0]["first_result"] == 1
+
+                print(
+                    "Multiple result sets test completed - library returns first result set"
+                )
+
             except Exception as e:
                 # If batch statements don't work, try a simpler approach
                 if "batch" in str(e).lower() or "multiple" in str(e).lower():
@@ -410,16 +439,18 @@ async def test_multiple_result_sets(test_config: Config):
                         UNION ALL  
                         SELECT 3 as result_set_id, 'third' as result_value
                     """)
-                    
+
                     assert result is not None
                     assert result.has_rows() and len(result.rows()) == 3
-                    assert result.rows()[0]['result_set_id'] == 1
-                    assert result.rows()[1]['result_set_id'] == 2
-                    assert result.rows()[2]['result_set_id'] == 3
-                    
-                    print("Multiple result sets test completed using UNION ALL approach")
+                    assert result.rows()[0]["result_set_id"] == 1
+                    assert result.rows()[1]["result_set_id"] == 2
+                    assert result.rows()[2]["result_set_id"] == 3
+
+                    print(
+                        "Multiple result sets test completed using UNION ALL approach"
+                    )
                 else:
                     raise
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
