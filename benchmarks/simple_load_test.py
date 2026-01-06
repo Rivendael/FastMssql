@@ -19,6 +19,7 @@ from fastmssql import Connection, PoolConfig
 @dataclass
 class QueryMetrics:
     """Track metrics for different query types."""
+
     select_queries: int = 0
     insert_queries: int = 0
     update_queries: int = 0
@@ -29,13 +30,13 @@ class QueryMetrics:
 
 async def setup_test_data(connection_string: str):
     """Create test tables with realistic schema."""
-    async with Connection(connection_string, PoolConfig.performance()) as conn:
+    async with Connection(connection_string, PoolConfig.one()) as conn:
         try:
             # Drop existing test tables
             await conn.execute("DROP TABLE IF EXISTS load_test_orders")
             await conn.execute("DROP TABLE IF EXISTS load_test_users")
             print("✓ Dropped existing test tables")
-            
+
             # Create users table
             await conn.execute("""
                 CREATE TABLE load_test_users (
@@ -48,7 +49,7 @@ async def setup_test_data(connection_string: str):
                 )
             """)
             print("✓ Created load_test_users table")
-            
+
             # Create orders table
             await conn.execute("""
                 CREATE TABLE load_test_orders (
@@ -64,49 +65,58 @@ async def setup_test_data(connection_string: str):
                 )
             """)
             print("✓ Created load_test_orders table")
-            
+
             # Insert initial users (increased to 10,000 to reduce lock contention)
             batch_size = 100
             total_users = 10000
             for batch_start in range(0, total_users, batch_size):
-                values_clause = ", ".join([f"(@P{i*2+1}, @P{i*2+2})" for i in range(min(batch_size, total_users - batch_start))])
+                values_clause = ", ".join(
+                    [
+                        f"(@P{i * 2 + 1}, @P{i * 2 + 2})"
+                        for i in range(min(batch_size, total_users - batch_start))
+                    ]
+                )
                 params = []
                 for i in range(batch_start, min(batch_start + batch_size, total_users)):
                     params.extend([f"user_{i}", f"user_{i}@test.local"])
-                
+
                 query = f"INSERT INTO load_test_users (username, email) VALUES {values_clause}"
                 await conn.execute(query, params)
-            
+
             print(f"✓ Inserted {total_users:,} test users")
-            
+
             # Create indexes for query optimization
             await conn.execute("""
                 CREATE INDEX idx_orders_user_id ON load_test_orders(user_id)
             """)
             print("✓ Created index on load_test_orders.user_id")
-            
+
             await conn.execute("""
                 CREATE INDEX idx_orders_status ON load_test_orders(status)
             """)
             print("✓ Created index on load_test_orders.status")
-            
+
             await conn.execute("""
                 CREATE INDEX idx_orders_order_date ON load_test_orders(order_date DESC)
             """)
             print("✓ Created index on load_test_orders.order_date")
-            
+
         except Exception as e:
             print(f"❌ Setup error: {e}")
             raise
 
 
-async def realistic_load_test(connection_string: str, workers: int = 10, duration: int = 15, warmup: int = 5):
+async def realistic_load_test(
+    connection_string: str, workers: int = 10, duration: int = 15, warmup: int = 5
+):
     """Run a realistic load test with mixed SQL operations."""
-    
+
     print("\n🎯 Realistic SQL Load Test:")
     print(f"   Workers: {workers}")
     print(f"   Duration: {duration}s (+ {warmup}s warmup)")
-    print("   Workload: Mixed SELECTs (60%), INSERTs (20%), UPDATEs (15%), DELETEs (5%)")
+    print(
+        "   Workload: Mixed SELECTs (60%), INSERTs (20%), UPDATEs (15%), DELETEs (5%)"
+    )
     print("   Operations: Parameterized queries, transactions, realistic data")
 
     # Thread-safe counters using locks
@@ -116,19 +126,19 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
     response_times = []
     query_metrics = defaultdict(lambda: QueryMetrics())
     worker_stats = defaultdict(lambda: {"requests": 0, "errors": 0})
-    
+
     def generate_random_string(length: int = 20) -> str:
         """Generate random string for test data."""
-        return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-    
+        return "".join(random.choices(string.ascii_letters + string.digits, k=length))
+
     async def worker(worker_id: int, conn: Connection):
         """Worker that executes realistic SQL queries."""
         nonlocal total_requests, total_errors
-        
+
         # Warmup phase
         warmup_end = time.time() + warmup
         warmup_requests = 0
-        
+
         print(f"Worker {worker_id}: Starting warmup...")
         while time.time() < warmup_end:
             try:
@@ -137,22 +147,24 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
                 warmup_requests += 1
             except Exception:
                 pass
-        
+
         print(f"Worker {worker_id}: Warmup complete ({warmup_requests} requests)")
-        
+
         # Actual test phase with mixed workload
         test_end = time.time() + duration
         local_requests = 0
         local_errors = 0
         local_response_times = []
         local_metrics = QueryMetrics()
-        
+
         while time.time() < test_end:
             try:
                 operation = random.randint(1, 100)
                 start_time = time.perf_counter()
-                
-                if operation <= 75:  # 75% SELECT queries (increased from 60% to reduce lock contention)
+
+                if (
+                    operation <= 75
+                ):  # 75% SELECT queries (increased from 60% to reduce lock contention)
                     # Query with WHERE clause and JOIN (use NOLOCK for reads to avoid locks)
                     query_type = random.randint(1, 3)
                     if query_type == 1:
@@ -162,7 +174,7 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
                             """SELECT COUNT(*) as order_count, SUM(amount) as total_amount 
                                FROM load_test_orders WITH (NOLOCK)
                                WHERE user_id = @P1""",
-                            [user_id]
+                            [user_id],
                         )
                     elif query_type == 2:
                         # Join users with their orders (use NOLOCK for reads)
@@ -175,15 +187,15 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
                         )
                     else:
                         # Search by status (use NOLOCK for reads)
-                        status = random.choice(['pending', 'completed', 'cancelled'])
+                        status = random.choice(["pending", "completed", "cancelled"])
                         await conn.execute(
                             """SELECT user_id, order_date, amount FROM load_test_orders WITH (NOLOCK)
                                WHERE status = @P1 
                                ORDER BY order_date DESC""",
-                            [status]
+                            [status],
                         )
                     local_metrics.select_queries += 1
-                    
+
                 elif operation <= 88:  # 13% INSERT queries (reduced from 20%)
                     # Insert new order (spread across all 10,000 users to reduce contention)
                     user_id = random.randint(1, 10000)
@@ -192,42 +204,44 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
                     await conn.execute(
                         """INSERT INTO load_test_orders (user_id, amount, description) 
                            VALUES (@P1, @P2, @P3)""",
-                        [user_id, amount, description]
+                        [user_id, amount, description],
                     )
                     local_metrics.insert_queries += 1
-                    
+
                 elif operation <= 96:  # 8% UPDATE queries (reduced from 15%)
                     # Update order status (spread across wider ID range to reduce lock contention)
                     order_id = random.randint(1, 100000)
-                    new_status = random.choice(['pending', 'completed', 'cancelled', 'shipped'])
+                    new_status = random.choice(
+                        ["pending", "completed", "cancelled", "shipped"]
+                    )
                     await conn.execute(
                         """UPDATE load_test_orders 
                            SET status = @P1, updated_at = GETDATE() 
                            WHERE order_id = @P2""",
-                        [new_status, order_id]
+                        [new_status, order_id],
                     )
                     local_metrics.update_queries += 1
-                    
+
                 else:  # 5% DELETE queries
                     # Delete old cancelled orders
                     order_id = random.randint(1, 5000)
                     await conn.execute(
                         """DELETE FROM load_test_orders 
                            WHERE order_id = @P1 AND status = 'cancelled'""",
-                        [order_id]
+                        [order_id],
                     )
                     local_metrics.delete_queries += 1
-                
+
                 response_time = time.perf_counter() - start_time
                 local_response_times.append(response_time)
                 local_requests += 1
-                
+
             except Exception as e:
                 local_errors += 1
                 local_metrics.errors += 1
                 if local_errors <= 3:
                     print(f"Worker {worker_id} error: {e}")
-        
+
         # Update global stats atomically
         async with stats_lock:
             total_requests += local_requests
@@ -236,64 +250,86 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
             worker_stats[worker_id]["requests"] = local_requests
             worker_stats[worker_id]["errors"] = local_errors
             query_metrics[worker_id] = local_metrics
-        
+
         print(f"Worker {worker_id}: {local_requests} requests, {local_errors} errors")
-    
+
     print("Starting warmup phase...")
-    
+
     # Create a single shared connection for all workers
-    async with Connection(connection_string, PoolConfig.performance()) as shared_conn:
+    async with Connection(
+        connection_string, PoolConfig.adaptive(workers)
+    ) as shared_conn:
         # Start all workers with the shared connection
-        worker_tasks = [asyncio.create_task(worker(i, shared_conn)) for i in range(workers)]
-        
+        worker_tasks = [
+            asyncio.create_task(worker(i, shared_conn)) for i in range(workers)
+        ]
+
         # Wait for warmup to complete
         await asyncio.sleep(warmup + 1)
         print("Test phase starting...")
-        
+
         # Capture pool stats before test
         pool_stats_before = await shared_conn.pool_stats()
         print(f"   Pool Before: {pool_stats_before}")
-        
+
         # Measure actual test duration precisely
         test_start = time.perf_counter()
-        
+
         # Wait for all workers to complete
         await asyncio.gather(*worker_tasks)
         actual_duration = time.perf_counter() - test_start - warmup
-        
+
         # Capture pool stats after test
         pool_stats_after = await shared_conn.pool_stats()
         print(f"   Pool After:  {pool_stats_after}")
-        
+
         # Aggregate query type metrics
         total_selects = sum(m.select_queries for m in query_metrics.values())
         total_inserts = sum(m.insert_queries for m in query_metrics.values())
         total_updates = sum(m.update_queries for m in query_metrics.values())
         total_deletes = sum(m.delete_queries for m in query_metrics.values())
-        
+
         # Calculate comprehensive results
         if total_requests > 0:
             rps = total_requests / actual_duration
             error_rate = (total_errors / (total_requests + total_errors)) * 100
-            
+
             # Response time statistics
             avg_response_time = statistics.mean(response_times) if response_times else 0
-            median_response_time = statistics.median(response_times) if response_times else 0
-            p95_response_time = statistics.quantiles(response_times, n=20)[18] if len(response_times) >= 20 else 0
-            p99_response_time = statistics.quantiles(response_times, n=100)[98] if len(response_times) >= 100 else 0
+            median_response_time = (
+                statistics.median(response_times) if response_times else 0
+            )
+            p95_response_time = (
+                statistics.quantiles(response_times, n=20)[18]
+                if len(response_times) >= 20
+                else 0
+            )
+            p99_response_time = (
+                statistics.quantiles(response_times, n=100)[98]
+                if len(response_times) >= 100
+                else 0
+            )
             min_response_time = min(response_times) if response_times else 0
             max_response_time = max(response_times) if response_times else 0
-            
+
             # Worker distribution
             requests_per_worker = [stats["requests"] for stats in worker_stats.values()]
-            worker_balance = (max(requests_per_worker) - min(requests_per_worker)) / max(requests_per_worker) * 100 if requests_per_worker else 0
+            worker_balance = (
+                (max(requests_per_worker) - min(requests_per_worker))
+                / max(requests_per_worker)
+                * 100
+                if requests_per_worker
+                else 0
+            )
         else:
             rps = 0
             error_rate = 100
-            avg_response_time = median_response_time = p95_response_time = p99_response_time = 0
+            avg_response_time = median_response_time = p95_response_time = (
+                p99_response_time
+            ) = 0
             min_response_time = max_response_time = 0
             worker_balance = 0
-        
+
         print("\n📊 Results:")
         print(f"   Total Requests: {total_requests:,}")
         print(f"   Errors: {total_errors}")
@@ -301,19 +337,27 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
         print(f"   RPS: {rps:.1f}")
         print(f"   Error Rate: {error_rate:.2f}%")
         print("\n   Query Distribution:")
-        print(f"     SELECTs:  {total_selects:,} ({total_selects/total_requests*100:.1f}%)")
-        print(f"     INSERTs:  {total_inserts:,} ({total_inserts/total_requests*100:.1f}%)")
-        print(f"     UPDATEs:  {total_updates:,} ({total_updates/total_requests*100:.1f}%)")
-        print(f"     DELETEs:  {total_deletes:,} ({total_deletes/total_requests*100:.1f}%)")
+        print(
+            f"     SELECTs:  {total_selects:,} ({total_selects / total_requests * 100:.1f}%)"
+        )
+        print(
+            f"     INSERTs:  {total_inserts:,} ({total_inserts / total_requests * 100:.1f}%)"
+        )
+        print(
+            f"     UPDATEs:  {total_updates:,} ({total_updates / total_requests * 100:.1f}%)"
+        )
+        print(
+            f"     DELETEs:  {total_deletes:,} ({total_deletes / total_requests * 100:.1f}%)"
+        )
         print("\n   Response Times:")
-        print(f"     Average: {avg_response_time*1000:.2f}ms")
-        print(f"     Median:  {median_response_time*1000:.2f}ms")
-        print(f"     P95:     {p95_response_time*1000:.2f}ms")
-        print(f"     P99:     {p99_response_time*1000:.2f}ms")
-        print(f"     Min:     {min_response_time*1000:.2f}ms")
-        print(f"     Max:     {max_response_time*1000:.2f}ms")
+        print(f"     Average: {avg_response_time * 1000:.2f}ms")
+        print(f"     Median:  {median_response_time * 1000:.2f}ms")
+        print(f"     P95:     {p95_response_time * 1000:.2f}ms")
+        print(f"     P99:     {p99_response_time * 1000:.2f}ms")
+        print(f"     Min:     {min_response_time * 1000:.2f}ms")
+        print(f"     Max:     {max_response_time * 1000:.2f}ms")
         print(f"   Worker Balance: {worker_balance:.1f}% variance")
-        
+
         return {
             "rps": rps,
             "total_requests": total_requests,
@@ -328,26 +372,31 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
             "selects": total_selects,
             "inserts": total_inserts,
             "updates": total_updates,
-            "deletes": total_deletes
-    }
+            "deletes": total_deletes,
+        }
 
 
 async def main():
     """Run realistic load tests with multiple iterations for stability."""
     from dotenv import load_dotenv
+
     load_dotenv()
     # Try to get connection string from environment
-    connection_string = os.getenv('FASTMSSQL_TEST_CONNECTION_STRING')
-    
+    connection_string = os.getenv("FASTMSSQL_TEST_CONNECTION_STRING")
+
     if not connection_string:
         print("❌ No connection string found!")
         print("Please set the FASTMSSQL_TEST_CONNECTION_STRING environment variable.")
         print("Example:")
-        print('  set FASTMSSQL_TEST_CONNECTION_STRING="Server=localhost,1433;Database=master;User Id=sa;Password=YourPassword;TrustServerCertificate=true;"')
+        print(
+            '  set FASTMSSQL_TEST_CONNECTION_STRING="Server=localhost,1433;Database=master;User Id=sa;Password=YourPassword;TrustServerCertificate=true;"'
+        )
         print("\nOr for Windows Authentication:")
-        print('  set FASTMSSQL_TEST_CONNECTION_STRING="Server=localhost;Database=master;Integrated Security=true;TrustServerCertificate=true;"')
+        print(
+            '  set FASTMSSQL_TEST_CONNECTION_STRING="Server=localhost;Database=master;Integrated Security=true;TrustServerCertificate=true;"'
+        )
         return
-    
+
     # Setup test data
     print("Setting up test database...")
     try:
@@ -355,7 +404,7 @@ async def main():
     except Exception as e:
         print(f"⚠️  Could not setup test data: {e}")
         print("Continuing with existing tables...")
-    
+
     # Test different worker counts with multiple iterations for stability
     scenarios = [
         {"workers": 5, "duration": 30, "iterations": 2},
@@ -363,125 +412,149 @@ async def main():
         {"workers": 20, "duration": 30, "iterations": 2},
         {"workers": 30, "duration": 30, "iterations": 2},
     ]
-    
+
     all_results = []
-    
+
     for scenario in scenarios:
         workers = scenario["workers"]
-        duration = scenario["duration"] 
+        duration = scenario["duration"]
         iterations = scenario["iterations"]
-        
-        print(f"\n{'='*70}")
+
+        print(f"\n{'=' * 70}")
         print(f"Testing {workers} workers ({iterations} iterations)")
-        print(f"{'='*70}")
-        
+        print(f"{'=' * 70}")
+
         iteration_results = []
-        
+
         for iteration in range(iterations):
             print(f"\n--- Iteration {iteration + 1}/{iterations} ---")
-            
+
             result = await realistic_load_test(
                 connection_string=connection_string,
                 workers=workers,
                 duration=duration,
-                warmup=5
+                warmup=5,
             )
-            
+
             iteration_results.append(result)
-            
+
             # Rest between iterations
             if iteration < iterations - 1:
                 print("Resting 5 seconds between iterations...")
                 await asyncio.sleep(5)
-        
+
         # Calculate average and stability metrics
         rps_values = [r["rps"] for r in iteration_results]
         avg_rps = statistics.mean(rps_values)
         rps_std = statistics.stdev(rps_values) if len(rps_values) > 1 else 0
-        rps_cv = (rps_std / avg_rps * 100) if avg_rps > 0 else 0  # Coefficient of variation
-        
+        rps_cv = (
+            (rps_std / avg_rps * 100) if avg_rps > 0 else 0
+        )  # Coefficient of variation
+
         response_times = [r["avg_response_time"] * 1000 for r in iteration_results]
         avg_response_time = statistics.mean(response_times)
-        
+
         p95_times = [r["p95_response_time"] * 1000 for r in iteration_results]
         avg_p95 = statistics.mean(p95_times)
-        
+
         total_requests = sum(r["total_requests"] for r in iteration_results)
         total_errors = sum(r["errors"] for r in iteration_results)
-        
+
         # Query type totals
         total_selects = sum(r["selects"] for r in iteration_results)
         total_inserts = sum(r["inserts"] for r in iteration_results)
         total_updates = sum(r["updates"] for r in iteration_results)
         total_deletes = sum(r["deletes"] for r in iteration_results)
-        
+
         print(f"\n📈 Summary for {workers} workers:")
         print(f"   Average RPS: {avg_rps:.1f} ± {rps_std:.1f} (CV: {rps_cv:.1f}%)")
         print(f"   RPS Range: {min(rps_values):.1f} - {max(rps_values):.1f}")
-        print(f"   Average Response Time: {avg_response_time:.2f}ms (P95: {avg_p95:.2f}ms)")
+        print(
+            f"   Average Response Time: {avg_response_time:.2f}ms (P95: {avg_p95:.2f}ms)"
+        )
         print(f"   Total Requests: {total_requests:,}")
-        print(f"   Query Mix: {total_selects} SELECTs, {total_inserts} INSERTs, {total_updates} UPDATEs, {total_deletes} DELETEs")
+        print(
+            f"   Query Mix: {total_selects} SELECTs, {total_inserts} INSERTs, {total_updates} UPDATEs, {total_deletes} DELETEs"
+        )
         print(f"   Total Errors: {total_errors}")
-        
-        all_results.append({
-            "workers": workers,
-            "avg_rps": avg_rps,
-            "rps_std": rps_std,
-            "rps_cv": rps_cv,
-            "min_rps": min(rps_values),
-            "max_rps": max(rps_values),
-            "avg_response_time": avg_response_time,
-            "avg_p95": avg_p95,
-            "total_requests": total_requests,
-            "total_errors": total_errors,
-            "total_selects": total_selects,
-            "total_inserts": total_inserts,
-            "total_updates": total_updates,
-            "total_deletes": total_deletes
-        })
-    
+
+        all_results.append(
+            {
+                "workers": workers,
+                "avg_rps": avg_rps,
+                "rps_std": rps_std,
+                "rps_cv": rps_cv,
+                "min_rps": min(rps_values),
+                "max_rps": max(rps_values),
+                "avg_response_time": avg_response_time,
+                "avg_p95": avg_p95,
+                "total_requests": total_requests,
+                "total_errors": total_errors,
+                "total_selects": total_selects,
+                "total_inserts": total_inserts,
+                "total_updates": total_updates,
+                "total_deletes": total_deletes,
+            }
+        )
+
     # Final comprehensive summary
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("FINAL SUMMARY - REALISTIC SQL WORKLOAD")
-    print(f"{'='*80}")
-    print(f"{'Workers':<10} {'Avg RPS':<12} {'±StdDev':<10} {'CV%':<8} {'Avg RT(ms)':<12} {'P95(ms)':<10}")
+    print(f"{'=' * 80}")
+    print(
+        f"{'Workers':<10} {'Avg RPS':<12} {'±StdDev':<10} {'CV%':<8} {'Avg RT(ms)':<12} {'P95(ms)':<10}"
+    )
     print("-" * 80)
-    
+
     for result in all_results:
-        print(f"{result['workers']:<10} {result['avg_rps']:<12.1f} {result['rps_std']:<10.1f} "
-              f"{result['rps_cv']:<8.1f} {result['avg_response_time']:<12.2f} {result['avg_p95']:<10.2f}")
-    
+        print(
+            f"{result['workers']:<10} {result['avg_rps']:<12.1f} {result['rps_std']:<10.1f} "
+            f"{result['rps_cv']:<8.1f} {result['avg_response_time']:<12.2f} {result['avg_p95']:<10.2f}"
+        )
+
     # Detailed query mix analysis
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("QUERY TYPE DISTRIBUTION")
-    print(f"{'='*80}")
-    print(f"{'Workers':<10} {'SELECTs':<15} {'INSERTs':<15} {'UPDATEs':<15} {'DELETEs':<15}")
+    print(f"{'=' * 80}")
+    print(
+        f"{'Workers':<10} {'SELECTs':<15} {'INSERTs':<15} {'UPDATEs':<15} {'DELETEs':<15}"
+    )
     print("-" * 80)
-    
+
     for result in all_results:
-        total = (result['total_selects'] + result['total_inserts'] + 
-                result['total_updates'] + result['total_deletes'])
-        selects_pct = result['total_selects'] / total * 100 if total > 0 else 0
-        inserts_pct = result['total_inserts'] / total * 100 if total > 0 else 0
-        updates_pct = result['total_updates'] / total * 100 if total > 0 else 0
-        deletes_pct = result['total_deletes'] / total * 100 if total > 0 else 0
-        
-        print(f"{result['workers']:<10} "
-              f"{result['total_selects']:,} ({selects_pct:.1f}%) "
-              f"{result['total_inserts']:,} ({inserts_pct:.1f}%) "
-              f"{result['total_updates']:,} ({updates_pct:.1f}%) "
-              f"{result['total_deletes']:,} ({deletes_pct:.1f}%)")
-    
+        total = (
+            result["total_selects"]
+            + result["total_inserts"]
+            + result["total_updates"]
+            + result["total_deletes"]
+        )
+        selects_pct = result["total_selects"] / total * 100 if total > 0 else 0
+        inserts_pct = result["total_inserts"] / total * 100 if total > 0 else 0
+        updates_pct = result["total_updates"] / total * 100 if total > 0 else 0
+        deletes_pct = result["total_deletes"] / total * 100 if total > 0 else 0
+
+        print(
+            f"{result['workers']:<10} "
+            f"{result['total_selects']:,} ({selects_pct:.1f}%) "
+            f"{result['total_inserts']:,} ({inserts_pct:.1f}%) "
+            f"{result['total_updates']:,} ({updates_pct:.1f}%) "
+            f"{result['total_deletes']:,} ({deletes_pct:.1f}%)"
+        )
+
     # Performance analysis
     print("\n🔍 Performance Analysis:")
-    best_result = max(all_results, key=lambda x: x['avg_rps'])
-    most_stable = min(all_results, key=lambda x: x['rps_cv'])
-    
-    print(f"   Best Performance: {best_result['workers']} workers @ {best_result['avg_rps']:.1f} RPS")
-    print(f"   Most Stable: {most_stable['workers']} workers (CV: {most_stable['rps_cv']:.1f}%)")
-    
+    best_result = max(all_results, key=lambda x: x["avg_rps"])
+    most_stable = min(all_results, key=lambda x: x["rps_cv"])
+
+    print(
+        f"   Best Performance: {best_result['workers']} workers @ {best_result['avg_rps']:.1f} RPS"
+    )
+    print(
+        f"   Most Stable: {most_stable['workers']} workers (CV: {most_stable['rps_cv']:.1f}%)"
+    )
+
     # Check for errors
-    total_errors_all = sum(r['total_errors'] for r in all_results)
+    total_errors_all = sum(r["total_errors"] for r in all_results)
     if total_errors_all > 0:
         print(f"   ⚠️  Total Errors Across All Tests: {total_errors_all}")
     else:

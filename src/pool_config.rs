@@ -142,11 +142,12 @@ impl PyPoolConfig {
     }
 
     /// Create a default configuration for high-throughput scenarios
+    /// Optimized for 15-25 concurrent workers without pool contention
     #[staticmethod]
     pub fn high_throughput() -> Self {
         PyPoolConfig {
-            max_size: 50,
-            min_idle: Some(15),
+            max_size: 25,      // Reduced from 50 - sweet spot for most workloads
+            min_idle: Some(8), // Reduced from 15 - maintains ready connections
             max_lifetime: Some(std::time::Duration::from_secs(1800)),
             idle_timeout: Some(std::time::Duration::from_secs(600)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),
@@ -198,14 +199,33 @@ impl PyPoolConfig {
     }
 
     /// Create a configuration optimized for maximum performance
+    /// Balanced for high concurrency without connection pool contention
     #[staticmethod]
     pub fn performance() -> Self {
         PyPoolConfig {
-            max_size: 100,
-            min_idle: Some(30),
+            max_size: 30,       // Reduced from 100 - prevents lock contention and thundering herd
+            min_idle: Some(10), // Reduced from 30 - matches typical concurrent load
             max_lifetime: Some(std::time::Duration::from_secs(7200)),
             idle_timeout: Some(std::time::Duration::from_secs(1800)),
             connection_timeout: Some(std::time::Duration::from_secs(10)),
+            test_on_check_out: None,
+            retry_connection: None,
+        }
+    }
+
+    /// Create an adaptive pool configuration based on expected concurrency
+    /// Formula: max_size = ceil(concurrent_workers * 1.2) + 5
+    #[staticmethod]
+    pub fn adaptive(concurrent_workers: u32) -> Self {
+        let max_size = ((concurrent_workers as f64 * 1.2).ceil() as u32 + 5).max(5);
+        let min_idle = (max_size / 3).max(2);
+
+        PyPoolConfig {
+            max_size,
+            min_idle: Some(min_idle),
+            max_lifetime: Some(std::time::Duration::from_secs(1800)),
+            idle_timeout: Some(std::time::Duration::from_secs(600)),
+            connection_timeout: Some(std::time::Duration::from_secs(30)),
             test_on_check_out: None,
             retry_connection: None,
         }
@@ -228,8 +248,8 @@ impl PyPoolConfig {
 impl Default for PyPoolConfig {
     fn default() -> Self {
         PyPoolConfig {
-            max_size: 10,
-            min_idle: Some(2),
+            max_size: 15,      // Balanced default for typical workloads (was 10)
+            min_idle: Some(3), // Slightly higher min_idle to keep connections ready
             max_lifetime: Some(std::time::Duration::from_secs(1800)),
             idle_timeout: Some(std::time::Duration::from_secs(300)),
             connection_timeout: Some(std::time::Duration::from_secs(30)),

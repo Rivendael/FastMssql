@@ -209,8 +209,8 @@ class TestPoolConfigPresets:
     def test_high_throughput(self):
         """Test high_throughput preset."""
         config = PoolConfig.high_throughput()
-        assert config.max_size == 50
-        assert config.min_idle == 15
+        assert config.max_size == 25
+        assert config.min_idle == 8
         assert config.max_lifetime_secs == 1800
         assert config.idle_timeout_secs == 600
         assert config.connection_timeout_secs == 30
@@ -245,11 +245,142 @@ class TestPoolConfigPresets:
     def test_performance(self):
         """Test performance preset."""
         config = PoolConfig.performance()
-        assert config.max_size == 100
-        assert config.min_idle == 30
+        assert config.max_size == 30
+        assert config.min_idle == 10
         assert config.max_lifetime_secs == 7200
         assert config.idle_timeout_secs == 1800
         assert config.connection_timeout_secs == 10
+
+
+@pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
+class TestPoolConfigAdaptive:
+    """Test PoolConfig adaptive() method for dynamic pool sizing."""
+
+    def test_adaptive_small_concurrency(self):
+        """Test adaptive with small number of workers (5)."""
+        config = PoolConfig.adaptive(5)
+        # Formula: ceil(5 * 1.2) + 5 = ceil(6) + 5 = 11
+        assert config.max_size == 11
+        # min_idle = max_size / 3, max(2)
+        assert config.min_idle == 3
+        assert config.max_lifetime_secs == 1800
+        assert config.idle_timeout_secs == 600
+        assert config.connection_timeout_secs == 30
+
+    def test_adaptive_medium_concurrency(self):
+        """Test adaptive with medium number of workers (20)."""
+        config = PoolConfig.adaptive(20)
+        # Formula: ceil(20 * 1.2) + 5 = ceil(24) + 5 = 29
+        assert config.max_size == 29
+        # min_idle = 29 / 3 = 9
+        assert config.min_idle == 9
+        assert config.max_lifetime_secs == 1800
+        assert config.idle_timeout_secs == 600
+
+    def test_adaptive_high_concurrency(self):
+        """Test adaptive with high number of workers (50)."""
+        config = PoolConfig.adaptive(50)
+        # Formula: ceil(50 * 1.2) + 5 = ceil(60) + 5 = 65
+        assert config.max_size == 65
+        # min_idle = 65 / 3 = 21
+        assert config.min_idle == 21
+
+    def test_adaptive_very_high_concurrency(self):
+        """Test adaptive with very high number of workers (100)."""
+        config = PoolConfig.adaptive(100)
+        # Formula: ceil(100 * 1.2) + 5 = ceil(120) + 5 = 125
+        assert config.max_size == 125
+        # min_idle = 125 / 3 = 41
+        assert config.min_idle == 41
+
+    def test_adaptive_single_worker(self):
+        """Test adaptive with single worker."""
+        config = PoolConfig.adaptive(1)
+        # Formula: ceil(1 * 1.2) + 5 = ceil(1.2) + 5 = 7
+        assert config.max_size == 7
+        # min_idle = max(7 / 3, 2) = max(2, 2) = 2
+        assert config.min_idle == 2
+
+    def test_adaptive_zero_workers(self):
+        """Test adaptive with zero workers (edge case)."""
+        config = PoolConfig.adaptive(0)
+        # Formula: max(ceil(0 * 1.2) + 5, 5) = max(5, 5) = 5
+        assert config.max_size == 5
+        # min_idle = max(5 / 3, 2) = max(1, 2) = 2
+        assert config.min_idle == 2
+
+    def test_adaptive_typical_scenarios(self):
+        """Test adaptive with typical real-world concurrency levels."""
+        # Typical FastAPI with 4 workers
+        config_4 = PoolConfig.adaptive(4)
+        assert 9 <= config_4.max_size <= 11  # Should be around 10
+
+        # Typical FastAPI with 8 workers
+        config_8 = PoolConfig.adaptive(8)
+        assert 14 <= config_8.max_size <= 16  # Should be around 15
+
+        # High-load API with 32 workers
+        config_32 = PoolConfig.adaptive(32)
+        assert 43 <= config_32.max_size <= 45  # Should be around 44
+
+    def test_adaptive_formula_consistency(self):
+        """Test that adaptive formula is consistent and predictable."""
+        # For each concurrency level, verify formula: ceil(n * 1.2) + 5
+        import math
+
+        for workers in [1, 2, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100]:
+            config = PoolConfig.adaptive(workers)
+            expected_max = max(math.ceil(workers * 1.2) + 5, 5)
+            assert config.max_size == expected_max, (
+                f"For {workers} workers, expected max_size={expected_max}, got {config.max_size}"
+            )
+
+    def test_adaptive_min_idle_ratio(self):
+        """Test that min_idle maintains reasonable ratio to max_size."""
+        # min_idle should be roughly 1/3 of max_size (but at least 2)
+        for workers in [5, 10, 20, 30, 50]:
+            config = PoolConfig.adaptive(workers)
+            # min_idle should be between 20% and 40% of max_size
+            ratio = config.min_idle / config.max_size
+            assert 0.2 <= ratio <= 0.4, (
+                f"For {workers} workers, min_idle ratio {ratio:.2f} out of range"
+            )
+
+    def test_adaptive_prevents_oversized_pools(self):
+        """Test that adaptive produces smaller pools than old presets for typical loads."""
+        # For 20 workers, adaptive should be much smaller than old performance() (was 100)
+        config = PoolConfig.adaptive(20)
+        assert config.max_size < 35, (
+            f"Adaptive pool too large: {config.max_size} for 20 workers"
+        )
+
+    def test_adaptive_scales_linearly(self):
+        """Test that pool size scales roughly linearly with worker count."""
+        config_10 = PoolConfig.adaptive(10)
+        config_20 = PoolConfig.adaptive(20)
+        config_40 = PoolConfig.adaptive(40)
+
+        # Doubling workers should roughly double pool size
+        ratio_10_20 = config_20.max_size / config_10.max_size
+        ratio_20_40 = config_40.max_size / config_20.max_size
+
+        # Both ratios should be close to 2.0 (within 20% tolerance)
+        assert 1.6 <= ratio_10_20 <= 2.4, f"Scaling ratio 10→20: {ratio_10_20:.2f}"
+        assert 1.6 <= ratio_20_40 <= 2.4, f"Scaling ratio 20→40: {ratio_20_40:.2f}"
+
+    def test_adaptive_all_settings_present(self):
+        """Test that adaptive() sets all expected configuration values."""
+        config = PoolConfig.adaptive(15)
+
+        assert config.max_size > 0
+        assert config.min_idle is not None
+        assert config.min_idle >= 2
+        assert config.max_lifetime_secs == 1800
+        assert config.idle_timeout_secs == 600
+        assert config.connection_timeout_secs == 30
+        # These should be None (use defaults)
+        assert config.test_on_check_out is None
+        assert config.retry_connection is None
 
 
 @pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")

@@ -27,7 +27,7 @@ pub struct PyConnection {
 impl PyConnection {
     /// For queries that return rows (SELECT statements)
     async fn execute_query_async_gil_free(
-        pool: &ConnectionPool,
+        pool: &Arc<ConnectionPool>,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
@@ -36,7 +36,7 @@ impl PyConnection {
 
     /// For commands that don't return rows (INSERT/UPDATE/DELETE/DDL)
     async fn execute_command_async_gil_free(
-        pool: &ConnectionPool,
+        pool: &Arc<ConnectionPool>,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
@@ -45,17 +45,16 @@ impl PyConnection {
 
     /// Uses query() method to get rows
     async fn execute_query_internal_gil_free(
-        pool: &ConnectionPool,
+        pool: &Arc<ConnectionPool>,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                let msg = e.to_string();
-                let err_msg = if msg.contains("timeout") || msg.contains("timed out") {
+                let err_msg = if e.to_string().contains("timeout") {
                     "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
                 } else {
-                    format!("Failed to get connection from pool: {}", msg)
+                    format!("Failed to get connection from pool: {}", e)
                 };
                 PyRuntimeError::new_err(err_msg)
             })?;
@@ -83,17 +82,16 @@ impl PyConnection {
 
     /// Uses execute() method to get affected row count
     async fn execute_command_internal_gil_free(
-        pool: &ConnectionPool,
+        pool: &Arc<ConnectionPool>,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                let msg = e.to_string();
-                let err_msg = if msg.contains("timeout") || msg.contains("timed out") {
+                let err_msg = if e.to_string().contains("timeout") {
                     "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
                 } else {
-                    format!("Failed to get connection from pool: {}", msg)
+                    format!("Failed to get connection from pool: {}", e)
                 };
                 PyRuntimeError::new_err(err_msg)
             })?;
