@@ -1,6 +1,6 @@
-use pyo3::prelude::*;
-use pyo3::types::{PyList, PyDict, PyTuple};
 use crate::type_mapping;
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList, PyTuple};
 
 #[pyclass]
 pub struct Parameter {
@@ -21,7 +21,7 @@ impl Parameter {
             let value_bound = value.bind(py);
             type_mapping::is_expandable_iterable(&value_bound).unwrap_or(false)
         });
-        
+
         Parameter {
             value,
             sql_type,
@@ -35,7 +35,7 @@ impl Parameter {
             Ok(repr) => repr.to_string(),
             Err(_) => "<error>".to_string(),
         };
-        
+
         // Check if this is an expanded parameter (iterable)
         if self.is_expanded {
             match &self.sql_type {
@@ -65,7 +65,11 @@ pub struct Parameters {
 impl Parameters {
     #[new]
     #[pyo3(signature = (*args, **kwargs))]
-    pub fn new(py: Python, args: &Bound<PyTuple>, kwargs: Option<&Bound<PyDict>>) -> PyResult<Self> {
+    pub fn new(
+        py: Python,
+        args: &Bound<PyTuple>,
+        kwargs: Option<&Bound<PyDict>>,
+    ) -> PyResult<Self> {
         let mut positional = Vec::new();
         let named = PyDict::new(py);
 
@@ -96,28 +100,39 @@ impl Parameters {
             }
         }
 
-        Ok(Parameters { 
-            positional, 
-            named: named.into() 
+        Ok(Parameters {
+            positional,
+            named: named.into(),
         })
     }
 
     #[pyo3(signature = (value, sql_type=None))]
-    pub fn add(mut slf: PyRefMut<Self>, py: Python, value: Py<PyAny>, sql_type: Option<String>) -> PyResult<Py<Parameters>> {
+    pub fn add(
+        mut slf: PyRefMut<Self>,
+        py: Python,
+        value: Py<PyAny>,
+        sql_type: Option<String>,
+    ) -> PyResult<Py<Parameters>> {
         let param = Parameter::new(value, sql_type);
         slf.positional.push(Py::new(py, param)?);
-        
+
         // Return the same Python object for chaining
         Ok(slf.into())
     }
 
     #[pyo3(signature = (key, value, sql_type=None))]
-    pub fn set(slf: PyRefMut<Self>, py: Python, key: String, value: Py<PyAny>, sql_type: Option<String>) -> PyResult<Py<Parameters>> {
+    pub fn set(
+        slf: PyRefMut<Self>,
+        py: Python,
+        key: String,
+        value: Py<PyAny>,
+        sql_type: Option<String>,
+    ) -> PyResult<Py<Parameters>> {
         let param = Parameter::new(value, sql_type);
-        
+
         // Add the new parameter to existing named dict
         slf.named.bind(py).set_item(key, Py::new(py, param)?)?;
-        
+
         // Return the same Python object for chaining
         Ok(slf.into())
     }
@@ -139,7 +154,7 @@ impl Parameters {
     fn __repr__(&self, py: Python) -> String {
         let positional_len = self.positional.len();
         let named_len = self.named.bind(py).len();
-        
+
         if positional_len == 0 && named_len == 0 {
             "Parameters()".to_string()
         } else if positional_len > 0 && named_len == 0 {
@@ -147,7 +162,10 @@ impl Parameters {
         } else if positional_len == 0 && named_len > 0 {
             format!("Parameters(named={})", named_len)
         } else {
-            format!("Parameters(positional={}, named={})", positional_len, named_len)
+            format!(
+                "Parameters(positional={}, named={})",
+                positional_len, named_len
+            )
         }
     }
 

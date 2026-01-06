@@ -1,15 +1,18 @@
-use pyo3::prelude::*;
-use pyo3::exceptions::PyValueError;
-use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PySet, PyFrozenSet};
-use tiberius::{Row, ColumnType};
 use chrono::{Datelike, Timelike};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::{PyBytes, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use tiberius::{ColumnType, Row};
 
 #[inline(always)]
 fn handle_int4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i32, usize>(index) {
         Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT4: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to INT4: {}",
+            index, e
+        ))),
     }
 }
 
@@ -18,7 +21,10 @@ fn handle_int8(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i64, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT8: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to INT8: {}",
+            index, e
+        ))),
     }
 }
 
@@ -27,7 +33,10 @@ fn handle_int1(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<u8, usize>(index) {
         Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT1: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to INT1: {}",
+            index, e
+        ))),
     }
 }
 
@@ -36,7 +45,10 @@ fn handle_int2(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<i16, usize>(index) {
         Ok(Some(val)) => Ok((val as i64).into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to INT2: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to INT2: {}",
+            index, e
+        ))),
     }
 }
 
@@ -45,7 +57,10 @@ fn handle_float8(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to FLOAT8: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to FLOAT8: {}",
+            index, e
+        ))),
     }
 }
 
@@ -54,7 +69,10 @@ fn handle_float4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f32, usize>(index) {
         Ok(Some(val)) => Ok((val as f64).into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to FLOAT4: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to FLOAT4: {}",
+            index, e
+        ))),
     }
 }
 
@@ -63,7 +81,10 @@ fn handle_nvarchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to NVARCHAR: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to NVARCHAR: {}",
+            index, e
+        ))),
     }
 }
 
@@ -72,7 +93,10 @@ fn handle_varchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to VARCHAR: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to VARCHAR: {}",
+            index, e
+        ))),
     }
 }
 
@@ -82,9 +106,12 @@ fn handle_bit(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         Ok(Some(val)) => {
             let int_val = if val { 1i32 } else { 0i32 };
             Ok(int_val.into_pyobject(py)?.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to BIT: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to BIT: {}",
+            index, e
+        ))),
     }
 }
 
@@ -93,7 +120,10 @@ fn handle_binary(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&[u8], usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to BINARY: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to BINARY: {}",
+            index, e
+        ))),
     }
 }
 
@@ -105,9 +135,12 @@ fn handle_money(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             let decimal_str = val.to_string();
             let decimal_class = py.import("decimal")?.getattr("Decimal")?;
             Ok(decimal_class.call1((decimal_str,))?.unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to MONEY: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to MONEY: {}",
+            index, e
+        ))),
     }
 }
 
@@ -119,9 +152,12 @@ fn handle_money4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             let decimal_str = val.to_string();
             let decimal_class = py.import("decimal")?.getattr("Decimal")?;
             Ok(decimal_class.call1((decimal_str,))?.unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to MONEY4: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to MONEY4: {}",
+            index, e
+        ))),
     }
 }
 
@@ -133,9 +169,12 @@ fn handle_decimal(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
             let decimal_str = numeric.to_string();
             let decimal_class = py.import("decimal")?.getattr("Decimal")?;
             Ok(decimal_class.call1((decimal_str,))?.unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DECIMAL: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to DECIMAL: {}",
+            index, e
+        ))),
     }
 }
 
@@ -155,9 +194,12 @@ fn handle_datetime(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
                 None,
             )?;
             Ok(dt.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DATETIME: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to DATETIME: {}",
+            index, e
+        ))),
     }
 }
 
@@ -165,16 +207,15 @@ fn handle_datetime(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_date(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<chrono::NaiveDate, usize>(index) {
         Ok(Some(val)) => {
-            let date = pyo3::types::PyDate::new(
-                py,
-                val.year(),
-                val.month() as u8,
-                val.day() as u8,
-            )?;
+            let date =
+                pyo3::types::PyDate::new(py, val.year(), val.month() as u8, val.day() as u8)?;
             Ok(date.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DATE: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to DATE: {}",
+            index, e
+        ))),
     }
 }
 
@@ -191,9 +232,12 @@ fn handle_time(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
                 None,
             )?;
             Ok(time.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to TIME: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to TIME: {}",
+            index, e
+        ))),
     }
 }
 
@@ -213,9 +257,12 @@ fn handle_datetimeoffset(row: &Row, index: usize, py: Python) -> PyResult<Py<PyA
                 None,
             )?;
             Ok(dt.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to DATETIMEOFFSET: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to DATETIMEOFFSET: {}",
+            index, e
+        ))),
     }
 }
 
@@ -225,9 +272,12 @@ fn handle_uuid(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         Ok(Some(val)) => {
             let uuid_str = format!("{}", val);
             Ok(uuid_str.into_pyobject(py)?.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to UUID: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to UUID: {}",
+            index, e
+        ))),
     }
 }
 
@@ -237,9 +287,12 @@ fn handle_xml(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         Ok(Some(xml_data)) => {
             let xml_str = xml_data.to_string();
             Ok(xml_str.into_pyobject(py)?.into_any().unbind())
-        },
+        }
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to XML: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to XML: {}",
+            index, e
+        ))),
     }
 }
 
@@ -248,7 +301,10 @@ fn handle_nchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {} to NCHAR: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {} to NCHAR: {}",
+            index, e
+        ))),
     }
 }
 
@@ -257,13 +313,21 @@ fn handle_fallback(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<&str, usize>(index) {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
-        Err(e) => Err(PyValueError::new_err(format!("Failed to convert column {}: {}", index, e)))
+        Err(e) => Err(PyValueError::new_err(format!(
+            "Failed to convert column {}: {}",
+            index, e
+        ))),
     }
 }
 
 /// Convert a SQL Server column value from Tiberius to Python
-/// 
-pub fn sql_to_python(row: &Row, index: usize, col_type: ColumnType, py: Python) -> PyResult<Py<PyAny>> {
+///
+pub fn sql_to_python(
+    row: &Row,
+    index: usize,
+    col_type: ColumnType,
+    py: Python,
+) -> PyResult<Py<PyAny>> {
     // Dispatch to specialized handlers - better branch prediction than giant match
     match col_type {
         ColumnType::Int4 => handle_int4(row, index, py),
@@ -284,7 +348,9 @@ pub fn sql_to_python(row: &Row, index: usize, col_type: ColumnType, py: Python) 
         ColumnType::Money => handle_money(row, index, py),
         ColumnType::Money4 => handle_money4(row, index, py),
         ColumnType::Decimaln | ColumnType::Numericn => handle_decimal(row, index, py),
-        ColumnType::Datetime | ColumnType::Datetimen | ColumnType::Datetime2 => handle_datetime(row, index, py),
+        ColumnType::Datetime | ColumnType::Datetimen | ColumnType::Datetime2 => {
+            handle_datetime(row, index, py)
+        }
         ColumnType::Datetime4 => handle_datetime(row, index, py), // 32-bit datetime
         ColumnType::Daten => handle_date(row, index, py),
         ColumnType::Timen => handle_time(row, index, py),
@@ -292,15 +358,15 @@ pub fn sql_to_python(row: &Row, index: usize, col_type: ColumnType, py: Python) 
         ColumnType::Guid => handle_uuid(row, index, py),
         ColumnType::Xml => handle_xml(row, index, py),
         ColumnType::SSVariant => handle_fallback(row, index, py), // SQL_VARIANT type - use fallback
-        ColumnType::BigVarBin => handle_binary(row, index, py), // Variable binary data
-        ColumnType::BigBinary => handle_binary(row, index, py), // Fixed-length binary
-        ColumnType::Udt => handle_fallback(row, index, py), // User-defined type
-        ColumnType::Null => Ok(py.None()), // NULL type
+        ColumnType::BigVarBin => handle_binary(row, index, py),   // Variable binary data
+        ColumnType::BigBinary => handle_binary(row, index, py),   // Fixed-length binary
+        ColumnType::Udt => handle_fallback(row, index, py),       // User-defined type
+        ColumnType::Null => Ok(py.None()),                        // NULL type
     }
 }
 
 /// Check if a Python object is an iterable that should be expanded for parameters
-/// 
+///
 /// Returns true for lists, tuples, sets, etc., but false for strings and bytes
 /// which should be treated as single values.
 pub fn is_expandable_iterable(obj: &Bound<PyAny>) -> PyResult<bool> {
@@ -326,5 +392,3 @@ pub fn is_expandable_iterable(obj: &Bound<PyAny>) -> PyResult<bool> {
     // Fallback: Check if it has __iter__ method (for custom iterables)
     Ok(obj.hasattr("__iter__")?)
 }
-
-

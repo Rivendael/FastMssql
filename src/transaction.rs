@@ -1,17 +1,17 @@
 use parking_lot::Mutex as SyncMutex;
-use tokio::sync::Mutex as AsyncMutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
-use tiberius::{AuthMethod, Config, Client};
+use tiberius::{AuthMethod, Client, Config};
 use tokio::net::TcpStream;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
+use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_on_connection};
 use crate::parameter_conversion::convert_parameters_to_fast;
-use crate::batch::{parse_batch_items, execute_batch_on_connection, query_batch_on_connection};
 use crate::ssl_config::PySslConfig;
 
 /// Extract host and port from connection string
@@ -23,15 +23,22 @@ fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
         .map(|s| s.trim())
         .unwrap_or("localhost");
 
-    
     if let Some(port_str) = server_part.split(',').nth(1) {
         // Format: "hostname,port"
-        let srv = server_part.split(',').next().unwrap_or("localhost").to_string();
+        let srv = server_part
+            .split(',')
+            .next()
+            .unwrap_or("localhost")
+            .to_string();
         let p = port_str.trim().parse::<u16>().unwrap_or(1433);
         (srv, p)
     } else if server_part.contains('\\') {
         // Format: "hostname\\instance"
-        let srv = server_part.split('\\').next().unwrap_or("localhost").to_string();
+        let srv = server_part
+            .split('\\')
+            .next()
+            .unwrap_or("localhost")
+            .to_string();
         (srv, 1433u16)
     } else {
         // Format: "hostname"
@@ -49,8 +56,8 @@ type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 pub struct Transaction {
     conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
     config: Arc<Config>,
-    server: String,  // Server host/address for TCP connection
-    port: u16,       // Port for TCP connection
+    server: String, // Server host/address for TCP connection
+    port: u16,      // Port for TCP connection
     _ssl_config: Option<PySslConfig>,
     connected: Arc<SyncMutex<bool>>,
 }
@@ -72,25 +79,34 @@ impl Transaction {
         application_name: Option<String>,
     ) -> PyResult<Self> {
         let (config, server, port) = if let Some(conn_str) = connection_string {
-            
             let config = Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
-            
+
             // Extract server and port from connection string
             let (server, port) = extract_host_port_from_connection_string(&conn_str);
-            
+
             (config, server, port)
         } else if let Some(srv) = server {
             let mut config = Config::new();
             config.host(&srv);
-            if let Some(db) = database { config.database(&db); }
+            if let Some(db) = database {
+                config.database(&db);
+            }
             if let Some(user) = username {
-                let pwd = password.ok_or_else(|| PyValueError::new_err("password is required when username is provided"))?;
+                let pwd = password.ok_or_else(|| {
+                    PyValueError::new_err("password is required when username is provided")
+                })?;
                 config.authentication(AuthMethod::sql_server(&user, &pwd));
             }
-            if let Some(p) = port { config.port(p); }
-            if let Some(itn) = instance_name { config.instance_name(itn); }
-            if let Some(apn) = application_name { config.application_name(apn); }
+            if let Some(p) = port {
+                config.port(p);
+            }
+            if let Some(itn) = instance_name {
+                config.instance_name(itn);
+            }
+            if let Some(apn) = application_name {
+                config.application_name(apn);
+            }
             if let Some(intent) = application_intent {
                 match intent.to_lowercase().trim() {
                     "readonly" | "read_only" => config.readonly(true),
@@ -153,21 +169,24 @@ impl Transaction {
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
-                
+
                 let result = conn_ref
                     .query(&query, &tiberius_params)
                     .await
                     .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?
                     .into_first_result()
                     .await
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
-                
+                    .map_err(|e| {
+                        PyRuntimeError::new_err(format!("Failed to get results: {}", e))
+                    })?;
+
                 drop(conn_guard); // Release lock after consuming all results
                 result
             };
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let query_stream = crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
+                let query_stream =
+                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
                 let py_result = Py::new(py, query_stream)?;
                 Ok(py_result.into_any())
             })
@@ -204,14 +223,16 @@ impl Transaction {
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
-                
+
                 let result = conn_ref
                     .execute(&command, &tiberius_params)
                     .await
-                    .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
-                
+                    .map_err(|e| {
+                        PyRuntimeError::new_err(format!("Command execution failed: {}", e))
+                    })?;
+
                 drop(conn_guard); // Release lock
-                
+
                 result.total()
             };
 
@@ -243,7 +264,7 @@ impl Transaction {
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
-                
+
                 execute_batch_on_connection(conn_ref, batch_commands).await?
             };
 
@@ -277,7 +298,7 @@ impl Transaction {
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
-                
+
                 query_batch_on_connection(conn_ref, batch_queries).await?
             };
 
@@ -310,14 +331,15 @@ impl Transaction {
                 let mut conn_guard = conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?
-                    ;
-                
+                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+
                 conn_ref
                     .simple_query("BEGIN TRANSACTION")
                     .await
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to begin transaction: {}", e)))?;
-                
+                    .map_err(|e| {
+                        PyRuntimeError::new_err(format!("Failed to begin transaction: {}", e))
+                    })?;
+
                 drop(conn_guard);
             }
 
@@ -333,14 +355,15 @@ impl Transaction {
             let mut conn_guard = conn.lock().await;
             let conn_ref = conn_guard
                 .as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?
-                ;
-            
+                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+
             conn_ref
                 .simple_query("COMMIT TRANSACTION")
                 .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to commit transaction: {}", e)))?;
-            
+                .map_err(|e| {
+                    PyRuntimeError::new_err(format!("Failed to commit transaction: {}", e))
+                })?;
+
             drop(conn_guard);
             Ok(())
         })
@@ -354,14 +377,15 @@ impl Transaction {
             let mut conn_guard = conn.lock().await;
             let conn_ref = conn_guard
                 .as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?
-                ;
-            
+                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+
             conn_ref
                 .simple_query("ROLLBACK TRANSACTION")
                 .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to rollback transaction: {}", e)))?;
-            
+                .map_err(|e| {
+                    PyRuntimeError::new_err(format!("Failed to rollback transaction: {}", e))
+                })?;
+
             drop(conn_guard);
             Ok(())
         })
@@ -409,14 +433,17 @@ impl Transaction {
         {
             let mut conn_guard = conn.lock().await;
             if conn_guard.is_none() {
-                let tcp_stream = TcpStream::connect((server, port))
-                    .await
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to server: {}", e)))?;
-                
+                let tcp_stream = TcpStream::connect((server, port)).await.map_err(|e| {
+                    PyRuntimeError::new_err(format!("Failed to connect to server: {}", e))
+                })?;
+
                 let compat_stream = tcp_stream.compat();
-                let new_conn: SingleConnectionType = Client::connect((**config).clone(), compat_stream)
-                    .await
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to connect to database: {}", e)))?;
+                let new_conn: SingleConnectionType =
+                    Client::connect((**config).clone(), compat_stream)
+                        .await
+                        .map_err(|e| {
+                            PyRuntimeError::new_err(format!("Failed to connect to database: {}", e))
+                        })?;
                 *conn_guard = Some(new_conn);
             }
         }

@@ -1,14 +1,16 @@
-use crate::parameter_conversion::{convert_parameters_to_fast, python_to_fast_parameter, FastParameter};
+use crate::parameter_conversion::{
+    convert_parameters_to_fast, python_to_fast_parameter, FastParameter,
+};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ensure_pool_initialized, ConnectionPool};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
-use tokio::sync::OnceCell;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::Config;
+use tokio::sync::OnceCell;
 
 /// Parses batch items (SQL queries with parameters) from a Python list.
 pub fn parse_batch_items<'p>(
@@ -71,7 +73,9 @@ pub async fn execute_batch_on_connection(
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
 
-        let result = conn.execute(sql, &tiberius_params).await
+        let result = conn
+            .execute(sql, &tiberius_params)
+            .await
             .map_err(|e| PyRuntimeError::new_err(format!("Batch item failed: {}", e)))?;
 
         let affected: u64 = result.rows_affected().iter().sum();
@@ -95,10 +99,14 @@ pub async fn query_batch_on_connection(
             .map(|p| p as &dyn tiberius::ToSql)
             .collect();
 
-        let stream = conn.query(&query, &tiberius_params).await
+        let stream = conn
+            .query(&query, &tiberius_params)
+            .await
             .map_err(|e| PyRuntimeError::new_err(format!("Batch query execution failed: {}", e)))?;
 
-        let rows = stream.into_first_result().await
+        let rows = stream
+            .into_first_result()
+            .await
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to get batch results: {}", e)))?;
 
         all_results.push(rows);
@@ -136,24 +144,20 @@ pub fn execute_batch<'p>(
 
         let all_results = match execute_batch_on_connection(&mut conn, batch_commands).await {
             Ok(results) => results,
-            Err(e) => {
-                match conn.simple_query("ROLLBACK TRANSACTION").await {
-                    Ok(_) => return Err(e),
-                    Err(rollback_err) => {
-                        return Err(PyRuntimeError::new_err(format!(
+            Err(e) => match conn.simple_query("ROLLBACK TRANSACTION").await {
+                Ok(_) => return Err(e),
+                Err(rollback_err) => {
+                    return Err(PyRuntimeError::new_err(format!(
                             "Batch execution failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
                             e, rollback_err
                         )));
-                    }
                 }
-            }
+            },
         };
 
-        conn.simple_query("COMMIT TRANSACTION")
-            .await
-            .map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to commit batch transaction: {}", e))
-            })?;
+        conn.simple_query("COMMIT TRANSACTION").await.map_err(|e| {
+            PyRuntimeError::new_err(format!("Failed to commit batch transaction: {}", e))
+        })?;
 
         Python::attach(|py| {
             let py_list = PyList::new(py, all_results)?;
