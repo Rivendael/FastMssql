@@ -270,7 +270,7 @@ fn handle_datetimeoffset(row: &Row, index: usize, py: Python) -> PyResult<Py<PyA
 fn handle_uuid(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<uuid::Uuid, usize>(index) {
         Ok(Some(val)) => {
-            let uuid_str = format!("{}", val);
+            let uuid_str = val.hyphenated().to_string();
             Ok(uuid_str.into_pyobject(py)?.into_any().unbind())
         }
         Ok(None) => Ok(py.None()),

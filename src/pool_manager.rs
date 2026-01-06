@@ -37,18 +37,40 @@ pub async fn establish_pool(
         builder = builder.retry_connection(retry);
     }
 
-    builder
+    let pool = builder
         .build(manager)
         .await
-        .map_err(|e| PyRuntimeError::new_err(format!("Failed to create connection pool: {}", e)))
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to create connection pool: {}", e)))?;
+
+    // Warmup pool if min_idle is configured to eliminate cold-start latency
+    if let Some(min_idle) = pool_config.min_idle {
+        warmup_pool(&pool, min_idle).await?;
+    }
+
+    Ok(pool)
 }
 
 pub async fn ensure_pool_initialized(
     pool: Arc<OnceCell<ConnectionPool>>,
     config: Arc<Config>,
     pool_config: &PyPoolConfig,
-) -> PyResult<ConnectionPool> {
+) -> PyResult<Arc<ConnectionPool>> {
     pool.get_or_try_init(|| async { establish_pool(&config, pool_config).await })
         .await
-        .map(|p| p.clone())
+        .map(|p| Arc::new(p.clone()))
+}
+
+/// Warms up the connection pool by pre-establishing min_idle connections
+/// This eliminates cold-start latency on first queries
+pub async fn warmup_pool(pool: &ConnectionPool, target_connections: u32) -> PyResult<()> {
+    // Pre-spawn connections sequentially (fast enough for initialization)
+    for _ in 0..target_connections {
+        let _ = pool
+            .get()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Connection warmup failed: {}", e)))?;
+        // Connection is automatically returned to pool when dropped
+    }
+
+    Ok(())
 }

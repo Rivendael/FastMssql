@@ -38,12 +38,12 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     builder
         .enable_all()
-        .worker_threads((cpu_count).max(1).min(256)) // Scale with CPU count for I/O-heavy workloads
-        .max_blocking_threads((cpu_count * 32).min(512)) // More blocking threads for DB I/O surge capacity
+        .worker_threads((cpu_count * 2).max(4).min(512)) // 2x CPUs for I/O-bound database work
+        .max_blocking_threads((cpu_count * 64).min(1024)) // More blocking threads for DB I/O surge capacity
         .thread_keep_alive(std::time::Duration::from_secs(900)) // 15 minutes to avoid thrashing
-        .thread_stack_size(4 * 1024 * 1024) // Smaller stack = more threads, better for high concurrency
-        .global_queue_interval(7)
-        .event_interval(13);
+        .thread_stack_size(2 * 1024 * 1024) // 2MB stack = 2x more threads, optimal for high concurrency
+        .global_queue_interval(31) // Lower frequency = better locality, less stealing overhead
+        .event_interval(61); // Less frequent epoll = more batching
 
     pyo3_async_runtimes::tokio::init(builder);
 

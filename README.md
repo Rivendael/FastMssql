@@ -8,7 +8,7 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![License](https://img.shields.io/badge/license-MIT%20-green)](LICENSE)
 
-[![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/build.yml)
+[![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml)
 
 [![Latest Release](https://img.shields.io/github/v/release/Rivendael/fastmssql)](https://github.com/Rivendael/fastmssql/releases)
 
@@ -270,7 +270,6 @@ Tune the pool to fit your workload. Constructor signature:
 ```python
 from fastmssql import PoolConfig
 
-# PoolConfig(max_size=10, min_idle=2, max_lifetime_secs=None, idle_timeout_secs=None, connection_timeout_secs=30)
 config = PoolConfig(
     max_size=20,              # max connections in pool
     min_idle=5,               # keep at least this many idle
@@ -283,21 +282,32 @@ config = PoolConfig(
 Presets:
 
 ```python
-one.  = PoolConfig.one()                     # ~ max_size=1, min_idle=1
-low   = PoolConfig.low_resource()            # ~ max_size=3,   min_idle=1
-dev   = PoolConfig.development()             # ~ max_size=5,   min_idle=1
-high  = PoolConfig.high_throughput()         # ~ max_size=50,  min_idle=15
-maxp  = PoolConfig.performance()             # ~ max_size=100, min_idle=30
+one   = PoolConfig.one()                     # max_size=1,  min_idle=1  (single connection)
+low   = PoolConfig.low_resource()            # max_size=3,  min_idle=1  (constrained environments)
+dev   = PoolConfig.development()             # max_size=5,  min_idle=1  (local development)
+high  = PoolConfig.high_throughput()         # max_size=25, min_idle=8  (high-throughput workloads)
+maxp  = PoolConfig.performance()             # max_size=30, min_idle=10 (maximum performance)
+
+# ✨ RECOMMENDED: Adaptive pool sizing based on your concurrency
+adapt = PoolConfig.adaptive(20)              # Dynamically sized for 20 concurrent workers
+                                             # Formula: max_size = ceil(workers * 1.2) + 5
 ```
+
+**⚡ Performance Tip**: Use `PoolConfig.adaptive(n)` where `n` is your expected concurrent workers/tasks. This prevents connection pool lock contention that can degrade performance with oversized pools.
 
 Apply to a connection:
 
 ```python
+# Recommended: adaptive sizing
+async with Connection(conn_str, pool_config=PoolConfig.adaptive(20)) as conn:
+    rows = (await conn.query("SELECT 1 AS ok")).rows()
+
+# Or use presets
 async with Connection(conn_str, pool_config=high) as conn:
     rows = (await conn.query("SELECT 1 AS ok")).rows()
 ```
 
-Default pool (if omitted): `max_size=20`, `min_idle=2`.
+Default pool (if omitted): `max_size=15`, `min_idle=3`.
 
 
 ### Transactions
@@ -418,7 +428,9 @@ Helpers:
 
 ## Performance tips
 
-For maximum throughput in highly concurrent scenarios, use multiple `Connection` instances (each with its own pool) and batch your work:
+### 1. Use adaptive pool sizing for optimal concurrency
+
+Match your pool size to actual concurrency to avoid connection pool lock contention:
 
 ```python
 import asyncio
@@ -427,15 +439,37 @@ from fastmssql import Connection, PoolConfig
 async def worker(conn_str, cfg):
     async with Connection(conn_str, pool_config=cfg) as conn:
         for _ in range(1000):
-            _ = (await conn.query("SELECT 1 as v")).rows()
+            result = await conn.query("SELECT 1 as v")
+            # ✅ Good: Lazy iteration (minimal GIL hold per row)
+            for row in result:
+                process(row)
 
 async def main():
     conn_str = "Server=.;Database=master;User Id=sa;Password=StrongPwd;"
-    cfg = PoolConfig.high_throughput()
-    await asyncio.gather(*[asyncio.create_task(worker(conn_str, cfg)) for _ in range(32)])
+    num_workers = 32
+    
+    # ✅ Adaptive sizing prevents pool contention
+    cfg = PoolConfig.adaptive(num_workers)  # → max_size=43 for 32 workers
+    
+    await asyncio.gather(*[worker(conn_str, cfg) for _ in range(num_workers)])
 
 asyncio.run(main())
 ```
+
+### 2. Use iteration for large result sets (not `.rows()`)
+
+```python
+result = await conn.query("SELECT * FROM large_table")
+
+# ✅ Good: Lazy conversion, one row at a time (minimal GIL contention)
+for row in result:
+    process(row)
+
+# ❌ Bad: Eager conversion, all rows at once (GIL bottleneck)
+all_rows = result.rows()  # or result.fetchall()
+```
+
+Lazy iteration distributes GIL acquisition across rows, dramatically improving performance with multiple Python workers.
 
 ## Examples & benchmarks
 
