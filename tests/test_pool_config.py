@@ -26,7 +26,7 @@ class TestPoolConfigConstructor:
             min_idle=5,
             max_lifetime_secs=1800,
             idle_timeout_secs=600,
-            connection_timeout_secs=45
+            connection_timeout_secs=45,
         )
         assert config.max_size == 20
         assert config.min_idle == 5
@@ -41,7 +41,7 @@ class TestPoolConfigConstructor:
             min_idle=None,
             max_lifetime_secs=None,
             idle_timeout_secs=None,
-            connection_timeout_secs=None
+            connection_timeout_secs=None,
         )
         assert config.max_size == 15
         assert config.min_idle is None
@@ -56,7 +56,9 @@ class TestPoolConfigConstructor:
 
     def test_min_idle_greater_than_max_size_invalid(self):
         """Test that min_idle > max_size raises an error."""
-        with pytest.raises(ValueError, match="min_idle cannot be greater than max_size"):
+        with pytest.raises(
+            ValueError, match="min_idle cannot be greater than max_size"
+        ):
             PoolConfig(max_size=10, min_idle=15)
 
     def test_min_idle_equal_max_size(self):
@@ -158,7 +160,9 @@ class TestPoolConfigSetters:
     def test_set_min_idle_greater_than_max_size_invalid(self):
         """Test that setting min_idle > max_size raises an error."""
         config = PoolConfig(max_size=10)
-        with pytest.raises(ValueError, match="min_idle cannot be greater than max_size"):
+        with pytest.raises(
+            ValueError, match="min_idle cannot be greater than max_size"
+        ):
             config.min_idle = 15
 
     def test_set_max_lifetime_secs(self):
@@ -259,7 +263,7 @@ class TestPoolConfigRepresentation:
             min_idle=5,
             max_lifetime_secs=1800,
             idle_timeout_secs=600,
-            connection_timeout_secs=45
+            connection_timeout_secs=45,
         )
         repr_str = repr(config)
         assert "PoolConfig" in repr_str
@@ -273,7 +277,7 @@ class TestPoolConfigRepresentation:
             min_idle=None,
             max_lifetime_secs=None,
             idle_timeout_secs=None,
-            connection_timeout_secs=None
+            connection_timeout_secs=None,
         )
         repr_str = repr(config)
         assert "PoolConfig" in repr_str
@@ -294,7 +298,7 @@ class TestPoolConfigEdgeCases:
         config = PoolConfig(
             max_lifetime_secs=86400,  # 1 day
             idle_timeout_secs=43200,  # 12 hours
-            connection_timeout_secs=300
+            connection_timeout_secs=300,
         )
         assert config.max_lifetime_secs == 86400
         assert config.idle_timeout_secs == 43200
@@ -303,9 +307,7 @@ class TestPoolConfigEdgeCases:
     def test_small_timeout_values(self):
         """Test with small timeout values."""
         config = PoolConfig(
-            max_lifetime_secs=1,
-            idle_timeout_secs=1,
-            connection_timeout_secs=1
+            max_lifetime_secs=1, idle_timeout_secs=1, connection_timeout_secs=1
         )
         assert config.max_lifetime_secs == 1
         assert config.idle_timeout_secs == 1
@@ -315,7 +317,7 @@ class TestPoolConfigEdgeCases:
         """Test that modifying one config doesn't affect another."""
         config1 = PoolConfig(max_size=10)
         config2 = PoolConfig(max_size=20)
-        
+
         config1.max_size = 30
         assert config1.max_size == 30
         assert config2.max_size == 20
@@ -324,7 +326,7 @@ class TestPoolConfigEdgeCases:
         """Test that modifying a preset config doesn't affect others."""
         config1 = PoolConfig.development()
         config2 = PoolConfig.development()
-        
+
         config1.max_size = 100
         assert config1.max_size == 100
         assert config2.max_size == 5  # Should still be default
@@ -337,12 +339,13 @@ class TestPoolConfigEdgeCases:
         config.max_lifetime_secs = 3600
         config.idle_timeout_secs = 1200
         config.connection_timeout_secs = 60
-        
+
         assert config.max_size == 50
         assert config.min_idle == 10
         assert config.max_lifetime_secs == 3600
         assert config.idle_timeout_secs == 1200
         assert config.connection_timeout_secs == 60
+
 
 @pytest.mark.skipif(PoolConfig is None, reason="fastmssql module not available")
 class TestPoolConfigTestOnCheckOut:
@@ -376,7 +379,7 @@ class TestPoolConfigTestOnCheckOut:
             max_lifetime_secs=1800,
             idle_timeout_secs=600,
             connection_timeout_secs=30,
-            test_on_check_out=True
+            test_on_check_out=True,
         )
         assert config.max_size == 20
         assert config.min_idle == 5
@@ -423,7 +426,7 @@ class TestPoolConfigRetryConnection:
             max_lifetime_secs=1800,
             idle_timeout_secs=600,
             connection_timeout_secs=30,
-            retry_connection=True
+            retry_connection=True,
         )
         assert config.max_size == 20
         assert config.min_idle == 5
@@ -444,48 +447,33 @@ class TestPoolConfigCombinedNewSettings:
 
     def test_both_settings_true(self):
         """Test with both test_on_check_out and retry_connection True."""
-        config = PoolConfig(
-            max_size=15,
-            test_on_check_out=True,
-            retry_connection=True
-        )
+        config = PoolConfig(max_size=15, test_on_check_out=True, retry_connection=True)
         assert config.test_on_check_out is True
         assert config.retry_connection is True
 
     def test_both_settings_false(self):
         """Test with both test_on_check_out and retry_connection False."""
         config = PoolConfig(
-            max_size=15,
-            test_on_check_out=False,
-            retry_connection=False
+            max_size=15, test_on_check_out=False, retry_connection=False
         )
         assert config.test_on_check_out is False
         assert config.retry_connection is False
 
     def test_mixed_settings_true_false(self):
         """Test with test_on_check_out True and retry_connection False."""
-        config = PoolConfig(
-            test_on_check_out=True,
-            retry_connection=False
-        )
+        config = PoolConfig(test_on_check_out=True, retry_connection=False)
         assert config.test_on_check_out is True
         assert config.retry_connection is False
 
     def test_mixed_settings_false_true(self):
         """Test with test_on_check_out False and retry_connection True."""
-        config = PoolConfig(
-            test_on_check_out=False,
-            retry_connection=True
-        )
+        config = PoolConfig(test_on_check_out=False, retry_connection=True)
         assert config.test_on_check_out is False
         assert config.retry_connection is True
 
     def test_both_settings_none(self):
         """Test with both settings as None."""
-        config = PoolConfig(
-            test_on_check_out=None,
-            retry_connection=None
-        )
+        config = PoolConfig(test_on_check_out=None, retry_connection=None)
         assert config.test_on_check_out is None
         assert config.retry_connection is None
 
@@ -498,7 +486,7 @@ class TestPoolConfigCombinedNewSettings:
             idle_timeout_secs=800,
             connection_timeout_secs=45,
             test_on_check_out=True,
-            retry_connection=True
+            retry_connection=True,
         )
         assert config.max_size == 30
         assert config.min_idle == 8
@@ -507,4 +495,3 @@ class TestPoolConfigCombinedNewSettings:
         assert config.connection_timeout_secs == 45
         assert config.test_on_check_out is True
         assert config.retry_connection is True
-

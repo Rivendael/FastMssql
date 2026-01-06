@@ -1,11 +1,9 @@
 """
 Tests for stored procedures, functions, and advanced SQL features with mssql-python-rust
 
-This module tests execution of stored procedures, user-defined functions, 
+This module tests execution of stored procedures, user-defined functions,
 CTEs, window functions, and other advanced SQL Server features.
 """
-
-import os
 
 import pytest
 import pytest_asyncio
@@ -32,7 +30,7 @@ async def stored_procedures(test_config: Config):
                     department NVARCHAR(50)
                 )
             """)
-            
+
             # Create test stored procedures
             await connection.execute("""
                 CREATE PROCEDURE sp_get_employee_by_id
@@ -42,7 +40,7 @@ async def stored_procedures(test_config: Config):
                     SELECT * FROM test_sp_employees WHERE id = @employee_id
                 END
             """)
-            
+
             await connection.execute("""
                 CREATE PROCEDURE sp_add_employee
                     @first_name NVARCHAR(50),
@@ -60,7 +58,7 @@ async def stored_procedures(test_config: Config):
                     SELECT @new_id as new_employee_id
                 END
             """)
-            
+
             await connection.execute("""
                 CREATE PROCEDURE sp_get_department_stats
                     @department NVARCHAR(50) = NULL
@@ -92,21 +90,22 @@ async def stored_procedures(test_config: Config):
                     END
                 END
             """)
-            
+
         except Exception as e:
             # If setup fails, skip the test
             pytest.fail(f"Database setup failed: {e}")
-        
+
         yield
-        
+
         # Cleanup
         try:
             await connection.execute("DROP PROCEDURE IF EXISTS sp_get_employee_by_id")
             await connection.execute("DROP PROCEDURE IF EXISTS sp_add_employee")
             await connection.execute("DROP PROCEDURE IF EXISTS sp_get_department_stats")
             await connection.execute("DROP TABLE IF EXISTS test_sp_employees")
-        except:
+        except Exception:
             pass
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -117,9 +116,9 @@ async def test_simple_stored_procedure_call(test_config: Config):
             # Clean up any existing procedure first
             try:
                 await conn.execute("DROP PROCEDURE IF EXISTS dbo.test_simple_proc")
-            except:
+            except Exception:
                 pass
-            
+
             # Create procedure using dynamic SQL
             await conn.execute("""
                 DECLARE @sql NVARCHAR(MAX) = N'
@@ -130,26 +129,29 @@ async def test_simple_stored_procedure_call(test_config: Config):
                 END'
                 EXEC sp_executesql @sql
             """)
-            
+
             # Call the procedure
             result = await conn.query("EXEC dbo.test_simple_proc")
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['message'] == 'Hello from procedure'
-            assert rows[0]['created_at'] is not None
-            
+            assert rows[0]["message"] == "Hello from procedure"
+            assert rows[0]["created_at"] is not None
+
             # Clean up
             try:
                 await conn.execute("DROP PROCEDURE IF EXISTS dbo.test_simple_proc")
-            except:
+            except Exception:
                 pass
-            
+
         except Exception:
             # Fall back to basic SQL test
-            result = await conn.query("SELECT 'fallback test' as message, GETDATE() as timestamp")
+            result = await conn.query(
+                "SELECT 'fallback test' as message, GETDATE() as timestamp"
+            )
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['message'] == 'fallback test'
+            assert rows[0]["message"] == "fallback test"
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -160,9 +162,9 @@ async def test_stored_procedure_with_parameters(test_config: Config):
             # Clean up any existing procedure first
             try:
                 await conn.execute("DROP PROCEDURE IF EXISTS dbo.test_param_proc")
-            except:
+            except Exception:
                 pass
-            
+
             # Create procedure with parameters using dynamic SQL
             await conn.execute("""
                 DECLARE @sql NVARCHAR(MAX) = N'
@@ -175,23 +177,28 @@ async def test_stored_procedure_with_parameters(test_config: Config):
                 END'
                 EXEC sp_executesql @sql
             """)
-            
+
             # Call with parameters
-            result = await conn.query("EXEC dbo.test_param_proc @input_val = 5, @multiplier = 3")
+            result = await conn.query(
+                "EXEC dbo.test_param_proc @input_val = 5, @multiplier = 3"
+            )
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['input'] == 5
-            assert rows[0]['result'] == 15
-            
+            assert rows[0]["input"] == 5
+            assert rows[0]["result"] == 15
+
             # Clean up
             await conn.execute("DROP PROCEDURE dbo.test_param_proc")
-            
+
         except Exception:
             # Fall back to built-in function with parameters
-            result = await conn.query("SELECT DB_NAME() as current_database, @@SERVERNAME as server_name")
+            result = await conn.query(
+                "SELECT DB_NAME() as current_database, @@SERVERNAME as server_name"
+            )
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['current_database'] == 'pymssql_test'
+            assert rows[0]["current_database"] == "pymssql_test"
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -211,24 +218,29 @@ async def test_user_defined_functions(test_config: Config):
                 END'
                 EXEC sp_executesql @sql
             """)
-            
+
             # Test the function
-            result = await conn.query("SELECT dbo.test_calc_bonus(50000, 0.15) as bonus")
+            result = await conn.query(
+                "SELECT dbo.test_calc_bonus(50000, 0.15) as bonus"
+            )
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['bonus'] == 7500.00
-            
+            assert rows[0]["bonus"] == 7500.00
+
             # Clean up
             await conn.execute("DROP FUNCTION dbo.test_calc_bonus")
-            
-        except Exception as e:
+
+        except Exception:
             # Fall back to testing built-in functions
-            result = await conn.query("SELECT LEN('test string') as str_length, UPPER('hello') as upper_str, ABS(-42) as abs_val")
+            result = await conn.query(
+                "SELECT LEN('test string') as str_length, UPPER('hello') as upper_str, ABS(-42) as abs_val"
+            )
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['str_length'] == 11
-            assert rows[0]['upper_str'] == 'HELLO'
-            assert rows[0]['abs_val'] == 42
+            assert rows[0]["str_length"] == 11
+            assert rows[0]["upper_str"] == "HELLO"
+            assert rows[0]["abs_val"] == 42
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -236,7 +248,6 @@ async def test_common_table_expressions(test_config: Config):
     """Test Common Table Expressions (CTEs)."""
     try:
         async with Connection(test_config.connection_string) as conn:
-
             await conn.execute("""DROP TABLE IF EXISTS test_cte_employees""")
             # Create test data
             await conn.execute("""
@@ -247,7 +258,7 @@ async def test_common_table_expressions(test_config: Config):
                     salary DECIMAL(10,2)
                 )
             """)
-            
+
             await conn.execute("""
                 INSERT INTO test_cte_employees (name, manager_id, salary) VALUES 
                 ('CEO', NULL, 200000),
@@ -257,7 +268,7 @@ async def test_common_table_expressions(test_config: Config):
                 ('Junior Dev', 4, 70000),
                 ('Sales Manager', 3, 90000)
             """)
-            
+
             # Recursive CTE for organizational hierarchy
             result = await conn.query("""
                 WITH EmployeeHierarchy AS (
@@ -277,11 +288,11 @@ async def test_common_table_expressions(test_config: Config):
                 SELECT * FROM EmployeeHierarchy ORDER BY level, name
             """)
             rows = result.rows()
-            
+
             assert len(rows) == 6
-            assert rows[0]['level'] == 0  # CEO
-            assert 'CEO' in rows[0]['hierarchy_path']
-            
+            assert rows[0]["level"] == 0  # CEO
+            assert "CEO" in rows[0]["hierarchy_path"]
+
             # Non-recursive CTE for aggregation
             result = await conn.query("""
                 WITH SalaryStats AS (
@@ -305,16 +316,17 @@ async def test_common_table_expressions(test_config: Config):
                 ORDER BY e.salary DESC
             """)
             rows = result.rows()
-            
+
             assert len(rows) == 5  # Excluding CEO
-            salary_categories = [row['salary_category'] for row in rows]
-            assert 'High' in salary_categories or 'Average' in salary_categories
-            
+            salary_categories = [row["salary_category"] for row in rows]
+            assert "High" in salary_categories or "Average" in salary_categories
+
             # Clean up
             await conn.execute("DROP TABLE test_cte_employees")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -334,7 +346,7 @@ async def test_window_functions(test_config: Config):
                     sale_date DATE
                 )
             """)
-            
+
             await conn.execute("""
                 INSERT INTO test_window_sales (salesperson, region, sale_amount, sale_date) VALUES 
                 ('Alice', 'North', 1000.00, '2023-01-15'),
@@ -346,7 +358,7 @@ async def test_window_functions(test_config: Config):
                 ('Diana', 'South', 1300.00, '2023-01-25'),
                 ('Diana', 'South', 1600.00, '2023-02-20')
             """)
-            
+
             # Test various window functions
             result = await conn.query("""
                 SELECT 
@@ -379,33 +391,34 @@ async def test_window_functions(test_config: Config):
                 ORDER BY sale_amount DESC
             """)
             rows = result.rows()
-            
+
             assert len(rows) == 8
-            
+
             # Check ranking functions
-            assert rows[0]['row_num'] == 1  # Highest sale amount
-            assert rows[0]['rank_val'] == 1
-            
+            assert rows[0]["row_num"] == 1  # Highest sale amount
+            assert rows[0]["rank_val"] == 1
+
             # Check partition-based ranking
-            north_sales = [r for r in rows if r['region'] == 'North']
-            south_sales = [r for r in rows if r['region'] == 'South']
-            
+            north_sales = [r for r in rows if r["region"] == "North"]
+            south_sales = [r for r in rows if r["region"] == "South"]
+
             # Each region should have its own ranking starting from 1
-            north_ranks = [r['region_row_num'] for r in north_sales]
-            south_ranks = [r['region_row_num'] for r in south_sales]
+            north_ranks = [r["region_row_num"] for r in north_sales]
+            south_ranks = [r["region_row_num"] for r in south_sales]
             assert 1 in north_ranks
             assert 1 in south_ranks
-            
+
             # Check aggregate functions
-            alice_sales = [r for r in rows if r['salesperson'] == 'Alice']
-            alice_total = alice_sales[0]['person_total']
+            alice_sales = [r for r in rows if r["salesperson"] == "Alice"]
+            alice_total = alice_sales[0]["person_total"]
             assert alice_total == 1800.00  # 1000 + 800
-            
+
             # Clean up
             await conn.execute("DROP TABLE test_window_sales")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -413,7 +426,6 @@ async def test_pivot_and_unpivot(test_config: Config):
     """Test PIVOT and UNPIVOT operations."""
     try:
         async with Connection(test_config.connection_string) as conn:
-
             await conn.execute("""DROP TABLE IF EXISTS test_pivot_sales""")
             # Create test data
             await conn.execute("""
@@ -423,7 +435,7 @@ async def test_pivot_and_unpivot(test_config: Config):
                     amount DECIMAL(10,2)
                 )
             """)
-            
+
             await conn.execute("""
                 INSERT INTO test_pivot_sales (year, quarter, amount) VALUES 
                 (2022, 'Q1', 10000),
@@ -435,7 +447,7 @@ async def test_pivot_and_unpivot(test_config: Config):
                 (2023, 'Q3', 13000),
                 (2023, 'Q4', 19000)
             """)
-            
+
             # PIVOT operation
             result = await conn.query("""
                 SELECT year, Q1, Q2, Q3, Q4
@@ -450,19 +462,20 @@ async def test_pivot_and_unpivot(test_config: Config):
                 ORDER BY year
             """)
             rows = result.rows()
-            
+
             assert len(rows) == 2
-            assert rows[0]['year'] == 2022
-            assert rows[0]['Q1'] == 10000
-            assert rows[0]['Q4'] == 18000
-            assert rows[1]['year'] == 2023
-            assert rows[1]['Q1'] == 11000
-            
+            assert rows[0]["year"] == 2022
+            assert rows[0]["Q1"] == 10000
+            assert rows[0]["Q4"] == 18000
+            assert rows[1]["year"] == 2023
+            assert rows[1]["Q1"] == 11000
+
             # Clean up
             await conn.execute("DROP TABLE test_pivot_sales")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -494,13 +507,14 @@ async def test_temp_tables_and_variables(test_config: Config):
                 SUM(value) as direct_total
             FROM #temp_local
         """)
-        
+
         rows = result.rows()
         assert len(rows) == 1
-        assert rows[0]['item_count'] == 2
-        assert rows[0]['total_value'] == 300
-        assert rows[0]['direct_count'] == 2
-        assert rows[0]['direct_total'] == 300
+        assert rows[0]["item_count"] == 2
+        assert rows[0]["total_value"] == 300
+        assert rows[0]["direct_count"] == 2
+        assert rows[0]["direct_total"] == 300
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -511,9 +525,9 @@ async def test_async_stored_procedures(test_config: Config):
             # Clean up any existing procedure first
             try:
                 await conn.execute("DROP PROCEDURE IF EXISTS dbo.test_async_proc")
-            except:
+            except Exception:
                 pass
-            
+
             # Create async procedure using dynamic SQL
             await conn.execute("""
                 DECLARE @sql NVARCHAR(MAX) = N'
@@ -525,25 +539,25 @@ async def test_async_stored_procedures(test_config: Config):
                 END'
                 EXEC sp_executesql @sql
             """)
-            
+
             # Call procedure asynchronously
             result = await conn.query("EXEC dbo.test_async_proc @value = 10")
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['input_value'] == 10
-            assert rows[0]['doubled'] == 20
-            assert rows[0]['execution_time'] is not None
-            
+            assert rows[0]["input_value"] == 10
+            assert rows[0]["doubled"] == 20
+            assert rows[0]["execution_time"] is not None
+
             # Clean up
             try:
                 await conn.execute("DROP PROCEDURE IF EXISTS dbo.test_async_proc")
-            except:
+            except Exception:
                 pass
-            
+
         except Exception:
             # Fall back to simple async test
             result = await conn.query("SELECT 'async test' as message, 42 as value")
             rows = result.rows()
             assert len(rows) == 1
-            assert rows[0]['message'] == 'async test'
-            assert rows[0]['value'] == 42
+            assert rows[0]["message"] == "async test"
+            assert rows[0]["value"] == 42

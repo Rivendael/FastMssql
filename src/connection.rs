@@ -1,5 +1,3 @@
-use tokio::sync::RwLock;
-use tokio::sync::OnceCell;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -7,6 +5,8 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::{AuthMethod, Config, Row};
+use tokio::sync::OnceCell;
+use tokio::sync::RwLock;
 
 use crate::batch::{bulk_insert, execute_batch, query_batch};
 use crate::parameter_conversion::{convert_parameters_to_fast, FastParameter};
@@ -18,7 +18,7 @@ use crate::ssl_config::PySslConfig;
 pub struct PyConnection {
     pool: Arc<OnceCell<ConnectionPool>>,
     pool_guard: Arc<RwLock<()>>,  // For disconnect synchronization
-    connected: Arc<RwLock<bool>>,  // Track explicit disconnect
+    connected: Arc<RwLock<bool>>, // Track explicit disconnect
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>,
@@ -76,7 +76,7 @@ impl PyConnection {
                 .await
                 .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?
         };
-        
+
         drop(conn);
         Ok(result)
     }
@@ -140,14 +140,24 @@ impl PyConnection {
         } else if let Some(srv) = server {
             let mut config = Config::new();
             config.host(&srv);
-            if let Some(db) = database { config.database(&db); }
+            if let Some(db) = database {
+                config.database(&db);
+            }
             if let Some(user) = username {
-                let pwd = password.ok_or_else(|| PyValueError::new_err("password is required when username is provided"))?;
+                let pwd = password.ok_or_else(|| {
+                    PyValueError::new_err("password is required when username is provided")
+                })?;
                 config.authentication(AuthMethod::sql_server(&user, &pwd));
             }
-            if let Some(p) = port { config.port(p); }
-            if let Some(itn) = instance_name { config.instance_name(itn); }
-            if let Some(apn) = application_name { config.application_name(apn); }
+            if let Some(p) = port {
+                config.port(p);
+            }
+            if let Some(itn) = instance_name {
+                config.instance_name(itn);
+            }
+            if let Some(apn) = application_name {
+                config.application_name(apn);
+            }
             if let Some(intent) = application_intent {
                 match intent.to_lowercase().trim() {
                     "readonly" | "read_only" => config.readonly(true),
@@ -157,7 +167,9 @@ impl PyConnection {
                     )),
                 }
             }
-            if let Some(ref ssl_cfg) = ssl_config { ssl_cfg.apply_to_config(&mut config); }
+            if let Some(ref ssl_cfg) = ssl_config {
+                ssl_cfg.apply_to_config(&mut config);
+            }
             config
         } else {
             return Err(PyValueError::new_err(
@@ -199,7 +211,8 @@ impl PyConnection {
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let query_stream = crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
+                let query_stream =
+                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
                 let py_result = Py::new(py, query_stream)?;
                 Ok(py_result.into_any())
             })
@@ -258,17 +271,20 @@ impl PyConnection {
             };
             let max_size = pool_config.max_size;
             let min_idle = pool_config.min_idle;
-            
+
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let dict = pyo3::types::PyDict::new(py);
-                
+
                 dict.set_item("connected", is_connected)?;
                 dict.set_item("connections", connections)?;
                 dict.set_item("idle_connections", idle_connections)?;
-                dict.set_item("active_connections", connections.saturating_sub(idle_connections))?;
+                dict.set_item(
+                    "active_connections",
+                    connections.saturating_sub(idle_connections),
+                )?;
                 dict.set_item("max_size", max_size)?;
                 dict.set_item("min_idle", min_idle)?;
-                
+
                 Ok(dict.into_any().unbind())
             })
         })
@@ -305,7 +321,7 @@ impl PyConnection {
         _traceback: Option<Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let connected = Arc::clone(&self.connected);
-        
+
         future_into_py(py, async move {
             *connected.write().await = false;
             Ok(())

@@ -5,11 +5,11 @@ Tests mixed read/write operations with parameterized queries and transactions.
 """
 
 import asyncio
-import time
 import os
-import statistics
 import random
+import statistics
 import string
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -103,18 +103,17 @@ async def setup_test_data(connection_string: str):
 async def realistic_load_test(connection_string: str, workers: int = 10, duration: int = 15, warmup: int = 5):
     """Run a realistic load test with mixed SQL operations."""
     
-    print(f"\n🎯 Realistic SQL Load Test:")
+    print("\n🎯 Realistic SQL Load Test:")
     print(f"   Workers: {workers}")
     print(f"   Duration: {duration}s (+ {warmup}s warmup)")
-    print(f"   Workload: Mixed SELECTs (60%), INSERTs (20%), UPDATEs (15%), DELETEs (5%)")
-    print(f"   Operations: Parameterized queries, transactions, realistic data")
+    print("   Workload: Mixed SELECTs (60%), INSERTs (20%), UPDATEs (15%), DELETEs (5%)")
+    print("   Operations: Parameterized queries, transactions, realistic data")
 
     # Thread-safe counters using locks
     stats_lock = asyncio.Lock()
     total_requests = 0
     total_errors = 0
     response_times = []
-    pool_stats_during_test = []
     query_metrics = defaultdict(lambda: QueryMetrics())
     worker_stats = defaultdict(lambda: {"requests": 0, "errors": 0})
     
@@ -295,18 +294,18 @@ async def realistic_load_test(connection_string: str, workers: int = 10, duratio
             min_response_time = max_response_time = 0
             worker_balance = 0
         
-        print(f"\n📊 Results:")
+        print("\n📊 Results:")
         print(f"   Total Requests: {total_requests:,}")
         print(f"   Errors: {total_errors}")
         print(f"   Test Duration: {actual_duration:.2f}s")
         print(f"   RPS: {rps:.1f}")
         print(f"   Error Rate: {error_rate:.2f}%")
-        print(f"\n   Query Distribution:")
+        print("\n   Query Distribution:")
         print(f"     SELECTs:  {total_selects:,} ({total_selects/total_requests*100:.1f}%)")
         print(f"     INSERTs:  {total_inserts:,} ({total_inserts/total_requests*100:.1f}%)")
         print(f"     UPDATEs:  {total_updates:,} ({total_updates/total_requests*100:.1f}%)")
         print(f"     DELETEs:  {total_deletes:,} ({total_deletes/total_requests*100:.1f}%)")
-        print(f"\n   Response Times:")
+        print("\n   Response Times:")
         print(f"     Average: {avg_response_time*1000:.2f}ms")
         print(f"     Median:  {median_response_time*1000:.2f}ms")
         print(f"     P95:     {p95_response_time*1000:.2f}ms")
@@ -474,7 +473,7 @@ async def main():
               f"{result['total_deletes']:,} ({deletes_pct:.1f}%)")
     
     # Performance analysis
-    print(f"\n🔍 Performance Analysis:")
+    print("\n🔍 Performance Analysis:")
     best_result = max(all_results, key=lambda x: x['avg_rps'])
     most_stable = min(all_results, key=lambda x: x['rps_cv'])
     
@@ -486,7 +485,7 @@ async def main():
     if total_errors_all > 0:
         print(f"   ⚠️  Total Errors Across All Tests: {total_errors_all}")
     else:
-        print(f"   ✅ No errors detected across all tests")
+        print("   ✅ No errors detected across all tests")
 
 
 if __name__ == "__main__":

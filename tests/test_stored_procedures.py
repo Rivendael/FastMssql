@@ -8,7 +8,6 @@ Run with: python -m pytest tests/test_stored_procedures.py -v
 """
 
 import pytest
-
 from conftest import Config
 
 try:
@@ -19,18 +18,20 @@ except ImportError:
 
 class TestStoredProcedureBasics:
     """Test basic stored procedure execution patterns."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_exec_with_select_statement(self, test_config: Config):
         """Test EXEC pattern with SELECT."""
         try:
             async with Connection(test_config.connection_string) as conn:
-                result = await conn.query("EXEC sp_executesql N'SELECT 1 as value, ''success'' as status'")
+                result = await conn.query(
+                    "EXEC sp_executesql N'SELECT 1 as value, ''success'' as status'"
+                )
                 assert result is not None
         except Exception as e:
             pytest.skip(f"EXEC sp_executesql not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_parameterized_exec(self, test_config: Config):
@@ -39,9 +40,9 @@ class TestStoredProcedureBasics:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT @P1 as name, @P2 as age, @P3 as salary",
-                    ["Alice", 30, 75000.00]
+                    ["Alice", 30, 75000.00],
                 )
-                
+
                 assert result.has_rows()
                 rows = result.rows()
                 assert len(rows) == 1
@@ -49,7 +50,7 @@ class TestStoredProcedureBasics:
                 assert rows[0]["age"] == 30
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_conditional_exec(self, test_config: Config):
@@ -58,9 +59,9 @@ class TestStoredProcedureBasics:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT CASE WHEN @P1 > @P2 THEN 'Greater' ELSE 'Less or Equal' END as comparison",
-                    [42, 30]
+                    [42, 30],
                 )
-                
+
                 assert result.has_rows()
                 rows = result.rows()
                 assert rows[0]["comparison"] == "Greater"
@@ -70,7 +71,7 @@ class TestStoredProcedureBasics:
 
 class TestParameterizedQueries:
     """Test parameterized query patterns."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_arithmetic_operations(self, test_config: Config):
@@ -81,17 +82,17 @@ class TestParameterizedQueries:
                 result = await conn.query("SELECT @P1 + @P2 as result", [10, 5])
                 assert result.has_rows()
                 assert result.rows()[0]["result"] == 15
-                
+
                 # Subtraction
                 result = await conn.query("SELECT @P1 - @P2 as result", [20, 8])
                 assert result.rows()[0]["result"] == 12
-                
+
                 # Multiplication
                 result = await conn.query("SELECT @P1 * @P2 as result", [7, 6])
                 assert result.rows()[0]["result"] == 42
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_string_concatenation(self, test_config: Config):
@@ -99,15 +100,14 @@ class TestParameterizedQueries:
         try:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
-                    "SELECT @P1 + ' ' + @P2 as full_name",
-                    ["John", "Doe"]
+                    "SELECT @P1 + ' ' + @P2 as full_name", ["John", "Doe"]
                 )
-                
+
                 assert result.has_rows()
                 assert result.rows()[0]["full_name"] == "John Doe"
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_case_expressions(self, test_config: Config):
@@ -122,9 +122,9 @@ class TestParameterizedQueries:
                             WHEN @P1 > 70 THEN 'C'
                             ELSE 'F'
                         END as grade""",
-                    [85]
+                    [85],
                 )
-                
+
                 assert result.has_rows()
                 assert result.rows()[0]["grade"] == "B"
         except Exception as e:
@@ -133,7 +133,7 @@ class TestParameterizedQueries:
 
 class TestConditionalLogic:
     """Test parameterized queries with conditional logic."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_if_else_logic(self, test_config: Config):
@@ -142,15 +142,15 @@ class TestConditionalLogic:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT IIF(@P1 > @P2, 'Greater', 'Less or Equal') as comparison",
-                    [10, 5]
+                    [10, 5],
                 )
-                
+
                 assert result.has_rows()
                 assert result.rows()[0]["comparison"] == "Greater"
         except Exception as e:
             # IIF might not be available in all SQL Server versions
             pytest.skip(f"IIF function not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_coalesce_null_handling(self, test_config: Config):
@@ -159,9 +159,9 @@ class TestConditionalLogic:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT COALESCE(CAST(@P1 AS NVARCHAR(100)), CAST(@P2 AS NVARCHAR(100)), 'default') as value",
-                    [None, "provided"]
+                    [None, "provided"],
                 )
-                
+
                 assert result.has_rows()
                 assert result.rows()[0]["value"] == "provided"
         except Exception as e:
@@ -170,7 +170,7 @@ class TestConditionalLogic:
 
 class TestComplexParameterizedQueries:
     """Test complex parameterized query patterns."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_multiple_conditions(self, test_config: Config):
@@ -179,14 +179,14 @@ class TestComplexParameterizedQueries:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT CASE WHEN @P1 > 0 AND @P2 < 100 THEN 'valid' ELSE 'invalid' END as status",
-                    [50, 75]
+                    [50, 75],
                 )
-                
+
                 assert result.has_rows()
                 assert result.rows()[0]["status"] == "valid"
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_date_operations(self, test_config: Config):
@@ -195,14 +195,14 @@ class TestComplexParameterizedQueries:
             async with Connection(test_config.connection_string) as conn:
                 result = await conn.query(
                     "SELECT DATEDIFF(day, @P1, @P2) as days_diff",
-                    ["2023-01-01", "2023-01-10"]
+                    ["2023-01-01", "2023-01-10"],
                 )
-                
+
                 assert result.has_rows()
                 assert result.rows()[0]["days_diff"] == 9
         except Exception as e:
             pytest.skip(f"Date operations with parameters: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_aggregate_with_case(self, test_config: Config):
@@ -213,9 +213,9 @@ class TestComplexParameterizedQueries:
                     """SELECT 
                         CASE WHEN @P1 > @P2 THEN @P1 ELSE @P2 END as max_value,
                         CASE WHEN @P1 < @P2 THEN @P1 ELSE @P2 END as min_value""",
-                    [100, 50]
+                    [100, 50],
                 )
-                
+
                 assert result.has_rows()
                 row = result.rows()[0]
                 assert row["max_value"] == 100
@@ -226,23 +226,20 @@ class TestComplexParameterizedQueries:
 
 class TestParameterVariations:
     """Test various parameter passing scenarios."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_null_parameters(self, test_config: Config):
         """Test queries with NULL parameters."""
         try:
             async with Connection(test_config.connection_string) as conn:
-                result = await conn.query(
-                    "SELECT @P1 as nullable_value",
-                    [None]
-                )
-                
+                result = await conn.query("SELECT @P1 as nullable_value", [None])
+
                 assert result.has_rows()
                 assert result.rows()[0]["nullable_value"] is None
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_special_characters(self, test_config: Config):
@@ -250,17 +247,14 @@ class TestParameterVariations:
         try:
             async with Connection(test_config.connection_string) as conn:
                 special_name = "O'Reilly & Associates <test>"
-                
-                result = await conn.query(
-                    "SELECT @P1 as name",
-                    [special_name]
-                )
-                
+
+                result = await conn.query("SELECT @P1 as name", [special_name])
+
                 assert result.has_rows()
                 assert result.rows()[0]["name"] == special_name
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_unicode_parameters(self, test_config: Config):
@@ -268,14 +262,14 @@ class TestParameterVariations:
         try:
             async with Connection(test_config.connection_string) as conn:
                 unicode_names = ["José García", "李明", "Müller Köhler"]
-                
+
                 for name in unicode_names:
                     result = await conn.query("SELECT @P1 as name", [name])
                     assert result.has_rows()
                     assert result.rows()[0]["name"] == name
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_empty_string(self, test_config: Config):
@@ -287,7 +281,7 @@ class TestParameterVariations:
                 assert result.rows()[0]["empty_str"] == ""
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_large_string(self, test_config: Config):
@@ -300,7 +294,7 @@ class TestParameterVariations:
                 assert len(result.rows()[0]["large_str"]) == 8000
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_decimal_precision(self, test_config: Config):
@@ -313,7 +307,7 @@ class TestParameterVariations:
                 assert abs(result.rows()[0]["decimal_val"] - precise_value) < 0.01
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_max_int_value(self, test_config: Config):
@@ -330,7 +324,7 @@ class TestParameterVariations:
 
 class TestBatchParameterExecution:
     """Test batch execution with parameters."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_batch_queries_with_parameters(self, test_config: Config):
@@ -342,8 +336,8 @@ class TestBatchParameterExecution:
                     ("SELECT @P1 * @P2 as product_value", [7, 6]),
                     ("SELECT @P1 as input_value", [42]),
                 ]
-                
-                if hasattr(conn, 'query_batch'):
+
+                if hasattr(conn, "query_batch"):
                     results = await conn.query_batch(batch_queries)
                     assert len(results) == 3
                     assert results[0].has_rows()
@@ -356,7 +350,7 @@ class TestBatchParameterExecution:
 
 class TestParameterCachingPatterns:
     """Test patterns that benefit from query plan caching."""
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_repeated_parameterized_query(self, test_config: Config):
@@ -364,14 +358,14 @@ class TestParameterCachingPatterns:
         try:
             async with Connection(test_config.connection_string) as conn:
                 query = "SELECT @P1 as value"
-                
+
                 for i in range(5):
                     result = await conn.query(query, [i * 10])
                     assert result.has_rows()
                     assert result.rows()[0]["value"] == i * 10
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
-    
+
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_different_parameters_same_query(self, test_config: Config):
@@ -379,9 +373,9 @@ class TestParameterCachingPatterns:
         try:
             async with Connection(test_config.connection_string) as conn:
                 query = "SELECT @P1 as num1, @P2 as num2, @P1 + @P2 as sum_val"
-                
+
                 test_cases = [(1, 2), (10, 20), (100, 200), (5, 15)]
-                
+
                 for a, b in test_cases:
                     result = await conn.query(query, [a, b])
                     assert result.has_rows()

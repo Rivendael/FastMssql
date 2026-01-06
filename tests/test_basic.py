@@ -4,10 +4,10 @@ Tests for mssql-python-rust
 Run with: python -m pytest tests/
 """
 
-import pytest
 import asyncio
 from decimal import Decimal
 
+import pytest
 from conftest import Config
 
 try:
@@ -16,16 +16,19 @@ try:
 except ImportError:
     pytest.fail("mssql wrapper not available - make sure mssql.py is importable")
 
+
 def test_version():
     """Test that we can get the library version."""
     version = fastmssql.version()
     assert isinstance(version, str)
     assert len(version) > 0
 
+
 def test_connection_creation(test_config: Config):
     """Test that we can create a connection object."""
     conn = Connection(test_config.connection_string)
     assert conn is not None
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -37,6 +40,7 @@ async def test_basic_connection(test_config: Config):
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_simple_query(test_config: Config):
@@ -46,10 +50,11 @@ async def test_simple_query(test_config: Config):
             result = await conn.query("SELECT 1 as test_value")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
-            test_value = rows[0]['test_value']
+            test_value = rows[0]["test_value"]
             assert test_value == 1
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -61,15 +66,16 @@ async def test_multiple_queries(test_config: Config):
             result1 = await conn.query("SELECT 'first' as query_name")
             rows1 = result1.rows()
             assert len(rows1) == 1
-            assert rows1[0]['query_name'] == 'first'
+            assert rows1[0]["query_name"] == "first"
 
             # Second query
             result2 = await conn.query("SELECT 'second' as query_name")
             rows2 = result2.rows()
             assert len(rows2) == 1
-            assert rows2[0]['query_name'] == 'second'
+            assert rows2[0]["query_name"] == "second"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -85,22 +91,23 @@ async def test_data_types(test_config: Config):
                     CAST(1 as BIT) as bool_val,
                     NULL as null_val
             """)
-            
+
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
-            
-            assert row['int_val'] == 42
-            float_val = row['float_val']
+
+            assert row["int_val"] == 42
+            float_val = row["float_val"]
             if isinstance(float_val, Decimal):
                 assert abs(float(float_val) - 3.14159) < 0.0001
             else:
                 assert abs(float_val - 3.14159) < 0.0001
-            assert row['str_val'] == 'test string'
-            assert row['bool_val'] == True
-            assert row['null_val'] is None
+            assert row["str_val"] == "test string"
+            assert row["bool_val"]
+            assert row["null_val"] is None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -112,14 +119,15 @@ async def test_convenience_functions(test_config: Config):
             result = await conn.query("SELECT 'convenience' as test")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
-            assert rows[0]['test'] == 'convenience'
-            
+            assert rows[0]["test"] == "convenience"
+
             # Test scalar-like execution
             scalar_result = await conn.query("SELECT 42 as value")
             scalar_rows = scalar_result.rows()
-            assert scalar_rows[0]['value'] == 42
+            assert scalar_rows[0]["value"] == 42
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -133,7 +141,7 @@ async def test_error_handling(test_config: Config):
             await conn.query("SELECT 1")
     except Exception:
         pass  # Expected to fail
-    
+
     # Test invalid query (requires database connection)
     try:
         async with Connection(test_config.connection_string) as conn:
@@ -142,6 +150,7 @@ async def test_error_handling(test_config: Config):
     except Exception as e:
         pytest.fail(f"Database not available for error testing: {e}")
 
+
 # Async Tests
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -149,6 +158,7 @@ async def test_async_connection_creation(test_config: Config):
     """Test that we can create an async connection object."""
     conn = Connection(test_config.connection_string)
     assert conn is not None
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -160,6 +170,7 @@ async def test_async_basic_connection(test_config: Config):
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_async_simple_query(test_config: Config):
@@ -169,9 +180,10 @@ async def test_async_simple_query(test_config: Config):
             result = await conn.query("SELECT 1 as test_value")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
-            assert rows[0]['test_value'] == 1
+            assert rows[0]["test_value"] == 1
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -183,15 +195,16 @@ async def test_async_multiple_queries(test_config: Config):
             result1 = await conn.query("SELECT 'first' as query_name")
             rows1 = result1.rows()
             assert len(rows1) == 1
-            assert rows1[0]['query_name'] == 'first'
-            
+            assert rows1[0]["query_name"] == "first"
+
             # Second query
             result2 = await conn.query("SELECT 'second' as query_name")
             rows2 = result2.rows()
             assert len(rows2) == 1
-            assert rows2[0]['query_name'] == 'second'
+            assert rows2[0]["query_name"] == "second"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -207,25 +220,26 @@ async def test_async_data_types(test_config: Config):
                     CAST(1 as BIT) as bool_val,
                     NULL as null_val
             """)
-            
+
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
-            
-            assert row['int_val'] == 42
-            float_val = row['float_val']
+
+            assert row["int_val"] == 42
+            float_val = row["float_val"]
             if isinstance(float_val, Decimal):
                 assert abs(float(float_val) - 3.14159) < 0.0001
             else:
                 assert abs(float_val - 3.14159) < 0.0001
-            assert row['str_val'] == 'test string'
-            assert row['bool_val'] == True
-            assert row['null_val'] is None
+            assert row["str_val"] == "test string"
+            assert row["bool_val"]
+            assert row["null_val"] is None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
+
 @pytest.mark.asyncio
-@pytest.mark.integration 
+@pytest.mark.integration
 async def test_async_execute_non_query(test_config: Config):
     """Test executing non-query operations asynchronously."""
     try:
@@ -249,20 +263,21 @@ async def test_async_execute_non_query(test_config: Config):
                 -- Return the count for verification
                 SELECT COUNT(*) as updated_count FROM test_async_execute_non_query WHERE test_flag = 1
             """
-            
+
             # Execute the complete test as a single batch to avoid session scope issues
             result = await conn.query(setup_and_test_sql)
-            
+
             # Verify that our update worked
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
-            assert rows[0]['updated_count'] == 1
-            
+            assert rows[0]["updated_count"] == 1
+
             # Clean up - remove the test table
             await conn.execute("DROP TABLE IF EXISTS test_async_execute_non_query")
-            
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -273,19 +288,20 @@ async def test_async_execute_scalar(test_config: Config):
             # Test scalar with number
             result = await conn.query("SELECT 42 as scalar_value")
             rows = result.rows() if result.has_rows() else []
-            assert rows[0]['scalar_value'] == 42
-            
+            assert rows[0]["scalar_value"] == 42
+
             # Test scalar with string
             result = await conn.query("SELECT 'hello world' as scalar_value")
             rows = result.rows() if result.has_rows() else []
-            assert rows[0]['scalar_value'] == 'hello world'
-            
+            assert rows[0]["scalar_value"] == "hello world"
+
             # Test scalar with NULL
             result = await conn.query("SELECT NULL as scalar_value")
             rows = result.rows() if result.has_rows() else []
-            assert rows[0]['scalar_value'] is None
+            assert rows[0]["scalar_value"] is None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -297,14 +313,15 @@ async def test_async_convenience_functions(test_config: Config):
             result = await conn.query("SELECT 'convenience_async' as test")
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
-            assert rows[0]['test'] == 'convenience_async'
-            
+            assert rows[0]["test"] == "convenience_async"
+
             # Test async scalar-like execution (get first value from result)
             scalar_result = await conn.query("SELECT 42 as value")
             scalar_rows = scalar_result.rows()
-            assert scalar_rows[0]['value'] == 42
+            assert scalar_rows[0]["value"] == 42
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -317,6 +334,7 @@ async def test_async_error_handling(test_config: Config):
     except Exception as e:
         pytest.fail(f"Database not available for error testing: {e}")
 
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_simple_parameterized_query(test_config: Config):
@@ -324,19 +342,19 @@ async def test_simple_parameterized_query(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             result = await conn.query(
-                "SELECT @P1 as param1, @P2 as param2, @P3 as param3",
-                [42, "test", True]
+                "SELECT @P1 as param1, @P2 as param2, @P3 as param3", [42, "test", True]
             )
-            
+
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
-            
-            assert row['param1'] == 42
-            assert row['param2'] == "test"
-            assert row['param3'] == True
+
+            assert row["param1"] == 42
+            assert row["param2"] == "test"
+            assert row["param3"]
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -344,24 +362,24 @@ async def test_parameters_object_basic(test_config: Config):
     """Test using Parameters object instead of simple list."""
     try:
         from fastmssql import Parameters
-        
+
         async with Connection(test_config.connection_string) as conn:
             params = Parameters(100, "Parameters Object", 3.14)
-            
+
             result = await conn.query(
-                "SELECT @P1 as id, @P2 as description, @P3 as value",
-                params
+                "SELECT @P1 as id, @P2 as description, @P3 as value", params
             )
-            
+
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
-            
-            assert row['id'] == 100
-            assert row['description'] == "Parameters Object"
-            assert abs(row['value'] - 3.14) < 0.001
+
+            assert row["id"] == 100
+            assert row["description"] == "Parameters Object"
+            assert abs(row["value"] - 3.14) < 0.001
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -369,25 +387,23 @@ async def test_parameters_method_chaining(test_config: Config):
     """Test Parameters object with method chaining."""
     try:
         from fastmssql import Parameters
-        
+
         async with Connection(test_config.connection_string) as conn:
-            params = (Parameters()
-                     .add(200)
-                     .add("Chained"))
-            
+            params = Parameters().add(200).add("Chained")
+
             result = await conn.query(
-                "SELECT @P1 as chained_id, @P2 as chained_name",
-                params
+                "SELECT @P1 as chained_id, @P2 as chained_name", params
             )
-            
+
             rows = result.rows() if result.has_rows() else []
             assert len(rows) == 1
             row = rows[0]
-            
-            assert row['chained_id'] == 200
-            assert row['chained_name'] == "Chained"
+
+            assert row["chained_id"] == 200
+            assert row["chained_name"] == "Chained"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -402,29 +418,36 @@ async def test_async_concurrent_queries(test_config: Config):
 
             # Wait for all queries to complete concurrently
             results = await asyncio.gather(query1, query2, query3)
-            
+
             # Verify results
             assert len(results) == 3
-            values = [(result.rows()[0] if result.has_rows() else {}).get('value') for result in results]
-            names = [(result.rows()[0] if result.has_rows() else {}).get('name') for result in results]
+            values = [
+                (result.rows()[0] if result.has_rows() else {}).get("value")
+                for result in results
+            ]
+            names = [
+                (result.rows()[0] if result.has_rows() else {}).get("name")
+                for result in results
+            ]
 
             assert set(values) == {1, 2, 3}
-            assert set(names) == {'query1', 'query2', 'query3'}
+            assert set(names) == {"query1", "query2", "query3"}
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
 
 if __name__ == "__main__":
     # Run basic tests when executed directly
     print("Running basic tests...")
-    
+
     print("Testing version...")
     test_version()
     print("✓ Version test passed")
-    
+
     print("Testing connection creation...")
     test_connection_creation()
     print("✓ Connection creation test passed")
-    
+
     print("\nBasic tests completed!")
     print("Run 'python -m pytest tests/ -v' for full test suite including async tests")
     print("Run 'python -m pytest tests/ -v -m integration' for integration tests")

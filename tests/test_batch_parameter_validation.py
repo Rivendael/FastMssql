@@ -84,7 +84,7 @@ class TestBatchParameterValidation:
         excess_params = list(range(2101))  # 2,101 parameters
 
         # Build the query with placeholders (1-indexed)
-        placeholders = ", ".join([f"@P{i+1}" for i in range(2101)])
+        placeholders = ", ".join([f"@P{i + 1}" for i in range(2101)])
         sql = f"SELECT {placeholders}"
 
         queries = [
@@ -103,7 +103,7 @@ class TestBatchParameterValidation:
         with pytest.raises((ValueError, RuntimeError)):
             try:
                 asyncio.run(run_test())
-            except Exception as e:
+            except Exception:
                 # Re-raise to be caught by pytest.raises
                 raise
 
@@ -113,7 +113,7 @@ class TestBatchParameterValidation:
         excess_params = list(range(2101))  # 2,101 parameters
 
         # Build the SQL with placeholders (1-indexed)
-        placeholders = ", ".join([f"@P{i+1}" for i in range(2101)])
+        placeholders = ", ".join([f"@P{i + 1}" for i in range(2101)])
         sql = f"SELECT {placeholders}"
 
         commands = [
@@ -132,7 +132,7 @@ class TestBatchParameterValidation:
         with pytest.raises((ValueError, RuntimeError)):
             try:
                 asyncio.run(run_test())
-            except Exception as e:
+            except Exception:
                 raise
 
     def test_batch_query_parameter_validation_error_message(self, test_config: Config):
@@ -168,7 +168,9 @@ class TestBatchParameterValidation:
                     or "parameter" in error_msg.lower()
                     or "2100" in error_msg
                     or "limit" in error_msg.lower()
-                ), f"Error message should reference batch item or parameter limit: {error_msg}"
+                ), (
+                    f"Error message should reference batch item or parameter limit: {error_msg}"
+                )
         except Exception:
             pass
 
@@ -183,7 +185,7 @@ class TestBatchParameterValidation:
             async with Connection(test_config.connection_string) as conn:
                 # Create 100 parameters - safe test that validates the mechanism works
                 params = list(range(100))
-                placeholders = ", ".join([f"@P{i+1}" for i in range(100)])
+                placeholders = ", ".join([f"@P{i + 1}" for i in range(100)])
                 sql = f"SELECT {placeholders}"
 
                 queries = [
@@ -235,7 +237,7 @@ class TestBatchParameterValidation:
                 for i in range(5):
                     # Each query gets 50 parameters
                     params = list(range(50))
-                    placeholders = ", ".join([f"@P{j+1}" for j in range(50)])
+                    placeholders = ", ".join([f"@P{j + 1}" for j in range(50)])
                     sql = f"SELECT {placeholders}"
                     queries.append((sql, params))
 

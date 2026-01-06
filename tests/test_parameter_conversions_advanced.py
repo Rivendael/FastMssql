@@ -5,16 +5,17 @@ This module tests parameter handling for various SQL types, edge cases,
 and boundary conditions to ensure proper type conversion between Python and SQL Server.
 """
 
-import pytest
 import datetime
 from decimal import Decimal
 
+import pytest
 from conftest import Config
 
 try:
     from fastmssql import Connection
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -24,19 +25,19 @@ async def test_parameter_int_types(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Small integer
             result = await conn.query("SELECT @P1 as value", [42])
-            assert result.rows()[0]['value'] == 42
-            
+            assert result.rows()[0]["value"] == 42
+
             # Large integer
             result = await conn.query("SELECT @P1 as value", [9223372036854775807])
-            assert result.rows()[0]['value'] == 9223372036854775807
-            
+            assert result.rows()[0]["value"] == 9223372036854775807
+
             # Negative integer
             result = await conn.query("SELECT @P1 as value", [-42])
-            assert result.rows()[0]['value'] == -42
-            
+            assert result.rows()[0]["value"] == -42
+
             # Zero
             result = await conn.query("SELECT @P1 as value", [0])
-            assert result.rows()[0]['value'] == 0
+            assert result.rows()[0]["value"] == 0
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -48,29 +49,29 @@ async def test_parameter_string_types(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             # Regular string
-            result = await conn.query("SELECT @P1 as value", ['hello'])
-            assert result.rows()[0]['value'] == 'hello'
-            
+            result = await conn.query("SELECT @P1 as value", ["hello"])
+            assert result.rows()[0]["value"] == "hello"
+
             # Empty string
-            result = await conn.query("SELECT @P1 as value", [''])
-            assert result.rows()[0]['value'] == ''
-            
+            result = await conn.query("SELECT @P1 as value", [""])
+            assert result.rows()[0]["value"] == ""
+
             # String with spaces
-            result = await conn.query("SELECT @P1 as value", ['hello world'])
-            assert result.rows()[0]['value'] == 'hello world'
-            
+            result = await conn.query("SELECT @P1 as value", ["hello world"])
+            assert result.rows()[0]["value"] == "hello world"
+
             # String with special characters
             result = await conn.query("SELECT @P1 as value", ["test'quote"])
-            assert "quote" in result.rows()[0]['value']
-            
+            assert "quote" in result.rows()[0]["value"]
+
             # Unicode string
-            result = await conn.query("SELECT @P1 as value", ['こんにちは'])
-            assert result.rows()[0]['value'] == 'こんにちは'
-            
+            result = await conn.query("SELECT @P1 as value", ["こんにちは"])
+            assert result.rows()[0]["value"] == "こんにちは"
+
             # Long string
-            long_str = 'x' * 1000
+            long_str = "x" * 1000
             result = await conn.query("SELECT @P1 as value", [long_str])
-            assert result.rows()[0]['value'] == long_str
+            assert result.rows()[0]["value"] == long_str
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -83,21 +84,21 @@ async def test_parameter_float_types(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Regular float
             result = await conn.query("SELECT @P1 as value", [3.14])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert abs(value - 3.14) < 0.001
-            
+
             # Zero
             result = await conn.query("SELECT @P1 as value", [0.0])
-            assert result.rows()[0]['value'] == 0.0
-            
+            assert result.rows()[0]["value"] == 0.0
+
             # Negative float
             result = await conn.query("SELECT @P1 as value", [-3.14])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert abs(value - (-3.14)) < 0.001
-            
+
             # Very small float
             result = await conn.query("SELECT @P1 as value", [0.0001])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert abs(value - 0.0001) < 0.00001
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
@@ -111,21 +112,21 @@ async def test_parameter_bool_types(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # True
             result = await conn.query("SELECT CAST(@P1 AS BIT) as value", [True])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert value in [1, True]
-            
+
             # False
             result = await conn.query("SELECT CAST(@P1 AS BIT) as value", [False])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert value in [0, False]
-            
+
             # Integer as bool
             result = await conn.query("SELECT CAST(@P1 AS BIT) as value", [1])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert value in [1, True]
-            
+
             result = await conn.query("SELECT CAST(@P1 AS BIT) as value", [0])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert value in [0, False]
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
@@ -139,17 +140,16 @@ async def test_parameter_none_values(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # None parameter
             result = await conn.query("SELECT @P1 as value", [None])
-            assert result.rows()[0]['value'] is None
-            
+            assert result.rows()[0]["value"] is None
+
             # Multiple parameters with None
             result = await conn.query(
-                "SELECT @P1 as val1, @P2 as val2, @P3 as val3",
-                [1, None, 'test']
+                "SELECT @P1 as val1, @P2 as val2, @P3 as val3", [1, None, "test"]
             )
             row = result.rows()[0]
-            assert row['val1'] == 1
-            assert row['val2'] is None
-            assert row['val3'] == 'test'
+            assert row["val1"] == 1
+            assert row["val2"] is None
+            assert row["val3"] == "test"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -164,17 +164,17 @@ async def test_parameter_datetime_types(test_config: Config):
             dt_val = datetime.datetime(2023, 12, 25, 14, 30, 45)
             dt_str = dt_val.isoformat()
             result = await conn.query("SELECT @P1 as value", [dt_str])
-            returned_dt = result.rows()[0]['value']
+            returned_dt = result.rows()[0]["value"]
             assert returned_dt is not None
-            assert '2023' in str(returned_dt)
-            
+            assert "2023" in str(returned_dt)
+
             # Date as string
             date_val = datetime.date(2023, 12, 25)
             date_str = date_val.isoformat()
             result = await conn.query("SELECT @P1 as value", [date_str])
-            returned_date = result.rows()[0]['value']
+            returned_date = result.rows()[0]["value"]
             assert returned_date is not None
-            assert '2023-12-25' in str(returned_date)
+            assert "2023-12-25" in str(returned_date)
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -186,19 +186,19 @@ async def test_parameter_decimal_types(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             # Decimal not directly supported - convert to float
-            decimal_val = Decimal('123.45')
+            decimal_val = Decimal("123.45")
             float_val = float(decimal_val)
             result = await conn.query("SELECT @P1 as value", [float_val])
-            returned = result.rows()[0]['value']
+            returned = result.rows()[0]["value"]
             # Check if approximately equal
             if returned is not None:
                 assert abs(float(returned) - 123.45) < 0.01
-            
+
             # Small decimal
-            decimal_val = Decimal('0.001')
+            decimal_val = Decimal("0.001")
             float_val = float(decimal_val)
             result = await conn.query("SELECT @P1 as value", [float_val])
-            returned = result.rows()[0]['value']
+            returned = result.rows()[0]["value"]
             if returned is not None:
                 assert abs(float(returned) - 0.001) < 0.0001
     except Exception as e:
@@ -212,9 +212,9 @@ async def test_parameter_bytes_types(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             # Bytes
-            bytes_val = b'hello'
+            bytes_val = b"hello"
             result = await conn.query("SELECT @P1 as value", [bytes_val])
-            returned = result.rows()[0]['value']
+            returned = result.rows()[0]["value"]
             # Bytes might be returned as string or bytes
             if isinstance(returned, bytes):
                 assert returned == bytes_val
@@ -232,16 +232,16 @@ async def test_parameter_list_only(test_config: Config):
     try:
         async with Connection(test_config.connection_string) as conn:
             # List parameters
-            result = await conn.query("SELECT @P1 as val1, @P2 as val2", [1, 'test'])
+            result = await conn.query("SELECT @P1 as val1, @P2 as val2", [1, "test"])
             row = result.rows()[0]
-            assert row['val1'] == 1
-            assert row['val2'] == 'test'
-            
+            assert row["val1"] == 1
+            assert row["val2"] == "test"
+
             # List with different values
-            result = await conn.query("SELECT @P1 as val1, @P2 as val2", [2, 'list'])
+            result = await conn.query("SELECT @P1 as val1, @P2 as val2", [2, "list"])
             row = result.rows()[0]
-            assert row['val1'] == 2
-            assert row['val2'] == 'list'
+            assert row["val1"] == 2
+            assert row["val2"] == "list"
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -254,16 +254,15 @@ async def test_parameter_many_parameters(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Create query with 20 parameters
             params = list(range(1, 21))
-            param_placeholders = ', '.join([f'@P{i}' for i in range(1, 21)])
+            param_placeholders = ", ".join([f"@P{i}" for i in range(1, 21)])
             query = f"SELECT {param_placeholders}"
-            
+
             result = await conn.query(query, params)
             assert result.has_rows()
             row = result.rows()[0]
-            
+
             # Verify each parameter
             for i in range(1, 21):
-                col_name = f'{i}'  # SQL Server might auto-name columns
                 # The exact column naming depends on implementation
                 assert row is not None
     except Exception as e:
@@ -276,13 +275,10 @@ async def test_parameter_repeated_values(test_config: Config):
     """Test using same parameter multiple times."""
     try:
         async with Connection(test_config.connection_string) as conn:
-            result = await conn.query(
-                "SELECT @P1 + @P1 + @P1 as result",
-                [5]
-            )
+            result = await conn.query("SELECT @P1 + @P1 + @P1 as result", [5])
             # Some systems might not support this; check if result is valid
             if result.has_rows():
-                value = result.rows()[0]['result']
+                value = result.rows()[0]["result"]
                 assert value == 15
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
@@ -296,22 +292,22 @@ async def test_parameter_special_string_characters(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Single quote
             result = await conn.query("SELECT @P1 as value", ["it's"])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert "'" in value or "'" in value
-            
+
             # Double quote
-            result = await conn.query('SELECT @P1 as value', ['he said "hello"'])
-            value = result.rows()[0]['value']
+            result = await conn.query("SELECT @P1 as value", ['he said "hello"'])
+            value = result.rows()[0]["value"]
             assert '"' in value or "hello" in value
-            
+
             # Backslash
             result = await conn.query("SELECT @P1 as value", ["path\\to\\file"])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert "path" in value
-            
+
             # Null character (might be stripped)
             result = await conn.query("SELECT @P1 as value", ["test\x00null"])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert value is not None
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
@@ -325,17 +321,19 @@ async def test_parameter_whitespace_handling(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Leading/trailing whitespace
             result = await conn.query("SELECT @P1 as value", ["  test  "])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert "test" in value
-            
+
             # Tab and newline characters
             result = await conn.query("SELECT @P1 as value", ["test\ttab\nline"])
-            value = result.rows()[0]['value']
+            value = result.rows()[0]["value"]
             assert "test" in value
-            
+
             # Multiple spaces
-            result = await conn.query("SELECT @P1 as value", ["test     multiple     spaces"])
-            value = result.rows()[0]['value']
+            result = await conn.query(
+                "SELECT @P1 as value", ["test     multiple     spaces"]
+            )
+            value = result.rows()[0]["value"]
             assert "test" in value
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
@@ -349,17 +347,17 @@ async def test_parameter_boundary_integers(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # INT min/max
             result = await conn.query("SELECT @P1 as value", [-2147483648])
-            assert result.rows()[0]['value'] == -2147483648
-            
+            assert result.rows()[0]["value"] == -2147483648
+
             result = await conn.query("SELECT @P1 as value", [2147483647])
-            assert result.rows()[0]['value'] == 2147483647
-            
+            assert result.rows()[0]["value"] == 2147483647
+
             # BIGINT min/max
             result = await conn.query("SELECT @P1 as value", [-9223372036854775808])
-            assert result.rows()[0]['value'] == -9223372036854775808
-            
+            assert result.rows()[0]["value"] == -9223372036854775808
+
             result = await conn.query("SELECT @P1 as value", [9223372036854775807])
-            assert result.rows()[0]['value'] == 9223372036854775807
+            assert result.rows()[0]["value"] == 9223372036854775807
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
@@ -375,7 +373,7 @@ async def test_parameter_mixed_types_in_batch(test_config: Config):
                 IF OBJECT_ID('tempdb..##mixed_types', 'U') IS NOT NULL
                     DROP TABLE ##mixed_types
             """)
-            
+
             await conn.execute("""
                 CREATE TABLE ##mixed_types (
                     id INT,
@@ -384,21 +382,30 @@ async def test_parameter_mixed_types_in_batch(test_config: Config):
                     active BIT
                 )
             """)
-            
+
             # Batch with different types
             batch_items = [
-                ("INSERT INTO ##mixed_types VALUES (@P1, @P2, @P3, @P4)", [1, 'Alice', 95.5, True]),
-                ("INSERT INTO ##mixed_types VALUES (@P1, @P2, @P3, @P4)", [2, 'Bob', 87.3, False]),
-                ("INSERT INTO ##mixed_types VALUES (@P1, @P2, @P3, @P4)", [3, 'Charlie', 92.1, True]),
+                (
+                    "INSERT INTO ##mixed_types VALUES (@P1, @P2, @P3, @P4)",
+                    [1, "Alice", 95.5, True],
+                ),
+                (
+                    "INSERT INTO ##mixed_types VALUES (@P1, @P2, @P3, @P4)",
+                    [2, "Bob", 87.3, False],
+                ),
+                (
+                    "INSERT INTO ##mixed_types VALUES (@P1, @P2, @P3, @P4)",
+                    [3, "Charlie", 92.1, True],
+                ),
             ]
-            
+
             results = await conn.execute_batch(batch_items)
             assert len(results) == 3
-            
+
             # Verify data
             result = await conn.query("SELECT COUNT(*) as cnt FROM ##mixed_types")
-            assert result.rows()[0]['cnt'] == 3
-            
+            assert result.rows()[0]["cnt"] == 3
+
             # Cleanup
             await conn.execute("DROP TABLE ##mixed_types")
     except Exception as e:
@@ -413,16 +420,16 @@ async def test_parameter_type_explicit_casting(test_config: Config):
         async with Connection(test_config.connection_string) as conn:
             # Cast to INT
             result = await conn.query("SELECT CAST(@P1 AS INT) as value", [42.7])
-            assert result.rows()[0]['value'] == 42
-            
+            assert result.rows()[0]["value"] == 42
+
             # Cast to VARCHAR
             result = await conn.query("SELECT CAST(@P1 AS VARCHAR(50)) as value", [123])
-            value = str(result.rows()[0]['value'])
-            assert '123' in value
-            
+            value = str(result.rows()[0]["value"])
+            assert "123" in value
+
             # Cast to FLOAT
-            result = await conn.query("SELECT CAST(@P1 AS FLOAT) as value", ['3.14'])
-            value = result.rows()[0]['value']
+            result = await conn.query("SELECT CAST(@P1 AS FLOAT) as value", ["3.14"])
+            value = result.rows()[0]["value"]
             if value is not None:
                 assert abs(float(value) - 3.14) < 0.1
     except Exception as e:

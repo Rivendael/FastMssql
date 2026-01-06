@@ -1,14 +1,19 @@
 import asyncio
-import pytest
 
+import pytest
 from conftest import Config
 
 try:
     from fastmssql import Connection, PoolConfig
 except ImportError:
-    raise ImportError("fastmssql module is not available. Ensure it is installed to run these tests.")
+    raise ImportError(
+        "fastmssql module is not available. Ensure it is installed to run these tests."
+    )
 
-@pytest.mark.skipif(Connection is None or PoolConfig is None, reason="fastmssql module not available")
+
+@pytest.mark.skipif(
+    Connection is None or PoolConfig is None, reason="fastmssql module not available"
+)
 class TestConnectionPoolBasics:
     """Test basic connection pool creation and configuration."""
 
@@ -25,11 +30,7 @@ class TestConnectionPoolBasics:
     @pytest.mark.asyncio
     async def test_connection_with_custom_pool_config(self, test_config: Config):
         """Test creating a connection with custom pool configuration."""
-        pool_config = PoolConfig(
-            max_size=5,
-            min_idle=1,
-            connection_timeout_secs=15
-        )
+        pool_config = PoolConfig(max_size=5, min_idle=1, connection_timeout_secs=15)
         async with Connection(test_config.connection_string, pool_config) as conn:
             result = await conn.query("SELECT 1 as test_val")
             assert result.has_rows()
@@ -69,7 +70,9 @@ class TestConnectionPoolBasics:
             assert result.has_rows()
 
 
-@pytest.mark.skipif(Connection is None or PoolConfig is None, reason="fastmssql module not available")
+@pytest.mark.skipif(
+    Connection is None or PoolConfig is None, reason="fastmssql module not available"
+)
 class TestConnectionPoolReuse:
     """Test that connection pool is reused across multiple operations."""
 
@@ -90,10 +93,7 @@ class TestConnectionPoolReuse:
         pool_config = PoolConfig(max_size=5, min_idle=2)
         async with Connection(test_config.connection_string, pool_config) as conn:
             # Create multiple concurrent queries
-            tasks = [
-                conn.query(f"SELECT {i} as test_val")
-                for i in range(3)
-            ]
+            tasks = [conn.query(f"SELECT {i} as test_val") for i in range(3)]
             results = await asyncio.gather(*tasks)
             assert len(results) == 3
             for i, result in enumerate(results):
@@ -104,13 +104,13 @@ class TestConnectionPoolReuse:
     async def test_consecutive_connections_same_config(self, test_config: Config):
         """Test that consecutive connections can reuse pool resources."""
         pool_config = PoolConfig(max_size=3, min_idle=1)
-        
+
         # First connection
         async with Connection(test_config.connection_string, pool_config) as conn:
             result1 = await conn.query("SELECT 1 as test_val")
             rows1 = result1.rows()
             assert rows1[0]["test_val"] == 1
-        
+
         # Second connection - should be able to reuse pool
         async with Connection(test_config.connection_string, pool_config) as conn:
             result2 = await conn.query("SELECT 2 as test_val")
@@ -118,7 +118,9 @@ class TestConnectionPoolReuse:
             assert rows2[0]["test_val"] == 2
 
 
-@pytest.mark.skipif(Connection is None or PoolConfig is None, reason="fastmssql module not available")
+@pytest.mark.skipif(
+    Connection is None or PoolConfig is None, reason="fastmssql module not available"
+)
 class TestConnectionPoolUnderLoad:
     """Test connection pool behavior under concurrent load."""
 
@@ -126,12 +128,12 @@ class TestConnectionPoolUnderLoad:
     async def test_pool_handles_concurrent_connections(self, test_config: Config):
         """Test that pool properly handles multiple concurrent connections."""
         pool_config = PoolConfig(max_size=10, min_idle=2)
-        
+
         async def query_task(conn, task_id):
             result = await conn.query(f"SELECT {task_id} as task_id")
             rows = result.rows()
             return rows[0]["task_id"]
-        
+
         async with Connection(test_config.connection_string, pool_config) as conn:
             tasks = [query_task(conn, i) for i in range(5)]
             results = await asyncio.gather(*tasks)
@@ -141,12 +143,12 @@ class TestConnectionPoolUnderLoad:
     async def test_pool_with_high_throughput_load(self, test_config: Config):
         """Test pool performance with high throughput configuration."""
         pool_config = PoolConfig.high_throughput()
-        
+
         async def simple_query(conn):
             result = await conn.query("SELECT 1 as val")
             rows = result.rows()
             return rows[0]["val"]
-        
+
         async with Connection(test_config.connection_string, pool_config) as conn:
             tasks = [simple_query(conn) for _ in range(20)]
             results = await asyncio.gather(*tasks)
@@ -157,12 +159,12 @@ class TestConnectionPoolUnderLoad:
     async def test_pool_with_development_config_load(self, test_config: Config):
         """Test pool behavior with development configuration under moderate load."""
         pool_config = PoolConfig.development()
-        
+
         async def query_with_data(conn, query_id):
             result = await conn.query(f"SELECT {query_id} as id")
             rows = result.rows()
             return rows[0]["id"]
-        
+
         async with Connection(test_config.connection_string, pool_config) as conn:
             # Development config has max_size=5, so we test with moderate concurrent load
             tasks = [query_with_data(conn, i) for i in range(8)]
@@ -170,7 +172,9 @@ class TestConnectionPoolUnderLoad:
             assert len(results) == 8
 
 
-@pytest.mark.skipif(Connection is None or PoolConfig is None, reason="fastmssql module not available")
+@pytest.mark.skipif(
+    Connection is None or PoolConfig is None, reason="fastmssql module not available"
+)
 class TestConnectionPoolEdgeCases:
     """Test edge cases and special scenarios in connection pooling."""
 
@@ -208,7 +212,7 @@ class TestConnectionPoolEdgeCases:
             min_idle=1,
             max_lifetime_secs=None,
             idle_timeout_secs=None,
-            connection_timeout_secs=None
+            connection_timeout_secs=None,
         )
         async with Connection(test_config.connection_string, pool_config) as conn:
             result = await conn.query("SELECT 1 as test")
@@ -224,11 +228,13 @@ class TestConnectionPoolEdgeCases:
                 result = await conn.query(f"SELECT {i} as idx")
                 rows = result.rows()
                 results.append(rows[0]["idx"])
-            
+
             assert results == list(range(20))
 
 
-@pytest.mark.skipif(Connection is None or PoolConfig is None, reason="fastmssql module not available")
+@pytest.mark.skipif(
+    Connection is None or PoolConfig is None, reason="fastmssql module not available"
+)
 class TestConnectionPoolLifecycle:
     """Test connection pool lifecycle and resource management."""
 
@@ -239,7 +245,7 @@ class TestConnectionPoolLifecycle:
         async with Connection(test_config.connection_string, pool_config) as conn:
             result = await conn.query("SELECT 1 as test")
             assert result.has_rows()
-        
+
         # After context exit, another connection should work fine
         async with Connection(test_config.connection_string, pool_config) as conn:
             result = await conn.query("SELECT 2 as test")
@@ -249,7 +255,7 @@ class TestConnectionPoolLifecycle:
     async def test_rapid_context_enter_exit(self, test_config: Config):
         """Test creating and closing multiple connections rapidly."""
         pool_config = PoolConfig(max_size=3, min_idle=1)
-        
+
         for i in range(5):
             async with Connection(test_config.connection_string, pool_config) as conn:
                 result = await conn.query(f"SELECT {i} as idx")
@@ -263,14 +269,16 @@ class TestConnectionPoolLifecycle:
         async with Connection(test_config.connection_string, pool_config1) as conn:
             result = await conn.query("SELECT 1 as test")
             assert result.has_rows()
-        
+
         pool_config2 = PoolConfig(max_size=5, min_idle=2)
         async with Connection(test_config.connection_string, pool_config2) as conn:
             result = await conn.query("SELECT 2 as test")
             assert result.has_rows()
 
 
-@pytest.mark.skipif(Connection is None or PoolConfig is None, reason="fastmssql module not available")
+@pytest.mark.skipif(
+    Connection is None or PoolConfig is None, reason="fastmssql module not available"
+)
 class TestConnectionPoolPresetConfigs:
     """Test all preset pool configurations."""
 
@@ -291,9 +299,9 @@ class TestConnectionPoolPresetConfigs:
             PoolConfig.low_resource(),
             PoolConfig.development(),
             PoolConfig.high_throughput(),
-            PoolConfig.performance()
+            PoolConfig.performance(),
         ]
-        
+
         for preset in presets:
             async with Connection(test_config.connection_string, preset) as conn:
                 result = await conn.query("SELECT 1 as test")

@@ -1,5 +1,5 @@
-use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 use std::path::PathBuf;
 
 /// SSL/TLS configuration options for database connections
@@ -34,10 +34,10 @@ pub enum EncryptionLevel {
 impl EncryptionLevel {
     #[classattr]
     const REQUIRED: EncryptionLevel = EncryptionLevel::Required;
-    
+
     #[classattr]
     const LOGIN_ONLY: EncryptionLevel = EncryptionLevel::LoginOnly;
-    
+
     #[classattr]
     const OFF: EncryptionLevel = EncryptionLevel::Off;
 
@@ -60,7 +60,10 @@ fn parse_encryption_level(level: &str) -> PyResult<EncryptionLevel> {
         "Required" => Ok(EncryptionLevel::Required),
         "LoginOnly" => Ok(EncryptionLevel::LoginOnly),
         "Off" => Ok(EncryptionLevel::Off),
-        _ => Err(PyValueError::new_err(format!("Invalid encryption_level '{}'. Valid values are: 'Required', 'LoginOnly', 'Off'", level)))
+        _ => Err(PyValueError::new_err(format!(
+            "Invalid encryption_level '{}'. Valid values are: 'Required', 'LoginOnly', 'Off'",
+            level
+        ))),
     }
 }
 
@@ -73,7 +76,7 @@ impl PySslConfig {
         // Validate trust_server_certificate and ca_certificate_path are mutually exclusive
         if trust_server_certificate && ca_certificate_path.is_some() {
             return Err(PyValueError::new_err(
-                "trust_server_certificate and ca_certificate_path are mutually exclusive"
+                "trust_server_certificate and ca_certificate_path are mutually exclusive",
             ));
         }
 
@@ -82,31 +85,33 @@ impl PySslConfig {
             let path = PathBuf::from(path_str);
             if !path.exists() {
                 return Err(PyValueError::new_err(format!(
-                    "CA certificate file does not exist: {}", path_str
+                    "CA certificate file does not exist: {}",
+                    path_str
                 )));
             }
-            
+
             // Check if the file is readable by trying to open it
             match std::fs::File::open(&path) {
-                Ok(_) => {}, // File is readable, continue validation
+                Ok(_) => {} // File is readable, continue validation
                 Err(e) => {
                     return Err(PyValueError::new_err(format!(
-                        "CA certificate file is not readable: {} ({})", path_str, e
+                        "CA certificate file is not readable: {} ({})",
+                        path_str, e
                     )));
                 }
             }
-            
+
             // Check file extension
             if let Some(ext) = path.extension() {
                 let ext = ext.to_string_lossy().to_lowercase();
                 if !matches!(ext.as_str(), "pem" | "crt" | "der") {
                     return Err(PyValueError::new_err(
-                        "CA certificate must be .pem, .crt, or .der file"
+                        "CA certificate must be .pem, .crt, or .der file",
                     ));
                 }
             } else {
                 return Err(PyValueError::new_err(
-                    "CA certificate file must have .pem, .crt, or .der extension"
+                    "CA certificate file must have .pem, .crt, or .der extension",
                 ));
             }
         }
@@ -145,7 +150,11 @@ impl PySslConfig {
         server_name: Option<String>,
     ) -> PyResult<Self> {
         Self::validate_certificate_config(trust_server_certificate, &ca_certificate_path)?;
-        Self::validate_encryption_config(encryption_level.clone(), trust_server_certificate, &ca_certificate_path)?;
+        Self::validate_encryption_config(
+            encryption_level.clone(),
+            trust_server_certificate,
+            &ca_certificate_path,
+        )?;
 
         Ok(PySslConfig {
             encryption_level,
@@ -183,14 +192,20 @@ impl PySslConfig {
                 // Already an enum
                 level_enum
             } else {
-                return Err(PyValueError::new_err("encryption_level must be a string or EncryptionLevel enum"));
+                return Err(PyValueError::new_err(
+                    "encryption_level must be a string or EncryptionLevel enum",
+                ));
             }
         } else {
             EncryptionLevel::Required // Default value
         };
-        
+
         Self::validate_certificate_config(trust_server_certificate, &ca_certificate_path)?;
-        Self::validate_encryption_config(encryption_level.clone(), trust_server_certificate, &ca_certificate_path)?;
+        Self::validate_encryption_config(
+            encryption_level.clone(),
+            trust_server_certificate,
+            &ca_certificate_path,
+        )?;
 
         Ok(PySslConfig {
             encryption_level,
@@ -221,7 +236,7 @@ impl PySslConfig {
             false,
             Some(ca_cert_path),
             true,
-            None
+            None,
         )
     }
 
@@ -263,7 +278,9 @@ impl PySslConfig {
 
     #[getter]
     pub fn ca_certificate_path(&self) -> Option<String> {
-        self.ca_certificate_path.as_ref().map(|p| p.to_string_lossy().to_string())
+        self.ca_certificate_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
     }
 
     #[getter]

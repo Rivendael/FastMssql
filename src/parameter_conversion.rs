@@ -1,9 +1,9 @@
-use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PyString};
-use pyo3::exceptions::PyValueError;
-use smallvec::SmallVec;
 use crate::py_parameters::Parameters;
 use crate::type_mapping;
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PyString};
+use smallvec::SmallVec;
 
 #[derive(Debug, Clone)]
 pub enum FastParameter {
@@ -29,19 +29,43 @@ impl tiberius::ToSql for FastParameter {
 }
 
 pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
-    if obj.is_none() { return Ok(FastParameter::Null); }
-    if let Ok(py_s) = obj.cast::<PyString>() { return Ok(FastParameter::String(py_s.to_str()?.to_owned())); }
-    if let Ok(py_i) = obj.cast::<PyInt>() { return py_i.extract::<i64>().map(FastParameter::I64).map_err(|_| PyValueError::new_err("Int too large")); }
-    if let Ok(py_f) = obj.cast::<PyFloat>() { return Ok(FastParameter::F64(py_f.value())); }
-    if let Ok(py_b) = obj.cast::<PyBool>() { return Ok(FastParameter::Bool(py_b.is_true())); }
-    if let Ok(py_by) = obj.cast::<PyBytes>() { return Ok(FastParameter::Bytes(py_by.as_bytes().to_vec())); }
-    
+    if obj.is_none() {
+        return Ok(FastParameter::Null);
+    }
+    if let Ok(py_s) = obj.cast::<PyString>() {
+        return Ok(FastParameter::String(py_s.to_str()?.to_owned()));
+    }
+    if let Ok(py_i) = obj.cast::<PyInt>() {
+        return py_i
+            .extract::<i64>()
+            .map(FastParameter::I64)
+            .map_err(|_| PyValueError::new_err("Int too large"));
+    }
+    if let Ok(py_f) = obj.cast::<PyFloat>() {
+        return Ok(FastParameter::F64(py_f.value()));
+    }
+    if let Ok(py_b) = obj.cast::<PyBool>() {
+        return Ok(FastParameter::Bool(py_b.is_true()));
+    }
+    if let Ok(py_by) = obj.cast::<PyBytes>() {
+        return Ok(FastParameter::Bytes(py_by.as_bytes().to_vec()));
+    }
+
     // Fallback for custom types
-    if let Ok(i) = obj.extract::<i64>() { Ok(FastParameter::I64(i)) }
-    else { Err(PyValueError::new_err(format!("Unsupported type: {}", obj.get_type().name()?))) }
+    if let Ok(i) = obj.extract::<i64>() {
+        Ok(FastParameter::I64(i))
+    } else {
+        Err(PyValueError::new_err(format!(
+            "Unsupported type: {}",
+            obj.get_type().name()?
+        )))
+    }
 }
 
-pub fn convert_parameters_to_fast(parameters: Option<&Bound<PyAny>>, py: Python) -> PyResult<SmallVec<[FastParameter; 16]>> {
+pub fn convert_parameters_to_fast(
+    parameters: Option<&Bound<PyAny>>,
+    py: Python,
+) -> PyResult<SmallVec<[FastParameter; 16]>> {
     if let Some(params) = parameters {
         if let Ok(params_obj) = params.extract::<Py<Parameters>>() {
             let list = params_obj.bind(py).call_method0("to_list")?;
@@ -60,12 +84,13 @@ fn python_params_to_fast_parameters(
     params: &Bound<PyList>,
 ) -> PyResult<SmallVec<[FastParameter; 16]>> {
     let len = params.len();
-    
+
     // SQL Server has a hard limit of 2,100 parameters per query
     if len > 2100 {
-        return Err(PyValueError::new_err(
-            format!("Too many parameters: {} provided, but SQL Server supports maximum 2,100 parameters", len)
-        ));
+        return Err(PyValueError::new_err(format!(
+            "Too many parameters: {} provided, but SQL Server supports maximum 2,100 parameters",
+            len
+        )));
     }
 
     // SmallVec optimization:
@@ -82,9 +107,9 @@ fn python_params_to_fast_parameters(
                     format!("Parameter expansion would exceed SQL Server limit of 2,100 parameters: current {} + expansion {} > 2,100", result.len(), approx_size)
                 ));
             }
-            
+
             expand_iterable_to_fast_params(&param, &mut result)?;
-            
+
             if result.len() > 2100 {
                 return Err(PyValueError::new_err(
                     format!("Parameter expansion exceeded SQL Server limit of 2,100 parameters: {} parameters after expansion", result.len())
@@ -120,8 +145,7 @@ fn get_iterable_size(iterable: &Bound<PyAny>) -> PyResult<usize> {
                 return Ok(size);
             }
         }
-        Err(_) => {
-        }
+        Err(_) => {}
     }
 
     Ok(2101)
