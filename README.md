@@ -8,7 +8,7 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![License](https://img.shields.io/badge/license-MIT%20-green)](LICENSE)
 
-[![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/build.yml)
+[![Unit Tests](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml/badge.svg)](https://github.com/Rivendael/fastmssql/actions/workflows/unittests.yml)
 
 [![Latest Release](https://img.shields.io/github/v/release/Rivendael/fastmssql)](https://github.com/Rivendael/fastmssql/releases)
 
