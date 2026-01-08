@@ -212,8 +212,6 @@ dependencies = [
  "bb8",
  "bb8-tiberius",
  "chrono",
- "futures",
- "memchr",
  "mimalloc",
  "num_cpus",
  "parking_lot",

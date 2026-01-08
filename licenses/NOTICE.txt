@@ -32,10 +32,6 @@ Additional dependencies used in this project:
   Copyright 2016-2025 Tokio Contributors
   Licensed under MIT or Apache License, Version 2.0
 
-- futures (https://github.com/rust-lang/futures-rs)
-  Copyright 2015-2025 The Rust Project Developers
-  Licensed under MIT or Apache License, Version 2.0
-
 - uuid (https://github.com/uuid-rs/uuid)
   Copyright 2015-2025 UUID Project Developers
   Licensed under MIT or Apache License, Version 2.0
@@ -46,10 +42,6 @@ Additional dependencies used in this project:
 
 - num_cpus (https://github.com/seanmonstar/num_cpus)
   Copyright 2015-2025 Sean McArthur
-  Licensed under MIT or Apache License, Version 2.0
-
-- memchr (https://github.com/BurntSushi/memchr)
-  Copyright 2015-2025 Andrew Gallant
   Licensed under MIT or Apache License, Version 2.0
 
 - ahash (https://github.com/tkaitchuck/aHash)
