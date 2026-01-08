@@ -41,7 +41,6 @@ ahash = "0.8.12"              # Faster hashing algorithm (used in optimized_type
 smallvec = "1.15.1"          # Stack-allocated vectors for small collections
 parking_lot = "0.12.5"       # Faster mutex/RwLock implementation than std::sync
 mimalloc = { version = "0.1.48", default-features = false } # Microsoft's fast memory allocator
-slab = "0.4.11"              # Pinned sub-dependency due to CVE-2025-55159
 
 [dev-dependencies]
 tempfile = "3.24.0"

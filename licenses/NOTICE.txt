@@ -60,10 +60,6 @@ Additional dependencies used in this project:
   Copyright 2018-2025 Microsoft Corporation, Daan Leijen
   Licensed under MIT License
 
-- slab (https://github.com/tokio-rs/slab)
-  Copyright 2019-2025 Carl Lerche
-  Licensed under MIT License
-
 - tempfile (https://github.com/Stebalien/tempfile)
   Copyright 2016-2025 Steven Allen
   Licensed under MIT or Apache License, Version 2.0
