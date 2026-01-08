@@ -10,7 +10,7 @@ This project includes and depends on the following third-party libraries:
   Copyright 2018-2025 PyO3 Project Contributors
   Licensed under the Apache License, Version 2.0
 
-- pyo3-asyncio (https://github.com/PyO3/pyo3-asyncio)
+- pyo3-async-runtimes (https://github.com/PyO3/pyo3-async-runtimes)
   Copyright 2020-2025 PyO3 Project Contributors
   Licensed under the Apache License, Version 2.0
 
@@ -32,35 +32,43 @@ Additional dependencies used in this project:
   Copyright 2016-2025 Tokio Contributors
   Licensed under MIT or Apache License, Version 2.0
 
-- futures (https://github.com/rust-lang/futures-rs)
-  Copyright 2015-2025 The Rust Project Developers
-  Licensed under MIT or Apache License, Version 2.0
-
-- serde (https://github.com/serde-rs/serde)
-  Copyright 2014-2025 Serde Project Developers
-  Licensed under MIT or Apache License, Version 2.0
-
-- serde_json (https://github.com/serde-rs/json)
-  Copyright 2014-2025 Serde Project Developers
-  Licensed under MIT or Apache License, Version 2.0
-
-- anyhow (https://github.com/dtolnay/anyhow)
-  Copyright 2019-2025 David Tolnay
+- uuid (https://github.com/uuid-rs/uuid)
+  Copyright 2015-2025 UUID Project Developers
   Licensed under MIT or Apache License, Version 2.0
 
 - chrono (https://github.com/chronotope/chrono)
   Copyright 2014-2025 Chronotope Developers
   Licensed under MIT or Apache License, Version 2.0
 
-- uuid (https://github.com/uuid-rs/uuid)
-  Copyright 2015-2025 UUID Project Developers
+- num_cpus (https://github.com/seanmonstar/num_cpus)
+  Copyright 2015-2025 Sean McArthur
   Licensed under MIT or Apache License, Version 2.0
+
+- ahash (https://github.com/tkaitchuck/aHash)
+  Copyright 2018-2025 Tom Kaitchuck
+  Licensed under MIT or Apache License, Version 2.0
+
+- smallvec (https://github.com/servo/rust-smallvec)
+  Copyright 2018-2025 The Servo Project Developers
+  Licensed under MIT or Apache License, Version 2.0
+
+- parking_lot (https://github.com/Amanieu/parking_lot)
+  Copyright 2016-2025 Amanieu d'Antras
+  Licensed under MIT or Apache License, Version 2.0
+
+- mimalloc (https://github.com/microsoft/mimalloc)
+  Copyright 2018-2025 Microsoft Corporation, Daan Leijen
+  Licensed under MIT License
 
 - tempfile (https://github.com/Stebalien/tempfile)
   Copyright 2016-2025 Steven Allen
   Licensed under MIT or Apache License, Version 2.0
 
 # Python development and testing tools
+- maturin (https://github.com/PyO3/maturin)
+  Copyright 2018-2025 PyO3 Project Contributors
+  Licensed under Apache License, Version 2.0 or MIT License
+
 - pytest (https://github.com/pytest-dev/pytest)
   Copyright 2004-2025 Holger Krekel and contributors
   Licensed under MIT License
@@ -68,6 +76,22 @@ Additional dependencies used in this project:
 - pytest-asyncio (https://github.com/pytest-dev/pytest-asyncio)
   Copyright 2015-2025 pytest-asyncio contributors
   Licensed under MIT License
+
+- pytest-timeout (https://github.com/pytest-dev/pytest-timeout)
+  Copyright 2011-2025 Floris Bruynooghe
+  Licensed under MIT License
+
+- pytest-xdist (https://github.com/pytest-dev/pytest-xdist)
+  Copyright 2009-2025 Holger Krekel and contributors
+  Licensed under MIT License
+
+- python-dotenv (https://github.com/theskumar/python-dotenv)
+  Copyright 2014-2025 Saurabh Kumar
+  Licensed under BSD-3-Clause License
+
+- psutil (https://github.com/giampaolo/psutil)
+  Copyright 2009-2025 Giampaolo Rodola
+  Licensed under BSD-3-Clause License
 
 - black (https://github.com/psf/black)
   Copyright 2018-2025 Python Software Foundation
@@ -77,9 +101,9 @@ Additional dependencies used in this project:
   Copyright 2022-2025 Astral Software Inc.
   Licensed under MIT License
 
-- maturin (https://github.com/PyO3/maturin)
-  Copyright 2018-2025 PyO3 Project Contributors
-  Licensed under Apache License, Version 2.0 or MIT License
+- cibuildwheel (https://github.com/pypa/cibuildwheel)
+  Copyright 2016-2025 PyPA Contributors
+  Licensed under BSD-2-Clause License
 
 The full text of the Apache License 2.0 is provided in licenses/APACHE_LICENSE_2.0.txt.
 The full text of the MIT License is provided in licenses/MIT_LICENSE.txt.

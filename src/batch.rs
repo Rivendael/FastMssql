@@ -10,7 +10,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::Config;
-use tokio::sync::OnceCell;
+use tokio::sync::RwLock;
 
 /// Parses batch items (SQL queries with parameters) from a Python list.
 pub fn parse_batch_items<'p>(
@@ -116,7 +116,7 @@ pub async fn query_batch_on_connection(
 }
 
 pub fn execute_batch<'p>(
-    pool: Arc<OnceCell<ConnectionPool>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     py: Python<'p>,
@@ -167,7 +167,7 @@ pub fn execute_batch<'p>(
 }
 
 pub fn query_batch<'p>(
-    pool: Arc<OnceCell<ConnectionPool>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     py: Python<'p>,
@@ -202,7 +202,7 @@ pub fn query_batch<'p>(
 }
 
 pub fn bulk_insert<'p>(
-    pool: Arc<OnceCell<ConnectionPool>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     py: Python<'p>,

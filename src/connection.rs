@@ -5,7 +5,6 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::{AuthMethod, Config, Row};
-use tokio::sync::OnceCell;
 use tokio::sync::RwLock;
 
 use crate::batch::{bulk_insert, execute_batch, query_batch};
@@ -16,9 +15,7 @@ use crate::ssl_config::PySslConfig;
 
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
-    pool: Arc<OnceCell<ConnectionPool>>,
-    pool_guard: Arc<RwLock<()>>,  // For disconnect synchronization
-    connected: Arc<RwLock<bool>>, // Track explicit disconnect
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>,
@@ -26,8 +23,9 @@ pub struct PyConnection {
 
 impl PyConnection {
     /// For queries that return rows (SELECT statements)
+    #[inline]
     async fn execute_query_async_gil_free(
-        pool: &Arc<ConnectionPool>,
+        pool: &ConnectionPool,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
@@ -35,8 +33,9 @@ impl PyConnection {
     }
 
     /// For commands that don't return rows (INSERT/UPDATE/DELETE/DDL)
+    #[inline]
     async fn execute_command_async_gil_free(
-        pool: &Arc<ConnectionPool>,
+        pool: &ConnectionPool,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
@@ -44,8 +43,9 @@ impl PyConnection {
     }
 
     /// Uses query() method to get rows
+    #[inline]
     async fn execute_query_internal_gil_free(
-        pool: &Arc<ConnectionPool>,
+        pool: &ConnectionPool,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
@@ -81,8 +81,9 @@ impl PyConnection {
     }
 
     /// Uses execute() method to get affected row count
+    #[inline]
     async fn execute_command_internal_gil_free(
-        pool: &Arc<ConnectionPool>,
+        pool: &ConnectionPool,
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
@@ -178,9 +179,7 @@ impl PyConnection {
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
 
         Ok(PyConnection {
-            pool: Arc::new(OnceCell::new()),
-            pool_guard: Arc::new(RwLock::new(())),
-            connected: Arc::new(RwLock::new(false)),
+            pool: Arc::new(RwLock::new(None)),
             config: Arc::new(config),
             pool_config,
             _ssl_config: ssl_config,
@@ -247,10 +246,9 @@ impl PyConnection {
     /// Check if connected to the database
     pub fn is_connected<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
-        let connected = self.connected.clone();
 
         future_into_py(py, async move {
-            let is_connected = *connected.read().await && pool.get().is_some();
+            let is_connected = pool.read().await.is_some();
             Ok(is_connected)
         })
     }
@@ -261,11 +259,14 @@ impl PyConnection {
         let pool_config = self.pool_config.clone();
 
         future_into_py(py, async move {
-            let (is_connected, connections, idle_connections) = if let Some(pool_ref) = pool.get() {
-                let state = pool_ref.state();
-                (true, state.connections, state.idle_connections)
-            } else {
-                (false, 0u32, 0u32)
+            let (is_connected, connections, idle_connections) = {
+                let pool_guard = pool.read().await;
+                if let Some(pool_ref) = pool_guard.as_ref() {
+                    let state = pool_ref.state();
+                    (true, state.connections, state.idle_connections)
+                } else {
+                    (false, 0u32, 0u32)
+                }
             };
             let max_size = pool_config.max_size;
             let min_idle = pool_config.min_idle;
@@ -294,18 +295,15 @@ impl PyConnection {
         let pool = Arc::clone(&borrowed.pool);
         let config = Arc::clone(&borrowed.config);
         let pool_config = borrowed.pool_config.clone();
-        let connected = Arc::clone(&borrowed.connected);
 
         future_into_py(py, async move {
-            let is_connected = pool.get().is_some();
+            let is_connected = pool.read().await.is_some();
 
             if is_connected {
-                *connected.write().await = true;
                 return Ok(());
             }
 
             let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
-            *connected.write().await = true;
             Ok(())
         })
     }
@@ -318,10 +316,7 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>,
         _traceback: Option<Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        let connected = Arc::clone(&self.connected);
-
         future_into_py(py, async move {
-            *connected.write().await = false;
             Ok(())
         })
     }
@@ -331,16 +326,13 @@ impl PyConnection {
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
-        let connected = Arc::clone(&self.connected);
 
         future_into_py(py, async move {
-            if pool.get().is_some() {
-                *connected.write().await = true;
+            if pool.read().await.is_some() {
                 return Ok(true);
             }
 
             let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
-            *connected.write().await = true;
             Ok(true)
         })
     }
@@ -348,20 +340,14 @@ impl PyConnection {
     /// Explicitly close the connection (drop the pool)
     pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
-        let guard = self.pool_guard.clone();
-        let connected = Arc::clone(&self.connected);
 
         future_into_py(py, async move {
-            let _write_guard = guard.write().await;
-            let was_connected = *connected.read().await;
-            *connected.write().await = false;
-            if pool.get().is_some() {
-                // OnceCell doesn't support clearing, but this is fine for disconnect semantics
-                // New connections will need a new Connection object
-                Ok(was_connected)
-            } else {
-                Ok(false)
-            }
+            let mut pool_guard = pool.write().await;
+            let had_pool = pool_guard.is_some();
+            *pool_guard = None;
+            drop(pool_guard);
+            
+            Ok(had_pool)
         })
     }
 
