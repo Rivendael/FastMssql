@@ -76,6 +76,23 @@ class Transaction:
     def __init__(self, *args, **kwargs):
         """Initialize a dedicated non-pooled connection for transactions."""
         self._rust_conn = _RustTransaction(*args, **kwargs)
+        self._TRANSACTION_BEGUN = False
+        self._TRANSACTION_COMMITTED = False
+        self._TRANSACTION_ROLLEDBACK = False
+
+    def _reset_transaction_flags(self):
+        """Reset the transaction state flags."""
+        self._TRANSACTION_BEGUN = False
+        self._TRANSACTION_COMMITTED = False
+        self._TRANSACTION_ROLLEDBACK = False
+    
+    def _validate_transaction_flags(self):
+        if not self._TRANSACTION_BEGUN:
+            raise RuntimeError("Transaction has not begun")
+        if self._TRANSACTION_COMMITTED:
+            raise RuntimeError("Transaction has already been committed")
+        if self._TRANSACTION_ROLLEDBACK:
+            raise RuntimeError("Transaction has already been rolled back")
 
     async def query(self, sql, params=None):
         """Execute a SELECT query that returns rows."""
@@ -87,19 +104,34 @@ class Transaction:
 
     async def begin(self):
         """Begin a transaction."""
+        # If previous transaction completed, reset flags to allow reuse
+        if self._TRANSACTION_COMMITTED or self._TRANSACTION_ROLLEDBACK:
+            self._reset_transaction_flags()
+        
+        if self._TRANSACTION_BEGUN:
+            raise RuntimeError("Transaction has already begun")
         await self._rust_conn.begin()
+        self._TRANSACTION_BEGUN = True
 
     async def commit(self):
         """Commit the current transaction."""
+
+        self._validate_transaction_flags()
         await self._rust_conn.commit()
+        self._TRANSACTION_COMMITTED = True
 
     async def rollback(self):
         """Rollback the current transaction."""
+
+        self._validate_transaction_flags()
         await self._rust_conn.rollback()
+        self._TRANSACTION_ROLLEDBACK = True
 
     async def close(self):
         """Close the connection."""
-        return await self._rust_conn.close()
+        result = await self._rust_conn.close()
+        self._reset_transaction_flags()
+        return result
 
     async def __aenter__(self):
         """Async context manager entry - automatically BEGIN transaction."""
@@ -125,6 +157,7 @@ class Transaction:
             except Exception:
                 pass
 
+        self._reset_transaction_flags()
         return False  # Don't suppress exceptions
 
 
