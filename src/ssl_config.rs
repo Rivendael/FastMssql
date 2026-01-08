@@ -81,7 +81,7 @@ impl PySslConfig {
         }
 
         // Validate CA certificate path if provided
-        if let Some(ref path_str) = ca_certificate_path {
+        if let Some(path_str) = ca_certificate_path {
             let path = PathBuf::from(path_str);
             if !path.exists() {
                 return Err(PyValueError::new_err(format!(
@@ -329,7 +329,7 @@ impl PySslConfig {
         // Configure trust settings
         if self.trust_server_certificate {
             config.trust_cert();
-        } else if let Some(ref ca_path) = self.ca_certificate_path {
+        } else if let Some(ca_path) = &self.ca_certificate_path {
             config.trust_cert_ca(ca_path.to_string_lossy().to_string());
         }
 

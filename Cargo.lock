@@ -269,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "fastmssql_core"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -281,7 +281,6 @@ dependencies = [
  "memchr",
  "mimalloc",
  "num_cpus",
- "once_cell",
  "parking_lot",
  "pyo3",
  "pyo3-async-runtimes",

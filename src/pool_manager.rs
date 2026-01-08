@@ -5,7 +5,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use std::sync::Arc;
 use tiberius::Config;
-use tokio::sync::OnceCell;
+use tokio::sync::RwLock;
 
 pub type ConnectionPool = Pool<ConnectionManager>;
 
@@ -51,13 +51,31 @@ pub async fn establish_pool(
 }
 
 pub async fn ensure_pool_initialized(
-    pool: Arc<OnceCell<ConnectionPool>>,
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: &PyPoolConfig,
-) -> PyResult<Arc<ConnectionPool>> {
-    pool.get_or_try_init(|| async { establish_pool(&config, pool_config).await })
-        .await
-        .map(|p| Arc::new(p.clone()))
+) -> PyResult<ConnectionPool> {
+    // Fast path: check if pool already exists with read lock
+    {
+        let read_guard = pool.read().await;
+        if let Some(existing_pool) = read_guard.as_ref() {
+            return Ok(existing_pool.clone());
+        }
+    }
+
+    // Slow path: initialize pool with write lock
+    let mut write_guard = pool.write().await;
+    
+    // Double-check in case another task initialized while we waited for write lock
+    if let Some(existing_pool) = write_guard.as_ref() {
+        return Ok(existing_pool.clone());
+    }
+
+    // Initialize new pool
+    let new_pool = establish_pool(&config, pool_config).await?;
+    *write_guard = Some(new_pool.clone());
+    
+    Ok(new_pool)
 }
 
 /// Warms up the connection pool by pre-establishing min_idle connections
