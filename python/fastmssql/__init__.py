@@ -73,32 +73,9 @@ class Transaction:
             await conn.execute("INSERT INTO ...")
     """
 
-    def __init__(
-        self,
-        connection_string=None,
-        ssl_config=None,
-        server=None,
-        database=None,
-        username=None,
-        password=None,
-        application_intent=None,
-        port=None,
-        instance_name=None,
-        application_name=None,
-    ):
+    def __init__(self, *args, **kwargs):
         """Initialize a dedicated non-pooled connection for transactions."""
-        self._rust_conn = _RustTransaction(
-            connection_string=connection_string,
-            ssl_config=ssl_config,
-            server=server,
-            database=database,
-            username=username,
-            password=password,
-            application_intent=application_intent,
-            port=port,
-            instance_name=instance_name,
-            application_name=application_name,
-        )
+        self._rust_conn = _RustTransaction(*args, **kwargs)
 
     async def query(self, sql, params=None):
         """Execute a SELECT query that returns rows."""
