@@ -85,6 +85,14 @@ class Transaction:
         self._TRANSACTION_BEGUN = False
         self._TRANSACTION_COMMITTED = False
         self._TRANSACTION_ROLLEDBACK = False
+    
+    def _validate_transaction_flags(self):
+        if not self._TRANSACTION_BEGUN:
+            raise RuntimeError("Transaction has not begun")
+        if self._TRANSACTION_COMMITTED:
+            raise RuntimeError("Transaction has already been committed")
+        if self._TRANSACTION_ROLLEDBACK:
+            raise RuntimeError("Transaction has already been rolled back")
 
     async def query(self, sql, params=None):
         """Execute a SELECT query that returns rows."""
@@ -107,25 +115,15 @@ class Transaction:
 
     async def commit(self):
         """Commit the current transaction."""
-        if not self._TRANSACTION_BEGUN:
-            raise RuntimeError("Transaction has not begun")
-        if self._TRANSACTION_COMMITTED:
-            raise RuntimeError("Transaction has already been committed")
-        if self._TRANSACTION_ROLLEDBACK:
-            raise RuntimeError("Transaction has already been rolled back")
-        
+
+        self._validate_transaction_flags()
         await self._rust_conn.commit()
         self._TRANSACTION_COMMITTED = True
 
     async def rollback(self):
         """Rollback the current transaction."""
-        if not self._TRANSACTION_BEGUN:
-            raise RuntimeError("Transaction has not begun")
-        if self._TRANSACTION_COMMITTED:
-            raise RuntimeError("Transaction has already been committed")
-        if self._TRANSACTION_ROLLEDBACK:
-            raise RuntimeError("Transaction has already been rolled back")
-        
+
+        self._validate_transaction_flags()
         await self._rust_conn.rollback()
         self._TRANSACTION_ROLLEDBACK = True
 
