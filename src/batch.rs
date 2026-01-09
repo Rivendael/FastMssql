@@ -68,10 +68,12 @@ pub async fn execute_batch_on_connection(
     let mut all_results = Vec::with_capacity(batch_commands.len());
 
     for (sql, parameters) in batch_commands {
-        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-            .iter()
-            .map(|p| p as &dyn tiberius::ToSql)
-            .collect();
+        // Pre-allocate with exact capacity to avoid reallocation
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+            SmallVec::with_capacity(parameters.len());
+        for p in &parameters {
+            tiberius_params.push(p as &dyn tiberius::ToSql);
+        }
 
         let result = conn
             .execute(sql, &tiberius_params)
@@ -94,10 +96,12 @@ pub async fn query_batch_on_connection(
     let mut all_results = Vec::with_capacity(batch_queries.len());
 
     for (query, parameters) in batch_queries {
-        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-            .iter()
-            .map(|p| p as &dyn tiberius::ToSql)
-            .collect();
+        // Pre-allocate with exact capacity to avoid reallocation
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+            SmallVec::with_capacity(parameters.len());
+        for p in &parameters {
+            tiberius_params.push(p as &dyn tiberius::ToSql);
+        }
 
         let stream = conn
             .query(&query, &tiberius_params)
@@ -289,8 +293,12 @@ pub fn bulk_insert<'p>(
                 sql.push(')');
             }
 
-            let params: Vec<&dyn tiberius::ToSql> =
-                chunk.iter().map(|p| p as &dyn tiberius::ToSql).collect();
+            // Use SmallVec to avoid heap allocation for small parameter sets
+            let mut params: SmallVec<[&dyn tiberius::ToSql; 128]> = 
+                SmallVec::with_capacity(chunk.len());
+            for p in chunk {
+                params.push(p as &dyn tiberius::ToSql);
+            }
 
             let result = conn
                 .execute(sql, &params)

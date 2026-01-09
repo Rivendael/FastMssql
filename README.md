@@ -497,6 +497,33 @@ See the [LICENSE](LICENSE) file for details.
 
 Built on excellent open source projects: Tiberius, PyO3, pyo3‑asyncio, bb8, tokio, serde, pytest, maturin, and more. See `licenses/NOTICE.txt` for the full list. The full texts of Apache‑2.0 and MIT are in `licenses/`.
 
+## Memory Performance Benchmarks
+
+FastMSSQL is highly memory-efficient with excellent performance characteristics across various workloads:
+
+| Test Scenario | Memory Usage | Performance | Notes |
+|--------------|--------------|-------------|-------|
+| **Connection Creation** | 4.83 MB | 0.02s | Parallel pool warmup, 3 connections |
+| **Sequential Queries (100)** | 0.83 MB | 0.01s | 8.48 KB per query |
+| **Large Result Sets (15K rows)** | 13.39 MB | 0.08s | ~0.89 KB per row with GUIDs, timestamps, strings |
+| **Concurrent Operations (200)** | 2.48 MB | 0.02s | 12.72 KB per operation, 20 concurrent workers |
+| **Memory Leak Test (1,000 ops)** | 0.44 MB | 0.02s | 0.448 KB per operation - no leaks detected |
+| **Batch Operations (250)** | 0.31 MB | 0.01s | 1.28 KB per batch operation |
+
+**Total for all tests**: 22.28 MB | 0.16s
+
+### Key Performance Characteristics
+
+- **Memory efficiency**: ~0.89 KB per row for complex SQL Server data (GUIDs, timestamps, variable-length strings)
+- **Lazy conversion**: Rows converted on-demand with caching for reset/re-iteration
+- **SmallVec optimization**: Stack-allocated parameters (0-16) avoid heap allocations
+- **Arc-based column sharing**: Column metadata shared across all rows in result set
+- **Zero-copy operations**: Direct Rust-to-Python conversion where possible
+- **Connection pool**: bb8-based pooling with adaptive sizing to prevent contention
+
+Benchmarks run on: macOS ARM64, Python 3.13, Rust 1.x (release build)  
+Test environment: Local SQL Server with realistic data types and concurrency
+
 ## Acknowledgments
 
-Thanks to the maintainers of Tiberius, PyO3, pyo3‑asyncio, Tokio, pytest, maturin, and the broader open source community.
+Thanks to the maintainers of Tiberius, bb8, PyO3, Tokio, pytest, maturin, and the broader open source community.

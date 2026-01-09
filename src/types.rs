@@ -38,9 +38,12 @@ impl Clone for PyFastRow {
 impl PyFastRow {
     /// Create a new PyFastRow from a Tiberius row and shared column info
     pub fn from_tiberius_row(row: Row, py: Python, column_info: Arc<ColumnInfo>) -> PyResult<Self> {
+        // Pre-allocate vector with exact capacity and cache num_columns to avoid repeated lookups
+        let num_columns = column_info.names.len();
+        let mut values = Vec::with_capacity(num_columns);
+        
         // Eagerly convert all values in column order using cached column types
-        let mut values = Vec::with_capacity(column_info.names.len());
-        for i in 0..column_info.names.len() {
+        for i in 0..num_columns {
             let col_type = column_info
                 .column_types
                 .get(i)
