@@ -129,12 +129,12 @@ async def test_sequential_queries(query_count: int = 100):
     with MemoryProfiler("Sequential Queries", verbose=True) as profiler:
         async with Connection(connection_string) as conn:
             for i in range(query_count):
-                result = await conn.execute(
+                result = await conn.query(
                     "SELECT @i as iteration, @@VERSION as version, NEWID() as id",
                     [i]
                 )
                 # Ensure results are materialized
-                rows = list(result)
+                rows = result.all()
                 for row in rows:
                     _ = len(str(row))
                 
@@ -167,7 +167,7 @@ async def test_large_result_sets(batch_size: int = 1000):
         async with Connection(connection_string) as conn:
             # Test with multiple result sets of varying sizes
             for size_mult in [1, 2, 4, 8]:
-                result = await conn.execute(
+                result = await conn.query(
                     f"""
                     WITH NumberSeries AS (
                         SELECT TOP {batch_size * size_mult}
@@ -181,7 +181,7 @@ async def test_large_result_sets(batch_size: int = 1000):
                     SELECT * FROM NumberSeries
                     """
                 )
-                rows = list(result)
+                rows = result.all()
                 print(f"    Fetched {len(rows)} rows ({size_mult}x batch size)")
                 profiler.take_snapshot(f"After {size_mult}x batch")
         
@@ -211,11 +211,11 @@ async def test_concurrent_operations(worker_count: int = 20, queries_per_worker:
             async def worker(worker_id: int):
                 results = []
                 for i in range(queries_per_worker):
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @worker_id as worker, @i as iteration, @@VERSION as version",
                         [worker_id, i]
                     )
-                    results.extend(list(result))
+                    results.extend(result.all())
                 return results
             
             # Run concurrent workers
@@ -262,7 +262,7 @@ async def test_memory_leak_detection(batch_count: int = 10, ops_per_batch: int =
                 batch_initial = psutil.Process().memory_info().rss / 1024 / 1024
                 
                 for i in range(ops_per_batch):
-                    result = await conn.execute(
+                    result = await conn.query(
                         """
                         SELECT 
                             @batch as batch_num,
@@ -298,16 +298,16 @@ async def test_memory_leak_detection(batch_count: int = 10, ops_per_batch: int =
     # Analyze leak pattern
     if batch_memories:
         avg_batch_increase = sum(batch_memories) / len(batch_memories)
-        print(f"\n  Leak Analysis:")
+        print("\n  Leak Analysis:")
         print(f"    Average memory per batch: {avg_batch_increase:.2f} MB")
         print(f"    First batch: {batch_memories[0]:.2f} MB")
         print(f"    Last batch: {batch_memories[-1]:.2f} MB")
         if batch_memories[-1] < batch_memories[0] * 0.9:
-            print(f"    ✅ Memory stabilizing (good sign)")
+            print("    ✅ Memory stabilizing (good sign)")
         elif batch_memories[-1] > batch_memories[0] * 1.1:
-            print(f"    ⚠️  Potential memory leak detected")
+            print("    ⚠️  Potential memory leak detected")
         else:
-            print(f"    ✅ Stable memory usage")
+            print("    ✅ Stable memory usage")
     
     return result
 
@@ -334,11 +334,11 @@ async def test_batch_operations(batch_size: int = 50):
                 
                 # Execute batch of parameterized queries
                 for params in batch_data:
-                    result = await conn.execute(
+                    result = await conn.query(
                         "SELECT @batch as batch, @item as item_num, @label as label",
                         params
                     )
-                    _ = list(result)
+                    _ = result.all()
                 
                 print(f"    Completed batch {batch_num + 1}")
                 profiler.take_snapshot(f"After batch {batch_num + 1}")
@@ -427,11 +427,6 @@ def print_summary(results: Dict[str, Optional[Dict]]):
 
 async def main():
     """Run all memory tests"""
-    try:
-        from fastmssql import Connection
-    except ImportError:
-        print("❌ fastmssql not available - run 'maturin develop --release' first")
-        return
     
     # Check connection string
     connection_string = os.getenv('FASTMSSQL_TEST_CONNECTION_STRING')

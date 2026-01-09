@@ -71,9 +71,10 @@ pub async fn ensure_pool_initialized(
         return Ok(existing_pool.clone());
     }
 
-    // Initialize new pool
+    // Initialize new pool and store it directly to avoid cloning
     let new_pool = establish_pool(&config, pool_config).await?;
     *write_guard = Some(new_pool.clone());
+    drop(write_guard);
     
     Ok(new_pool)
 }
@@ -81,13 +82,25 @@ pub async fn ensure_pool_initialized(
 /// Warms up the connection pool by pre-establishing min_idle connections
 /// This eliminates cold-start latency on first queries
 pub async fn warmup_pool(pool: &ConnectionPool, target_connections: u32) -> PyResult<()> {
-    // Pre-spawn connections sequentially (fast enough for initialization)
-    for _ in 0..target_connections {
-        let _ = pool
-            .get()
-            .await
+    let concurrent_warmup = std::cmp::min(target_connections, 4);
+    
+    let mut handles = Vec::with_capacity(concurrent_warmup as usize);
+    
+    for _ in 0..concurrent_warmup {
+        let pool_clone = pool.clone();
+        let handle = tokio::spawn(async move {
+            match pool_clone.get().await {
+                Ok(_conn) => Ok(()),
+                Err(e) => Err(e)
+            }
+        });
+        handles.push(handle);
+    }
+    
+    for handle in handles {
+        handle.await
+            .map_err(|e| PyRuntimeError::new_err(format!("Connection warmup task failed: {}", e)))?
             .map_err(|e| PyRuntimeError::new_err(format!("Connection warmup failed: {}", e)))?;
-        // Connection is automatically returned to pool when dropped
     }
 
     Ok(())

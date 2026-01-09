@@ -32,14 +32,15 @@ pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     if obj.is_none() {
         return Ok(FastParameter::Null);
     }
-    if let Ok(py_s) = obj.cast::<PyString>() {
-        return Ok(FastParameter::String(py_s.to_str()?.to_owned()));
-    }
+    
     if let Ok(py_i) = obj.cast::<PyInt>() {
         return py_i
             .extract::<i64>()
             .map(FastParameter::I64)
             .map_err(|_| PyValueError::new_err("Int too large"));
+    }
+    if let Ok(py_s) = obj.cast::<PyString>() {
+        return Ok(FastParameter::String(py_s.to_str()?.to_owned()));
     }
     if let Ok(py_f) = obj.cast::<PyFloat>() {
         return Ok(FastParameter::F64(py_f.value()));
@@ -158,17 +159,19 @@ where
 {
     use pyo3::types::{PyList, PyTuple};
 
-    // Fast path for common collection types - avoid iterator overhead and intermediate Vec allocation
+    // Fast path for common collection types - avoid iterator overhead
     if let Ok(list) = iterable.cast::<PyList>() {
         for item in list.iter() {
-            result.extend(std::iter::once(python_to_fast_parameter(&item)?));
+            let param = python_to_fast_parameter(&item)?;
+            result.extend(std::iter::once(param));
         }
         return Ok(());
     }
 
     if let Ok(tuple) = iterable.cast::<PyTuple>() {
         for item in tuple.iter() {
-            result.extend(std::iter::once(python_to_fast_parameter(&item)?));
+            let param = python_to_fast_parameter(&item)?;
+            result.extend(std::iter::once(param));
         }
         return Ok(());
     }
@@ -177,7 +180,6 @@ where
     let py = iterable.py();
     let iter = iterable.call_method0("__iter__")?;
 
-    // Pre-allocate a small buffer to batch extend operations and reduce allocations
     let mut batch: SmallVec<[FastParameter; 16]> = SmallVec::new();
 
     loop {

@@ -51,30 +51,29 @@ impl PyConnection {
     ) -> PyResult<Vec<Row>> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                let err_msg = if e.to_string().contains("timeout") {
-                    "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
+                // Only allocate error string if error actually occurred
+                if e.to_string().contains("timeout") {
+                    PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
                 } else {
-                    format!("Failed to get connection from pool: {}", e)
-                };
-                PyRuntimeError::new_err(err_msg)
+                    PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+                }
             })?;
 
-        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-            .iter()
-            .map(|p| p as &dyn tiberius::ToSql)
-            .collect();
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+            SmallVec::with_capacity(parameters.len());
+        for p in parameters {
+            tiberius_params.push(p as &dyn tiberius::ToSql);
+        }
 
-        let result = {
-            let stream = conn
-                .query(query, &tiberius_params)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+        let stream = conn
+            .query(query, &tiberius_params)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
 
-            stream
-                .into_first_result()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?
-        };
+        let result = stream
+            .into_first_result()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
 
         drop(conn);
         Ok(result)
@@ -89,27 +88,27 @@ impl PyConnection {
     ) -> PyResult<u64> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                let err_msg = if e.to_string().contains("timeout") {
-                    "Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.".to_string()
+                // Only allocate error string if error actually occurred
+                if e.to_string().contains("timeout") {
+                    PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
                 } else {
-                    format!("Failed to get connection from pool: {}", e)
-                };
-                PyRuntimeError::new_err(err_msg)
+                    PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+                }
             })?;
 
-        let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = parameters
-            .iter()
-            .map(|p| p as &dyn tiberius::ToSql)
-            .collect();
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+            SmallVec::with_capacity(parameters.len());
+        for p in parameters {
+            tiberius_params.push(p as &dyn tiberius::ToSql);
+        }
 
-        let total_affected = {
-            let result = conn
-                .execute(query, &tiberius_params)
-                .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
+        let result = conn
+            .execute(query, &tiberius_params)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
 
-            result.rows_affected().iter().sum::<u64>()
-        };
+        let total_affected = result.rows_affected().iter().sum::<u64>();
+        
         drop(conn);
         Ok(total_affected)
     }
@@ -256,7 +255,8 @@ impl PyConnection {
     /// Get connection pool statistics
     pub fn pool_stats<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let pool = self.pool.clone();
-        let pool_config = self.pool_config.clone();
+        let max_size = self.pool_config.max_size;
+        let min_idle = self.pool_config.min_idle;
 
         future_into_py(py, async move {
             let (is_connected, connections, idle_connections) = {
@@ -268,8 +268,6 @@ impl PyConnection {
                     (false, 0u32, 0u32)
                 }
             };
-            let max_size = pool_config.max_size;
-            let min_idle = pool_config.min_idle;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let dict = pyo3::types::PyDict::new(py);
@@ -339,14 +337,12 @@ impl PyConnection {
 
     /// Explicitly close the connection (drop the pool)
     pub fn disconnect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        let pool = self.pool.clone();
+        let pool = Arc::clone(&self.pool);
 
         future_into_py(py, async move {
             let mut pool_guard = pool.write().await;
             let had_pool = pool_guard.is_some();
             *pool_guard = None;
-            drop(pool_guard);
-            
             Ok(had_pool)
         })
     }
