@@ -135,7 +135,7 @@ archs = ["universal2"]
 before-build = "curl -sSf https://sh.rustup.rs | sh -s -- -y; rustup target add x86_64-apple-darwin"
 
 [tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "10.12"
+MACOSX_DEPLOYMENT_TARGET = "10.15"
 
 [dependency-groups]
 dev = [
