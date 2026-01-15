@@ -160,39 +160,35 @@ wheels = [
 
 [[package]]
 name = "fastmssql"
-version = "0.5.7"
+version = "0.5.8"
 source = { editable = "." }
-dependencies = [
-    { name = "maturin" },
-    { name = "pytest-timeout" },
-    { name = "python-dotenv" },
-]
 
 [package.dev-dependencies]
 dev = [
     { name = "cibuildwheel", version = "2.23.3", source = { registry = "https://pypi.org/simple" }, extra = ["uv"], marker = "python_full_version < '3.11'" },
     { name = "cibuildwheel", version = "3.3.0", source = { registry = "https://pypi.org/simple" }, extra = ["uv"], marker = "python_full_version >= '3.11'" },
+    { name = "maturin" },
     { name = "psutil" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "python-dotenv" },
     { name = "ruff" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "maturin", specifier = "==1.10.2" },
-    { name = "pytest-timeout", specifier = "==2.4.0" },
-    { name = "python-dotenv", specifier = "==1.2.1" },
-]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "cibuildwheel", extras = ["uv"], specifier = ">=2.23.3" },
+    { name = "maturin", specifier = "==1.10.2" },
     { name = "psutil", specifier = "==7.2.0" },
     { name = "pytest", specifier = "==8.4.2" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
+    { name = "pytest-timeout", specifier = "==2.4.0" },
     { name = "pytest-xdist", specifier = "==3.8.0" },
+    { name = "python-dotenv", specifier = "==1.2.1" },
     { name = "ruff", specifier = ">=0.14.10" },
 ]
 
