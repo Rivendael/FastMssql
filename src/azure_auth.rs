@@ -397,9 +397,17 @@ impl PyAzureCredential {
                     PyRuntimeError::new_err("Access token not found in Azure CLI response")
                 })?;
 
-                // Azure CLI response includes expiresOn as ISO 8601 timestamp
-                // For simplicity, we'll use the default 1 hour expiration for CLI tokens
-                let expires_in = 3600u64; // 1 hour default for CLI tokens
+                // Parse the expiresOn timestamp from Azure CLI response
+                let expires_on = json["expiresOn"].as_str().ok_or_else(|| {
+                    PyRuntimeError::new_err("expiresOn not found in Azure CLI response")
+                })?;
+
+                // Parse ISO 8601 timestamp and calculate seconds until expiration
+                let expires_at = chrono::DateTime::parse_from_rfc3339(expires_on)
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to parse expiresOn: {}", e)))?;
+                
+                let now = chrono::Utc::now();
+                let expires_in = (expires_at.timestamp() - now.timestamp()).max(0) as u64;
 
                 Ok((access_token.to_string(), expires_in))
             }
