@@ -444,7 +444,3 @@ class TestTransactionAzureIntegrationPatterns(unittest.TestCase):
         )
 
         self.assertIsInstance(transaction, fastmssql.Transaction)
-
-
-if __name__ == "__main__":
-    unittest.main()

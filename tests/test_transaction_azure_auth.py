@@ -480,7 +480,3 @@ class TestTransactionAzureTokenAcquisition(unittest.TestCase):
 
         # Just creating the transaction should succeed
         self.assertIsInstance(transaction, fastmssql.Transaction)
-
-
-if __name__ == "__main__":
-    unittest.main()

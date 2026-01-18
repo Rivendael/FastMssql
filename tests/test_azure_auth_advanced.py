@@ -290,11 +290,3 @@ def run_azure_auth_tests():
     result = runner.run(suite)
 
     return result.wasSuccessful()
-
-
-if __name__ == "__main__":
-    # Run all tests
-    success = run_azure_auth_tests()
-
-    # Exit with appropriate code
-    exit(0 if success else 1)

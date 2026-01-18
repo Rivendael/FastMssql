@@ -244,8 +244,3 @@ class TestRealWorldScenarios(unittest.TestCase):
         )
 
         self.assertIsInstance(conn, fastmssql.Connection)
-
-
-if __name__ == "__main__":
-    # Configure test discovery and execution
-    unittest.main(verbosity=2)
