@@ -48,22 +48,6 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 - Cross‑platform: Windows, macOS, Linux
 - Batch operations: high-performance bulk inserts and batch query execution
 
-## Key API methods
-
-Core methods for individual operations:
-
-- `query()` — SELECT statements that return rows
-- `execute()` — INSERT/UPDATE/DELETE/DDL that return affected row count
-
-```python
-# Use query() for SELECT statements
-result = await conn.query("SELECT * FROM users WHERE age > @P1", [25])
-rows = result.rows()
-
-# Use execute() for data modification
-affected = await conn.execute("INSERT INTO users (name) VALUES (@P1)", ["John"])
-```
-
 ## Installation
 
 ### From PyPI (recommended)
