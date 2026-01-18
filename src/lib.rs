@@ -5,6 +5,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use pyo3::prelude::*;
 
+mod azure_auth;
 mod batch;
 mod connection;
 mod parameter_conversion;
@@ -16,6 +17,7 @@ mod transaction;
 mod type_mapping;
 mod types;
 
+pub use azure_auth::{AzureCredentialType, PyAzureCredential};
 pub use connection::PyConnection;
 pub use pool_config::PyPoolConfig;
 pub use py_parameters::{Parameter, Parameters};
@@ -56,6 +58,8 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPoolConfig>()?;
     m.add_class::<PySslConfig>()?;
     m.add_class::<EncryptionLevel>()?;
+    m.add_class::<PyAzureCredential>()?;
+    m.add_class::<AzureCredentialType>()?;
 
     m.add_function(wrap_pyfunction!(version, m)?)?;
 

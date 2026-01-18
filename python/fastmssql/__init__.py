@@ -1,7 +1,7 @@
 """FastMSSQL - High-Performance Microsoft SQL Server Driver for Python
 
 High-performance Rust-backed Python driver for SQL Server with async/await support,
-connection pooling, SSL/TLS encryption, and parameterized queries.
+connection pooling, SSL/TLS encryption, Azure Active Directory authentication, and parameterized queries.
 """
 
 # Import from the compiled Rust module
@@ -9,6 +9,8 @@ from .fastmssql import (
     Connection as _RustConnection,
 )
 from .fastmssql import (
+    AzureCredential,
+    AzureCredentialType,
     EncryptionLevel,
     FastRow,
     Parameter,
@@ -162,6 +164,8 @@ class Transaction:
 
 
 __all__ = [
+    "AzureCredential",
+    "AzureCredentialType",
     "Connection",
     "Transaction",
     "PoolConfig",
@@ -171,5 +175,6 @@ __all__ = [
     "Parameter",
     "Parameters",
     "EncryptionLevel",
+    "ApplicationIntent",
     "version",
 ]
