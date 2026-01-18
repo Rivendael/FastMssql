@@ -3,7 +3,16 @@ use pyo3::prelude::*;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tiberius::AuthMethod;
+use tokio::sync::Mutex;
+
+#[derive(Clone, Debug)]
+struct CachedToken {
+    access_token: String,
+    expires_at: Instant,
+}
 
 /// Azure credential configuration for database connections
 #[pyclass(name = "AzureCredential")]
@@ -11,6 +20,8 @@ use tiberius::AuthMethod;
 pub struct PyAzureCredential {
     pub credential_type: AzureCredentialType,
     pub config: HashMap<String, String>,
+    // Thread-safe token cache
+    token_cache: Arc<Mutex<Option<CachedToken>>>,
 }
 
 /// Types of Azure credentials supported
@@ -67,6 +78,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::ServicePrincipal,
             config,
+            token_cache: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -80,6 +92,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::ManagedIdentity,
             config,
+            token_cache: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -91,6 +104,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::AccessToken,
             config,
+            token_cache: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -99,6 +113,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::DefaultAzure,
             config: HashMap::new(),
+            token_cache: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -127,12 +142,24 @@ impl PyAzureCredential {
 
 impl PyAzureCredential {
     pub async fn to_auth_method(&self) -> PyResult<AuthMethod> {
-        match self.credential_type {
-            AzureCredentialType::AccessToken => {
-                let token = self.config.get("access_token")
-                    .ok_or_else(|| PyValueError::new_err("Access token not found in configuration"))?;
-                Ok(AuthMethod::aad_token(token))
+        // For static access tokens, return directly without caching
+        if let AzureCredentialType::AccessToken = self.credential_type {
+            let token = self.config.get("access_token")
+                .ok_or_else(|| PyValueError::new_err("Access token not found in configuration"))?;
+            return Ok(AuthMethod::aad_token(token));
+        }
+
+        {
+            let cache_guard = self.token_cache.lock().await;
+            if let Some(cached) = cache_guard.as_ref() {
+                // Check if token is still valid (with 5 minute buffer before expiry)
+                if cached.expires_at > Instant::now() + Duration::from_secs(300) {
+                    return Ok(AuthMethod::aad_token(&cached.access_token));
+                }
             }
+        }
+
+        let token = match self.credential_type {
             AzureCredentialType::ServicePrincipal => {
                 let client_id = self.config.get("client_id")
                     .ok_or_else(|| PyValueError::new_err("Client ID not found in configuration"))?;
@@ -141,19 +168,55 @@ impl PyAzureCredential {
                 let tenant_id = self.config.get("tenant_id")
                     .ok_or_else(|| PyValueError::new_err("Tenant ID not found in configuration"))?;
 
-                let token = self.acquire_service_principal_token(client_id, client_secret, tenant_id).await?;
-                Ok(AuthMethod::aad_token(token))
+                self.acquire_service_principal_token_cached(client_id, client_secret, tenant_id).await?
             }
             AzureCredentialType::ManagedIdentity => {
                 let client_id = self.config.get("client_id");
-                let token = self.acquire_managed_identity_token(client_id.cloned()).await?;
-                Ok(AuthMethod::aad_token(token))
+                self.acquire_managed_identity_token_cached(client_id.cloned()).await?
             }
             AzureCredentialType::DefaultAzure => {
-                let token = self.acquire_default_azure_token().await?;
-                Ok(AuthMethod::aad_token(token))
+                self.acquire_default_azure_token_cached().await?
             }
-        }
+            AzureCredentialType::AccessToken => unreachable!(), // Handled above
+        };
+
+        Ok(AuthMethod::aad_token(token))
+    }
+
+    // Cached token acquisition methods
+    async fn acquire_service_principal_token_cached(
+        &self,
+        client_id: &str,
+        client_secret: &str,
+        tenant_id: &str,
+    ) -> PyResult<String> {
+        let token = self.acquire_service_principal_token(client_id, client_secret, tenant_id).await?;
+        self.cache_token(token.clone()).await;
+        Ok(token)
+    }
+
+    async fn acquire_managed_identity_token_cached(&self, client_id: Option<String>) -> PyResult<String> {
+        let token = self.acquire_managed_identity_token(client_id).await?;
+        self.cache_token(token.clone()).await;
+        Ok(token)
+    }
+
+    async fn acquire_default_azure_token_cached(&self) -> PyResult<String> {
+        let token = self.acquire_default_azure_token().await?;
+        self.cache_token(token.clone()).await;
+        Ok(token)
+    }
+
+    async fn cache_token(&self, access_token: String) {
+        // Azure tokens typically last 1 hour, we'll cache for 55 minutes to be safe
+        let expires_at = Instant::now() + Duration::from_secs(55 * 60);
+        let cached_token = CachedToken {
+            access_token,
+            expires_at,
+        };
+
+        let mut cache_guard = self.token_cache.lock().await;
+        *cache_guard = Some(cached_token);
     }
 
     async fn acquire_service_principal_token(
