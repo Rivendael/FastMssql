@@ -6,6 +6,7 @@ Tests actual connection behavior, error handling, and edge cases with mocks.
 import os
 import unittest
 from unittest import IsolatedAsyncioTestCase
+from unittest.mock import patch
 
 import fastmssql
 
@@ -184,7 +185,7 @@ class TestAzureAuthenticationIntegrationPatterns(unittest.TestCase):
             )
             self.assertIsInstance(conn, fastmssql.Connection)
 
-    @unittest.mock.patch.dict(
+    @patch.dict(
         os.environ,
         {
             "ENVIRONMENT": "test",
