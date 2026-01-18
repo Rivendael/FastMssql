@@ -32,7 +32,7 @@ pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     if obj.is_none() {
         return Ok(FastParameter::Null);
     }
-    
+
     if let Ok(py_i) = obj.cast::<PyInt>() {
         return py_i
             .extract::<i64>()
@@ -104,24 +104,28 @@ fn python_params_to_fast_parameters(
         if type_mapping::is_expandable_iterable(&param)? {
             let approx_size = get_iterable_size(&param)?;
             if result.len() + approx_size > 2100 {
-                return Err(PyValueError::new_err(
-                    format!("Parameter expansion would exceed SQL Server limit of 2,100 parameters: current {} + expansion {} > 2,100", result.len(), approx_size)
-                ));
+                return Err(PyValueError::new_err(format!(
+                    "Parameter expansion would exceed SQL Server limit of 2,100 parameters: current {} + expansion {} > 2,100",
+                    result.len(),
+                    approx_size
+                )));
             }
 
             expand_iterable_to_fast_params(&param, &mut result)?;
 
             if result.len() > 2100 {
-                return Err(PyValueError::new_err(
-                    format!("Parameter expansion exceeded SQL Server limit of 2,100 parameters: {} parameters after expansion", result.len())
-                ));
+                return Err(PyValueError::new_err(format!(
+                    "Parameter expansion exceeded SQL Server limit of 2,100 parameters: {} parameters after expansion",
+                    result.len()
+                )));
             }
         } else {
             result.push(python_to_fast_parameter(&param)?);
             if result.len() > 2100 {
-                return Err(PyValueError::new_err(
-                    format!("Parameter limit exceeded: {} parameters, but SQL Server supports maximum 2,100 parameters", result.len())
-                ));
+                return Err(PyValueError::new_err(format!(
+                    "Parameter limit exceeded: {} parameters, but SQL Server supports maximum 2,100 parameters",
+                    result.len()
+                )));
             }
         }
     }

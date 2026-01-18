@@ -41,7 +41,7 @@ impl PyFastRow {
         // Pre-allocate vector with exact capacity and cache num_columns to avoid repeated lookups
         let num_columns = column_info.names.len();
         let mut values = Vec::with_capacity(num_columns);
-        
+
         // Eagerly convert all values in column order using cached column types
         for i in 0..num_columns {
             let col_type = column_info

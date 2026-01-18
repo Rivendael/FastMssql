@@ -9,9 +9,9 @@ use tokio::sync::RwLock;
 
 use crate::azure_auth::PyAzureCredential;
 use crate::batch::{bulk_insert, execute_batch, query_batch};
-use crate::parameter_conversion::{convert_parameters_to_fast, FastParameter};
+use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast};
 use crate::pool_config::PyPoolConfig;
-use crate::pool_manager::{ensure_pool_initialized_with_auth, ConnectionPool};
+use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::ssl_config::PySslConfig;
 
 #[pyclass(name = "Connection")]
@@ -61,7 +61,7 @@ impl PyConnection {
                 }
             })?;
 
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
             SmallVec::with_capacity(parameters.len());
         for p in parameters {
             tiberius_params.push(p as &dyn tiberius::ToSql);
@@ -98,7 +98,7 @@ impl PyConnection {
                 }
             })?;
 
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
             SmallVec::with_capacity(parameters.len());
         for p in parameters {
             tiberius_params.push(p as &dyn tiberius::ToSql);
@@ -110,7 +110,7 @@ impl PyConnection {
             .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
 
         let total_affected = result.rows_affected().iter().sum::<u64>();
-        
+
         drop(conn);
         Ok(total_affected)
     }
@@ -147,7 +147,7 @@ impl PyConnection {
             if let Some(ref user) = username {
                 if azure_credential.is_some() {
                     return Err(PyValueError::new_err(
-                        "Cannot use both username/password and azure_credential. Choose one authentication method."
+                        "Cannot use both username/password and azure_credential. Choose one authentication method.",
                     ));
                 }
                 let pwd = password.ok_or_else(|| {
@@ -171,9 +171,12 @@ impl PyConnection {
                 match intent.to_lowercase().trim() {
                     "readonly" | "read_only" => config.readonly(true),
                     "readwrite" | "read_write" | "" => config.readonly(false),
-                    invalid => return Err(PyValueError::new_err(
-                        format!("Invalid application_intent '{}'. Valid values: 'readonly', 'read_only', 'readwrite', 'read_write', or empty string", invalid)
-                    )),
+                    invalid => {
+                        return Err(PyValueError::new_err(format!(
+                            "Invalid application_intent '{}'. Valid values: 'readonly', 'read_only', 'readwrite', 'read_write', or empty string",
+                            invalid
+                        )));
+                    }
                 }
             }
             if let Some(ref ssl_cfg) = ssl_config {
@@ -189,7 +192,7 @@ impl PyConnection {
         // Validate authentication configuration when using individual parameters
         if server.is_some() && username.is_none() && azure_credential.is_none() {
             return Err(PyValueError::new_err(
-                "When using individual connection parameters, either username/password or azure_credential must be provided"
+                "When using individual connection parameters, either username/password or azure_credential must be provided",
             ));
         }
 
@@ -221,7 +224,9 @@ impl PyConnection {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            let pool_ref = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
+            let pool_ref =
+                ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                    .await?;
 
             let execution_result =
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
@@ -252,7 +257,9 @@ impl PyConnection {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            let pool_ref = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
+            let pool_ref =
+                ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                    .await?;
 
             let affected_count =
                 Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
@@ -323,7 +330,8 @@ impl PyConnection {
                 return Ok(());
             }
 
-            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
+            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                .await?;
             Ok(())
         })
     }
@@ -336,9 +344,7 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>,
         _traceback: Option<Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        future_into_py(py, async move {
-            Ok(())
-        })
+        future_into_py(py, async move { Ok(()) })
     }
 
     /// Explicitly establish a connection (initialize the pool if not already connected)
@@ -353,7 +359,8 @@ impl PyConnection {
                 return Ok(true);
             }
 
-            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
+            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                .await?;
             Ok(true)
         })
     }

@@ -1,8 +1,8 @@
 use crate::parameter_conversion::{
-    convert_parameters_to_fast, python_to_fast_parameter, FastParameter,
+    FastParameter, convert_parameters_to_fast, python_to_fast_parameter,
 };
 use crate::pool_config::PyPoolConfig;
-use crate::pool_manager::{ensure_pool_initialized, ConnectionPool};
+use crate::pool_manager::{ConnectionPool, ensure_pool_initialized};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -45,12 +45,11 @@ pub fn parse_batch_items<'p>(
         };
 
         if fast_params.len() > 2100 {
-            return Err(PyValueError::new_err(
-                format!(
-                    "Batch item {} exceeds SQL Server parameter limit: {} parameters provided, maximum is 2,100",
-                    batch_index, fast_params.len()
-                )
-            ));
+            return Err(PyValueError::new_err(format!(
+                "Batch item {} exceeds SQL Server parameter limit: {} parameters provided, maximum is 2,100",
+                batch_index,
+                fast_params.len()
+            )));
         }
 
         batch_items.push((sql, fast_params));
@@ -69,7 +68,7 @@ pub async fn execute_batch_on_connection(
 
     for (sql, parameters) in batch_commands {
         // Pre-allocate with exact capacity to avoid reallocation
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
             SmallVec::with_capacity(parameters.len());
         for p in &parameters {
             tiberius_params.push(p as &dyn tiberius::ToSql);
@@ -97,7 +96,7 @@ pub async fn query_batch_on_connection(
 
     for (query, parameters) in batch_queries {
         // Pre-allocate with exact capacity to avoid reallocation
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = 
+        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
             SmallVec::with_capacity(parameters.len());
         for p in &parameters {
             tiberius_params.push(p as &dyn tiberius::ToSql);
@@ -152,9 +151,9 @@ pub fn execute_batch<'p>(
                 Ok(_) => return Err(e),
                 Err(rollback_err) => {
                     return Err(PyRuntimeError::new_err(format!(
-                            "Batch execution failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
-                            e, rollback_err
-                        )));
+                        "Batch execution failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
+                        e, rollback_err
+                    )));
                 }
             },
         };
@@ -294,7 +293,7 @@ pub fn bulk_insert<'p>(
             }
 
             // Use SmallVec to avoid heap allocation for small parameter sets
-            let mut params: SmallVec<[&dyn tiberius::ToSql; 128]> = 
+            let mut params: SmallVec<[&dyn tiberius::ToSql; 128]> =
                 SmallVec::with_capacity(chunk.len());
             for p in chunk {
                 params.push(p as &dyn tiberius::ToSql);

@@ -130,7 +130,7 @@ impl PySslConfig {
             EncryptionLevel::Required | EncryptionLevel::LoginOnly => {
                 if !trust_server_certificate && ca_certificate_path.is_none() {
                     return Err(PyValueError::new_err(
-                        "Encryption level Required or LoginOnly requires either trust_server_certificate=True or a ca_certificate_path"
+                        "Encryption level Required or LoginOnly requires either trust_server_certificate=True or a ca_certificate_path",
                     ));
                 }
             }

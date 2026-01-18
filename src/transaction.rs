@@ -83,7 +83,7 @@ impl Transaction {
     ) -> PyResult<Self> {
         // Store the original server parameter for validation before it gets reassigned
         let server_param = server.clone();
-        
+
         let (config, server, port) = if let Some(conn_str) = connection_string {
             let config = Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
@@ -101,7 +101,7 @@ impl Transaction {
             if let Some(ref user) = username {
                 if azure_credential.is_some() {
                     return Err(PyValueError::new_err(
-                        "Cannot use both username/password and azure_credential. Choose one authentication method."
+                        "Cannot use both username/password and azure_credential. Choose one authentication method.",
                     ));
                 }
                 let pwd = password.ok_or_else(|| {
@@ -129,7 +129,7 @@ impl Transaction {
                         return Err(PyValueError::new_err(format!(
                             "Invalid application_intent '{}'. Valid values: 'readonly', 'read_only', 'readwrite', 'read_write', or empty string",
                             invalid
-                        )))
+                        )));
                     }
                 }
             }
@@ -146,7 +146,7 @@ impl Transaction {
         // Validate authentication configuration when using individual parameters
         if server_param.is_some() && username.is_none() && azure_credential.is_none() {
             return Err(PyValueError::new_err(
-                "When using individual connection parameters, either username/password or azure_credential must be provided"
+                "When using individual connection parameters, either username/password or azure_credential must be provided",
             ));
         }
 
@@ -179,7 +179,15 @@ impl Transaction {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
+            Self::ensure_connected(
+                &conn,
+                &config,
+                &server,
+                port,
+                &connected,
+                azure_credential.as_ref(),
+            )
+            .await?;
 
             // Execute query on the held connection
             let execution_result = {
@@ -234,7 +242,15 @@ impl Transaction {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
+            Self::ensure_connected(
+                &conn,
+                &config,
+                &server,
+                port,
+                &connected,
+                azure_credential.as_ref(),
+            )
+            .await?;
 
             // Execute command on the held connection
             let affected = {
@@ -282,7 +298,15 @@ impl Transaction {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
+            Self::ensure_connected(
+                &conn,
+                &config,
+                &server,
+                port,
+                &connected,
+                azure_credential.as_ref(),
+            )
+            .await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -317,7 +341,15 @@ impl Transaction {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
+            Self::ensure_connected(
+                &conn,
+                &config,
+                &server,
+                port,
+                &connected,
+                azure_credential.as_ref(),
+            )
+            .await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -351,7 +383,15 @@ impl Transaction {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
+            Self::ensure_connected(
+                &conn,
+                &config,
+                &server,
+                port,
+                &connected,
+                azure_credential.as_ref(),
+            )
+            .await?;
 
             // Execute BEGIN TRANSACTION
             {
@@ -466,20 +506,19 @@ impl Transaction {
                 })?;
 
                 let compat_stream = tcp_stream.compat();
-                
+
                 // Configure authentication
                 let mut auth_config = (**config).clone();
                 if let Some(azure_cred) = azure_credential {
                     let auth_method = azure_cred.to_auth_method().await?;
                     auth_config.authentication(auth_method);
                 }
-                
-                let new_conn: SingleConnectionType =
-                    Client::connect(auth_config, compat_stream)
-                        .await
-                        .map_err(|e| {
-                            PyRuntimeError::new_err(format!("Failed to connect to database: {}", e))
-                        })?;
+
+                let new_conn: SingleConnectionType = Client::connect(auth_config, compat_stream)
+                    .await
+                    .map_err(|e| {
+                        PyRuntimeError::new_err(format!("Failed to connect to database: {}", e))
+                    })?;
                 *conn_guard = Some(new_conn);
             }
         }
