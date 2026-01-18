@@ -26,6 +26,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+setup_files/azure.env
 
 # PyO3 / maturin build artifacts
 *.whl

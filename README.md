@@ -40,6 +40,7 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 - High performance: optimized for very high RPS and low overhead
 - Rust core: memory‑safe and reliable, tuned Tokio runtime
 - No ODBC: native SQL Server client, no external drivers needed
+- Azure authentication: Service Principal, Managed Identity, and access token support (**BETA**)
 - Connection pooling: bb8‑based, smart defaults (default max_size=20, min_idle=2)
 - Async first: clean async/await API with `async with` context managers
 - Strong typing: fast conversions for common SQL Server types
@@ -170,6 +171,120 @@ asyncio.run(main())
 ```
 
 Note: Windows authentication (Trusted Connection) is currently not supported. Use SQL authentication (username/password).
+
+### Azure Authentication (BETA)
+
+🧪 **This is a beta feature.** Azure authentication functionality is experimental and may change in future versions.
+
+FastMSSSQL supports Azure Active Directory (AAD) authentication for Azure SQL Database and Azure SQL Managed Instance. You can authenticate using Service Principals, Managed Identity, or access tokens.
+
+#### Service Principal Authentication
+
+```python
+import asyncio
+from fastmssql import Connection, AzureCredential
+
+async def main():
+    # Create Azure credential using Service Principal
+    azure_cred = AzureCredential.service_principal(
+        client_id="your-client-id",
+        client_secret="your-client-secret", 
+        tenant_id="your-tenant-id"
+    )
+    
+    async with Connection(
+        server="yourserver.database.windows.net",
+        database="yourdatabase",
+        azure_credential=azure_cred
+    ) as conn:
+        result = await conn.query("SELECT GETDATE() as current_time")
+        for row in result.rows():
+            print(f"Connected! Current time: {row['current_time']}")
+
+asyncio.run(main())
+```
+
+#### Managed Identity Authentication
+
+For Azure resources (VMs, Function Apps, App Service, etc.):
+
+```python
+import asyncio
+from fastmssql import Connection, AzureCredential
+
+async def main():
+    # System-assigned managed identity
+    azure_cred = AzureCredential.managed_identity()
+    
+    # Or user-assigned managed identity
+    # azure_cred = AzureCredential.managed_identity(client_id="user-assigned-identity-client-id")
+    
+    async with Connection(
+        server="yourserver.database.windows.net",
+        database="yourdatabase",
+        azure_credential=azure_cred
+    ) as conn:
+        result = await conn.query("SELECT USER_NAME() as user_name")
+        for row in result.rows():
+            print(f"Connected as: {row['user_name']}")
+
+asyncio.run(main())
+```
+
+#### Access Token Authentication
+
+If you already have an access token from another Azure service:
+
+```python
+import asyncio
+from fastmssql import Connection, AzureCredential
+
+async def main():
+    # Use a pre-obtained access token
+    access_token = "your-access-token"
+    azure_cred = AzureCredential.access_token(access_token)
+    
+    async with Connection(
+        server="yourserver.database.windows.net",
+        database="yourdatabase",
+        azure_credential=azure_cred
+    ) as conn:
+        result = await conn.query("SELECT 1 as test")
+        print("Connected with access token!")
+
+asyncio.run(main())
+```
+
+#### Default Azure Credential
+
+Uses the Azure credential chain (environment variables → managed identity → Azure CLI → Azure PowerShell):
+
+```python
+import asyncio
+from fastmssql import Connection, AzureCredential
+
+async def main():
+    # Use default Azure credential chain
+    azure_cred = AzureCredential.default()
+    
+    async with Connection(
+        server="yourserver.database.windows.net",
+        database="yourdatabase",
+        azure_credential=azure_cred
+    ) as conn:
+        result = await conn.query("SELECT 1 as test")
+        print("Connected with default credentials!")
+
+asyncio.run(main())
+```
+
+**Prerequisites for Azure Authentication:**
+- Azure SQL Database or Azure SQL Managed Instance
+- Service Principal with appropriate SQL Database permissions
+- For Managed Identity: Azure resource with managed identity enabled
+- For Default credential: Azure CLI installed and authenticated (`az login`)
+
+See [examples/azure_auth_example.py](examples/azure_auth_example.py) for comprehensive usage examples.
 
 ### Working with data
 

@@ -7,10 +7,11 @@ use std::sync::Arc;
 use tiberius::{AuthMethod, Config, Row};
 use tokio::sync::RwLock;
 
+use crate::azure_auth::PyAzureCredential;
 use crate::batch::{bulk_insert, execute_batch, query_batch};
 use crate::parameter_conversion::{convert_parameters_to_fast, FastParameter};
 use crate::pool_config::PyPoolConfig;
-use crate::pool_manager::{ensure_pool_initialized, ConnectionPool};
+use crate::pool_manager::{ensure_pool_initialized_with_auth, ConnectionPool};
 use crate::ssl_config::PySslConfig;
 
 #[pyclass(name = "Connection")]
@@ -19,6 +20,7 @@ pub struct PyConnection {
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>,
+    azure_credential: Option<PyAzureCredential>,
 }
 
 impl PyConnection {
@@ -117,11 +119,12 @@ impl PyConnection {
 #[pymethods]
 impl PyConnection {
     #[new]
-    #[pyo3(signature = (connection_string = None, pool_config = None, ssl_config = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
+    #[pyo3(signature = (connection_string = None, pool_config = None, ssl_config = None, azure_credential = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
     pub fn new(
         connection_string: Option<String>,
         pool_config: Option<PyPoolConfig>,
         ssl_config: Option<PySslConfig>,
+        azure_credential: Option<PyAzureCredential>,
         server: Option<String>,
         database: Option<String>,
         username: Option<String>,
@@ -135,17 +138,25 @@ impl PyConnection {
             // Use provided connection string
             Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
-        } else if let Some(srv) = server {
+        } else if let Some(ref srv) = server {
             let mut config = Config::new();
-            config.host(&srv);
+            config.host(srv);
             if let Some(db) = database {
                 config.database(&db);
             }
-            if let Some(user) = username {
+            if let Some(ref user) = username {
+                if azure_credential.is_some() {
+                    return Err(PyValueError::new_err(
+                        "Cannot use both username/password and azure_credential. Choose one authentication method."
+                    ));
+                }
                 let pwd = password.ok_or_else(|| {
                     PyValueError::new_err("password is required when username is provided")
                 })?;
-                config.authentication(AuthMethod::sql_server(&user, &pwd));
+                config.authentication(AuthMethod::sql_server(user, &pwd));
+            } else if azure_credential.is_some() {
+                // Azure authentication will be set up dynamically during connection
+                // No authentication is set on config here since we need to acquire tokens asynchronously
             }
             if let Some(p) = port {
                 config.port(p);
@@ -175,6 +186,13 @@ impl PyConnection {
             ));
         };
 
+        // Validate authentication configuration when using individual parameters
+        if server.is_some() && username.is_none() && azure_credential.is_none() {
+            return Err(PyValueError::new_err(
+                "When using individual connection parameters, either username/password or azure_credential must be provided"
+            ));
+        }
+
         let pool_config = pool_config.unwrap_or_else(PyPoolConfig::default);
 
         Ok(PyConnection {
@@ -182,6 +200,7 @@ impl PyConnection {
             config: Arc::new(config),
             pool_config,
             _ssl_config: ssl_config,
+            azure_credential,
         })
     }
 
@@ -199,9 +218,10 @@ impl PyConnection {
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
+            let pool_ref = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
 
             let execution_result =
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
@@ -229,9 +249,10 @@ impl PyConnection {
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
+            let pool_ref = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
 
             let affected_count =
                 Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
@@ -293,6 +314,7 @@ impl PyConnection {
         let pool = Arc::clone(&borrowed.pool);
         let config = Arc::clone(&borrowed.config);
         let pool_config = borrowed.pool_config.clone();
+        let azure_credential = borrowed.azure_credential.clone();
 
         future_into_py(py, async move {
             let is_connected = pool.read().await.is_some();
@@ -301,7 +323,7 @@ impl PyConnection {
                 return Ok(());
             }
 
-            let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
+            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
             Ok(())
         })
     }
@@ -324,13 +346,14 @@ impl PyConnection {
         let pool = Arc::clone(&self.pool);
         let config = Arc::clone(&self.config);
         let pool_config = self.pool_config.clone();
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
             if pool.read().await.is_some() {
                 return Ok(true);
             }
 
-            let _ = ensure_pool_initialized(pool, config, &pool_config).await?;
+            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential).await?;
             Ok(true)
         })
     }

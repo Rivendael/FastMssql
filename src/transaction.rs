@@ -10,6 +10,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
+use crate::azure_auth::PyAzureCredential;
 use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_on_connection};
 use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
@@ -59,16 +60,18 @@ pub struct Transaction {
     server: String, // Server host/address for TCP connection
     port: u16,      // Port for TCP connection
     _ssl_config: Option<PySslConfig>,
+    azure_credential: Option<PyAzureCredential>,
     connected: Arc<SyncMutex<bool>>,
 }
 
 #[pymethods]
 impl Transaction {
     #[new]
-    #[pyo3(signature = (connection_string = None, ssl_config = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
+    #[pyo3(signature = (connection_string = None, ssl_config = None, azure_credential = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
     pub fn new(
         connection_string: Option<String>,
         ssl_config: Option<PySslConfig>,
+        azure_credential: Option<PyAzureCredential>,
         server: Option<String>,
         database: Option<String>,
         username: Option<String>,
@@ -78,6 +81,9 @@ impl Transaction {
         instance_name: Option<String>,
         application_name: Option<String>,
     ) -> PyResult<Self> {
+        // Store the original server parameter for validation before it gets reassigned
+        let server_param = server.clone();
+        
         let (config, server, port) = if let Some(conn_str) = connection_string {
             let config = Config::from_ado_string(&conn_str)
                 .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
@@ -92,11 +98,19 @@ impl Transaction {
             if let Some(db) = database {
                 config.database(&db);
             }
-            if let Some(user) = username {
+            if let Some(ref user) = username {
+                if azure_credential.is_some() {
+                    return Err(PyValueError::new_err(
+                        "Cannot use both username/password and azure_credential. Choose one authentication method."
+                    ));
+                }
                 let pwd = password.ok_or_else(|| {
                     PyValueError::new_err("password is required when username is provided")
                 })?;
-                config.authentication(AuthMethod::sql_server(&user, &pwd));
+                config.authentication(AuthMethod::sql_server(user, &pwd));
+            } else if azure_credential.is_some() {
+                // Azure authentication will be set up dynamically during connection
+                // No authentication is set on config here since we need to acquire tokens asynchronously
             }
             if let Some(p) = port {
                 config.port(p);
@@ -129,12 +143,20 @@ impl Transaction {
             ));
         };
 
+        // Validate authentication configuration when using individual parameters
+        if server_param.is_some() && username.is_none() && azure_credential.is_none() {
+            return Err(PyValueError::new_err(
+                "When using individual connection parameters, either username/password or azure_credential must be provided"
+            ));
+        }
+
         Ok(Transaction {
             conn: Arc::new(AsyncMutex::new(None)),
             config: Arc::new(config),
             server,
             port,
             _ssl_config: ssl_config,
+            azure_credential,
             connected: Arc::new(SyncMutex::new(false)),
         })
     }
@@ -154,9 +176,10 @@ impl Transaction {
         let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
 
             // Execute query on the held connection
             let execution_result = {
@@ -208,9 +231,10 @@ impl Transaction {
         let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
 
             // Execute command on the held connection
             let affected = {
@@ -255,9 +279,10 @@ impl Transaction {
         let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -289,9 +314,10 @@ impl Transaction {
         let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -322,9 +348,10 @@ impl Transaction {
         let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
+        let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, &server, port, &connected).await?;
+            Self::ensure_connected(&conn, &config, &server, port, &connected, azure_credential.as_ref()).await?;
 
             // Execute BEGIN TRANSACTION
             {
@@ -428,6 +455,7 @@ impl Transaction {
         server: &str,
         port: u16,
         connected: &Arc<SyncMutex<bool>>,
+        azure_credential: Option<&PyAzureCredential>,
     ) -> PyResult<()> {
         // Establish connection if not already connected
         {
@@ -438,8 +466,16 @@ impl Transaction {
                 })?;
 
                 let compat_stream = tcp_stream.compat();
+                
+                // Configure authentication
+                let mut auth_config = (**config).clone();
+                if let Some(azure_cred) = azure_credential {
+                    let auth_method = azure_cred.to_auth_method().await?;
+                    auth_config.authentication(auth_method);
+                }
+                
                 let new_conn: SingleConnectionType =
-                    Client::connect((**config).clone(), compat_stream)
+                    Client::connect(auth_config, compat_stream)
                         .await
                         .map_err(|e| {
                             PyRuntimeError::new_err(format!("Failed to connect to database: {}", e))

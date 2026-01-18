@@ -411,6 +411,99 @@ class Parameters:
         """Get string representation of parameters."""
         ...
 
+class AzureCredentialType(StrEnum):
+    """Azure credential type constants for authentication."""
+    SERVICE_PRINCIPAL: str = "ServicePrincipal"
+    MANAGED_IDENTITY: str = "ManagedIdentity"
+    ACCESS_TOKEN: str = "AccessToken"
+    DEFAULT_AZURE: str = "DefaultAzure"
+
+class AzureCredential:
+    """
+    Azure Active Directory credential for SQL Server authentication.
+
+    Supports various Azure authentication methods:
+    - Service Principal: Client credentials (client_id, client_secret, tenant_id)
+    - Managed Identity: For Azure resources (VMs, Functions, App Service, etc.)
+    - Access Token: Pre-obtained access token
+    - Default Azure: Azure SDK default credential chain
+    """
+
+    credential_type: AzureCredentialType
+    config: Dict[str, str]
+
+    @staticmethod
+    def service_principal(
+        client_id: str,
+        client_secret: str,
+        tenant_id: str
+    ) -> AzureCredential:
+        """
+        Create Azure credential for Service Principal authentication.
+
+        Args:
+            client_id: Azure AD application (client) ID
+            client_secret: Azure AD application client secret
+            tenant_id: Azure AD tenant ID
+
+        Returns:
+            AzureCredential configured for Service Principal authentication
+        """
+        ...
+
+    @staticmethod
+    def managed_identity(client_id: Optional[str] = None) -> AzureCredential:
+        """
+        Create Azure credential for Managed Identity authentication.
+
+        Args:
+            client_id: Optional client ID for user-assigned managed identity.
+                      If None, uses system-assigned managed identity.
+
+        Returns:
+            AzureCredential configured for Managed Identity authentication
+
+        Note:
+            This only works when running on Azure resources (VMs, Functions, App Service, etc.)
+            with managed identity enabled.
+        """
+        ...
+
+    @staticmethod
+    def access_token(token: str) -> AzureCredential:
+        """
+        Create Azure credential with pre-obtained access token.
+
+        Args:
+            token: Valid Azure AD access token for SQL Database resource
+
+        Returns:
+            AzureCredential configured with the provided access token
+
+        Note:
+            The token must be valid for the SQL Database resource scope:
+            https://database.windows.net/
+        """
+        ...
+
+    @staticmethod
+    def default() -> AzureCredential:
+        """
+        Create Azure credential using default credential chain.
+
+        Returns:
+            AzureCredential using Azure SDK's default credential chain
+
+        Note:
+            Default chain attempts credentials in this order:
+            1. Environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, etc.)
+            2. Managed Identity
+            3. Azure CLI
+            4. Azure PowerShell
+            5. Visual Studio/VS Code
+        """
+        ...
+
 class Connection:
     """
     High-performance SQL Server connection with async/await support.
@@ -419,20 +512,16 @@ class Connection:
     - Connection string: Connection("Server=localhost;Database=test")
     - Individual parameters: Connection(server="localhost", database="test")
     - SQL auth: Connection(server="host", username="user", password="pass")
+    - Azure auth: Connection(server="host", azure_credential=azure_cred)
 
     Features:
     - Thread-safe connection pooling with configurable parameters
     - Async/await support for non-blocking I/O
     - SSL/TLS encryption support
+    - Azure Active Directory authentication
     - Parameterized queries with automatic type conversion
     - Batch operations for high-performance bulk inserts and multiple queries
     - Connection pool statistics and monitoring
-
-    Example:
-        async with Connection("Server=localhost;Database=mydb") as conn:
-            result = await conn.query("SELECT * FROM users WHERE id = @P1", [123])
-            for row in result.rows():
-                print(row['name'])
     """
     def __init__(
         self,
@@ -443,6 +532,7 @@ class Connection:
         password: Optional[str] = None,
         pool_config: Optional[PoolConfig] = None,
         ssl_config: Optional[SslConfig] = None,
+        azure_credential: Optional[AzureCredential] = None,
         application_intent: Optional[ApplicationIntent | str] = None,
         port: Optional[int] = None,
         instance_name: Optional[str] = None,
@@ -459,10 +549,16 @@ class Connection:
             password: Password for SQL authentication
             pool_config: Connection pool configuration
             ssl_config: SSL/TLS configuration
+            azure_credential: Azure Active Directory credential for authentication
             application_intent: Sets ApplicationIntent to "ReadOnly" or "ReadWrite" (default: ReadWrite)
             port: TCP port number (default: 1433)
             instance_name: Named instance of SQL Server
             application_name: Application name for SQL Server connection
+
+        Note:
+            - Either connection_string OR individual parameters must be provided
+            - When using individual parameters, either username/password OR azure_credential must be provided
+            - azure_credential and username/password are mutually exclusive
         """
         ...
 
@@ -602,6 +698,7 @@ class Transaction:
         self,
         connection_string: Optional[str] = None,
         ssl_config: Optional[SslConfig] = None,
+        azure_credential: Optional[AzureCredential] = None,
         server: Optional[str] = None,
         database: Optional[str] = None,
         username: Optional[str] = None,

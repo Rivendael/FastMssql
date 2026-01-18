@@ -1,3 +1,4 @@
+use crate::azure_auth::PyAzureCredential;
 use crate::pool_config::PyPoolConfig;
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
@@ -73,6 +74,39 @@ pub async fn ensure_pool_initialized(
 
     // Initialize new pool and store it directly to avoid cloning
     let new_pool = establish_pool(&config, pool_config).await?;
+    *write_guard = Some(new_pool.clone());
+    drop(write_guard);
+    
+    Ok(new_pool)
+}
+
+pub async fn ensure_pool_initialized_with_auth(
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
+    config: Arc<Config>,
+    pool_config: &PyPoolConfig,
+    azure_credential: Option<PyAzureCredential>,
+) -> PyResult<ConnectionPool> {
+    {
+        let read_guard = pool.read().await;
+        if let Some(existing_pool) = read_guard.as_ref() {
+            return Ok(existing_pool.clone());
+        }
+    }
+
+    let mut write_guard = pool.write().await;
+    
+    if let Some(existing_pool) = write_guard.as_ref() {
+        return Ok(existing_pool.clone());
+    }
+
+    let mut auth_config = (*config).clone();
+    
+    if let Some(azure_cred) = azure_credential {
+        let auth_method = azure_cred.to_auth_method().await?;
+        auth_config.authentication(auth_method);
+    }
+
+    let new_pool = establish_pool(&auth_config, pool_config).await?;
     *write_guard = Some(new_pool.clone());
     drop(write_guard);
     

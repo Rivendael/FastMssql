@@ -920,11 +920,11 @@ class TestPasswordValidation:
         )
         assert conn is not None
 
-    def test_connection_without_username_allows_no_password(self):
-        """Creating a connection without username should not require password."""
-        # Object creation should succeed with no username and no password
-        conn = Connection(server="localhost", database="testdb")
-        assert conn is not None
+    def test_connection_without_username_requires_authentication(self):
+        """Creating a connection without username should require some form of authentication."""
+        # Object creation should fail with no username and no authentication
+        with pytest.raises(ValueError, match="either username/password or azure_credential must be provided"):
+            Connection(server="localhost", database="testdb")
 
     def test_connection_with_connection_string_ignores_password_check(self):
         """Connection string mode should not enforce password validation."""
