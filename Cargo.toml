@@ -34,7 +34,7 @@ tiberius = { version = "0.12.3", features = ["chrono", "rustls"], default-featur
 tokio-util = { version = "0.7.18", features = ["compat"] }
 bb8 = "0.9.1"
 bb8-tiberius = "0.16"
-chrono = { version = "0.4.42" }
+chrono = { version = "0.4.43" }
 uuid = { version = "1.19.0" }
 num_cpus = "1.17.0"
 ahash = "0.8.12"              # Faster hashing algorithm (used in optimized_types.rs)
