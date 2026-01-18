@@ -261,32 +261,3 @@ class TestAzureCredentialValidation(unittest.TestCase):
         # Empty token (should work, error would come during usage)
         cred2 = fastmssql.AzureCredential.access_token("")
         self.assertIsInstance(cred2, fastmssql.AzureCredential)
-
-
-def run_azure_auth_tests():
-    """
-    Convenience function to run all Azure authentication tests.
-    Can be called from other test modules or scripts.
-    """
-    # Create test suite
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite()
-
-    # Add all test classes
-    test_classes = [
-        TestAzureAuthenticationAsync,
-        TestAzureAuthenticationErrorScenarios,
-        TestAzureCredentialEdgeCases,
-        TestAzureAuthenticationIntegrationPatterns,
-        TestAzureCredentialValidation,
-    ]
-
-    for test_class in test_classes:
-        tests = loader.loadTestsFromTestCase(test_class)
-        suite.addTests(tests)
-
-    # Run tests
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
-
-    return result.wasSuccessful()
