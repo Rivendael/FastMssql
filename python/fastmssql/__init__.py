@@ -24,14 +24,7 @@ from .fastmssql import (
     Transaction as _RustTransaction,
 )
 
-try:
-    from enum import StrEnum
-except ImportError:
-    # Python 3.10 compatibility: StrEnum was added in Python 3.11
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        pass
+from enum import StrEnum
 
 
 class ApplicationIntent(StrEnum):
