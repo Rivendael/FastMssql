@@ -355,7 +355,7 @@ bash setup.sh
 The project uses GitHub Actions for continuous integration. The workflow in
 `.github/workflows/unittests.yml`:
 
-- Tests against Python 3.10, 3.11, 3.12, 3.13, and 3.14
+- Tests against Python 3.11, 3.12, 3.13, and 3.14
 - Spins up a SQL Server 2022 Express container using the same image as above
 - Installs dependencies and builds with maturin
 - Runs the full test suite

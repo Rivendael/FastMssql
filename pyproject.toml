@@ -4,11 +4,11 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.6.0"
+version = "0.6.1"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [
     { name = "Rivendael", email = "riverb514@gmail.com" },
@@ -24,7 +24,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -139,13 +138,13 @@ MACOSX_DEPLOYMENT_TARGET = "10.15"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.14.10",
-    "pytest==8.4.2",
+    "ruff>=0.14.13",
+    "pytest==9.0.2",
     "pytest-asyncio==1.3.0",
     "pytest-timeout==2.4.0",
-    "psutil==7.2.0",            # For memory and process monitoring in stress tests
+    "psutil==7.2.1",            # For memory and process monitoring in stress tests
     "pytest-xdist==3.8.0",
-    "maturin==1.10.2",
+    "maturin==1.11.5",
     "python-dotenv==1.2.1",
-    "cibuildwheel[uv]>=2.23.3",
+    "cibuildwheel[uv]>=3.3.1",
 ]

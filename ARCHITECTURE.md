@@ -53,7 +53,7 @@ Rust in the hot path while providing a clean Python API.
 - **PyO3 0.27.2** — Python bindings for Rust
   - Handles Python ↔ Rust data marshalling
   - Manages Python reference counting and GIL interactions
-  - ABI3 stable across Python 3.10-3.14
+  - ABI3 stable across Python 3.11-3.14
 
 ### Async Runtime
 

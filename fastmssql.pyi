@@ -10,14 +10,7 @@ High-performance Rust-backed Python driver for SQL Server with:
 """
 
 from typing import Any, Coroutine, Dict, List, Optional, Tuple
-
-try:
-    from enum import StrEnum
-except ImportError:
-    # Python 3.10 compatibility: StrEnum was added in Python 3.11
-    from enum import Enum
-    class StrEnum(str, Enum):
-        pass
+from enum import StrEnum
 
 class PoolConfig:
     """
