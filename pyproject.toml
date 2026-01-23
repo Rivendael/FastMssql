@@ -147,4 +147,6 @@ dev = [
     "maturin==1.11.5",
     "python-dotenv==1.2.1",
     "cibuildwheel[uv]>=3.3.1",
+    "wheel==0.46.3",
+    "filelock==3.20.3"
 ]
