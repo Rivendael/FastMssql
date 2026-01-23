@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastmssql"
-version = "0.6.1"
+version = "0.6.2"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
 readme = "README.md"
@@ -69,7 +69,7 @@ Repository = "https://github.com/Rivendael/FastMssql"
 Documentation = "https://github.com/Rivendael/FastMssql#readme"
 
 [tool.maturin]
-features = ["pyo3/abi3-py310"]
+features = ["pyo3/abi3-py311"]
 module-name = "fastmssql"
 python-source = "python"
 include = ["fastmssql.pyi"]
@@ -110,7 +110,7 @@ required-version = ">=0.9.7"
 
 [tool.cibuildwheel]
 build-frontend = "build[uv]"
-build = "cp310-* cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
+build = "cp311-* cp312-* cp313-* cp313t-* cp314-* cp314t-*"
 manylinux-aarch64-image = "manylinux_2_34"
 enable = ["cpython-freethreading"]
 skip = [
