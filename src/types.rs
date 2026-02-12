@@ -18,7 +18,7 @@ pub struct ColumnInfo {
 }
 
 /// Memory-optimized to share column metadata across all rows in a result set.
-#[pyclass(name = "FastRow")]
+#[pyclass(name = "FastRow", from_py_object)]
 pub struct PyFastRow {
     // Row values stored in column order for cache-friendly access
     values: Vec<Py<PyAny>>,
@@ -463,19 +463,15 @@ impl PyQueryStream {
             });
         }
 
-        // Create shared column info from the first row
         let first_row = &tiberius_rows[0];
         let column_info = build_column_info(first_row);
 
         let row_count = tiberius_rows.len();
-        // Initialize cache - all None (not yet converted)
+
         let converted_cache: Vec<Option<PyFastRow>> = vec![None; row_count];
 
-        // Wrap rows in Some() since Row doesn't impl Clone
         let wrapped_rows: Vec<Option<Row>> = tiberius_rows.into_iter().map(Some).collect();
 
-        // Store raw rows - NO Python conversion!
-        // This is the key: from_tiberius_rows() returns instantly
         Ok(PyQueryStream {
             tiberius_rows: wrapped_rows,
             converted_cache,

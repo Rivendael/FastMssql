@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use std::path::PathBuf;
 
 /// SSL/TLS configuration options for database connections
-#[pyclass(name = "SslConfig")]
+#[pyclass(name = "SslConfig", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PySslConfig {
     /// Encryption level for the connection
@@ -19,7 +19,7 @@ pub struct PySslConfig {
 }
 
 /// Encryption levels for TLS connections
-#[pyclass(name = "EncryptionLevel")]
+#[pyclass(name = "EncryptionLevel", from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum EncryptionLevel {
     /// All traffic is encrypted (recommended)

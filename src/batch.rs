@@ -127,8 +127,6 @@ pub fn execute_batch<'p>(
 ) -> PyResult<Bound<'p, PyAny>> {
     let batch_commands = parse_batch_items(commands, py)?;
 
-    // PERFORMANCE CRITICAL: Move Arc values directly without intermediate clones
-    // Arc::clone() is cheap, but the move statement doesn't clone - it transfers ownership
     let pool = Arc::clone(&pool);
     let config = Arc::clone(&config);
     let pool_config = pool_config.clone();
