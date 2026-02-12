@@ -15,7 +15,7 @@ struct CachedToken {
 }
 
 /// Azure credential configuration for database connections
-#[pyclass(name = "AzureCredential")]
+#[pyclass(name = "AzureCredential", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyAzureCredential {
     pub credential_type: AzureCredentialType,
@@ -25,7 +25,7 @@ pub struct PyAzureCredential {
 }
 
 /// Types of Azure credentials supported
-#[pyclass(name = "AzureCredentialType")]
+#[pyclass(name = "AzureCredentialType", from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum AzureCredentialType {
     ServicePrincipal,

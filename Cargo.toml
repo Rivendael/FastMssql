@@ -1,6 +1,6 @@
 [package]
 name = "fastmssql_core"
-version = "0.6.2"
+version = "0.6.3"
 edition = "2024"
 
 [lib]
@@ -27,26 +27,27 @@ debug = true               # Keep debug info for development
 opt-level = 2
 
 [dependencies]
-pyo3 = { version = "0.27.2", features = ["extension-module", "abi3-py311"] }
-pyo3-async-runtimes = { version = "0.27.0", features = ["tokio", "tokio-runtime"] }
+pyo3 = { version = "0.28.0", features = ["extension-module", "abi3-py311"] }
+pyo3-async-runtimes = { version = "0.28.0", features = ["tokio", "tokio-runtime"] }
 tokio = { version = "1.49.0", features = ["full"] }
 tiberius = { version = "0.12.3", features = ["chrono", "rustls"], default-features = false }
 tokio-util = { version = "0.7.18", features = ["compat"] }
 bb8 = "0.9.1"
 bb8-tiberius = "0.16"
 chrono = { version = "0.4.43" }
-uuid = { version = "1.19.0" }
-num_cpus = "1.17.0"
+uuid = { version = "1.20.0" }
 ahash = "0.8.12"              # Faster hashing algorithm (used in optimized_types.rs)
 smallvec = "1.15.1"          # Stack-allocated vectors for small collections
 parking_lot = "0.12.5"       # Faster mutex/RwLock implementation than std::sync
 mimalloc = { version = "0.1.48", default-features = false } # Microsoft's fast memory allocator
-slab = "0.4.11"              # Pinned sub-dependency due to CVE-2025-55159
+slab = "0.4.12"              # Pinned sub-dependency due to CVE-2025-55159
+bytes = "1.11.1"             # Pinned sub-dependency due to CVE-2026-25541
 
 # Azure authentication dependencies
-reqwest = { version = "0.13.1", features = ["json", "rustls"], default-features = false }
+reqwest = { version = "0.13.2", features = ["json", "rustls"], default-features = false }
 serde_json = "1.0.149"
 serde_urlencoded = "0.7.1"
 
+
 [dev-dependencies]
-tempfile = "3.24.0"
+tempfile = "3.25.0"

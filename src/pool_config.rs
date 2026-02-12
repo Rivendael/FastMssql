@@ -2,7 +2,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 /// Configuration for the bb8 connection pool
-#[pyclass(name = "PoolConfig")]
+#[pyclass(name = "PoolConfig", from_py_object)]
 #[derive(Clone)]
 pub struct PyPoolConfig {
     pub max_size: u32,
