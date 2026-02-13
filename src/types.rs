@@ -446,6 +446,18 @@ impl PyQueryStream {
     pub fn fetchall(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.all(py)
     }
+
+    /// Convert query results to an Apache Arrow Table
+    pub fn to_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let column_info = self
+            .column_info
+            .as_ref()
+            .ok_or_else(|| PyValueError::new_err("No column information available"))?;
+
+        let arrays = crate::arrow_conversion::build_arrow_columns(&self.tiberius_rows, column_info, py)?;
+
+        crate::arrow_conversion::arrow_arrays_to_pyarrow_table(&column_info.names, arrays, py)
+    }
 }
 
 impl PyQueryStream {

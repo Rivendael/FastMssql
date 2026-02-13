@@ -9,8 +9,11 @@ High-performance Rust-backed Python driver for SQL Server with:
 - Memory-efficient result handling
 """
 
-from typing import Any, Coroutine, Dict, List, Optional, Tuple
+from typing import Any, Coroutine, Dict, List, Optional, Tuple, TYPE_CHECKING
 from enum import StrEnum
+
+if TYPE_CHECKING:
+    import pyarrow
 
 class PoolConfig:
     """
@@ -293,6 +296,26 @@ class QueryStream:
             which can cause GIL contention and poor performance with large result sets.
             For better performance, use iteration instead: ``for row in result: ...``
             This provides lazy, row-by-row conversion that distributes GIL acquisition.
+        """
+        ...
+
+    def to_arrow(self) -> pyarrow.Table:
+        """
+        Convert query results to Apache Arrow Table.
+
+        Converts all rows to an Apache Arrow Table with column-oriented storage,
+        enabling efficient bulk data processing and integration with data analysis tools.
+
+        Returns:
+            pyarrow.Table: Column-oriented result representation with schema metadata
+
+        Raises:
+            ImportError: If PyArrow is not installed
+            RuntimeError: If conversion fails (empty results from Tiberius may lack schema info)
+
+        Note:
+            All rows are converted eagerly into Arrow arrays and loaded into memory.
+            For very large result sets, consider processing in batches.
         """
         ...
 

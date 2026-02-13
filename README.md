@@ -47,6 +47,7 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 - Thread‑safe: safe to use in concurrent apps
 - Cross‑platform: Windows, macOS, Linux
 - Batch operations: high-performance bulk inserts and batch query execution
+- Apache Arrow support
 
 ## Installation
 
@@ -54,6 +55,14 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 ```bash
 pip install fastmssql
+```
+
+### Optional dependencies
+
+**Apache Arrow support** (for `to_arrow()` method):
+
+```bash
+pip install fastmssql[arrow]
 ```
 
 ### Prerequisites
@@ -361,6 +370,42 @@ async def main_fetching():
 
 asyncio.run(main_fetching())
 ```
+
+### Apache Arrow
+
+Convert query results to Apache Arrow tables for efficient bulk data processing and interoperability with data science tools:
+
+```python
+import asyncio
+from fastmssql import Connection
+
+async def main():
+    conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
+    async with Connection(conn_str) as conn:
+        # Execute query and convert to Arrow
+        result = await conn.query("SELECT id, name, salary FROM employees")
+        arrow_table = result.to_arrow()
+        
+        # Arrow Table enables:
+        # - Efficient columnar storage and compute
+        # - Integration with Pandas, DuckDB, Polars
+        # - Parquet/ORC serialization
+        df = arrow_table.to_pandas()  # Convert to pandas DataFrame
+        print(df)
+        
+        # Write to Parquet for long-term storage
+        import pyarrow.parquet as pq
+        pq.write_table(arrow_table, "employees.parquet")
+        
+        # Or use with DuckDB for analytical queries
+        import duckdb
+        result = duckdb.from_arrow(arrow_table).filter("salary > 50000").execute()
+        print(result.fetchall())
+```
+
+**Requirements**: Install PyArrow with `pip install pyarrow`
+
+Note: Results are converted eagerly into Arrow arrays. For very large datasets, consider chunking queries or using iteration-based processing instead.
 
 ### Connection pooling
 
