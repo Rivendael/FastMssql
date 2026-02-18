@@ -118,7 +118,7 @@ fn get_arrow_type_with_cache(
 }
 
 /// Converts SQL query results into Arrow arrays, one per column.
-/// 
+///
 /// This function handles the critical conversion of tiberius Row data to PyArrow arrays.
 /// Key optimizations:
 /// - ArrowTypeCache reused across all columns (single pyarrow import)
@@ -148,18 +148,20 @@ pub fn build_arrow_columns(
     // Handle empty result sets: create properly-typed empty arrays
     if num_rows == 0 {
         for (col_idx, col_type) in column_info.column_types.iter().enumerate() {
-            let arrow_type = get_arrow_type_with_cache(*col_type, &cache, py)
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(
-                        format!("Failed to determine Arrow type for column {}: {}", col_idx, e)
-                    )
-                })?;
+            let arrow_type = get_arrow_type_with_cache(*col_type, &cache, py).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "Failed to determine Arrow type for column {}: {}",
+                    col_idx, e
+                ))
+            })?;
             let empty_list = pyo3::types::PyList::empty(py);
-            let array = array_class.call((empty_list, arrow_type), None)
+            let array = array_class
+                .call((empty_list, arrow_type), None)
                 .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(
-                        format!("Failed to create empty Array for column {}: {}", col_idx, e)
-                    )
+                    pyo3::exceptions::PyRuntimeError::new_err(format!(
+                        "Failed to create empty Array for column {}: {}",
+                        col_idx, e
+                    ))
                 })?;
             columns.push(array.unbind());
         }
@@ -174,31 +176,30 @@ pub fn build_arrow_columns(
         // Convert values for this column across all rows
         for (row_idx, row_opt) in rows.iter().enumerate() {
             let value = if let Some(row) = row_opt {
-                type_mapping::sql_to_python(row, col_idx, col_type, py)
-                    .map_err(|e| {
-                        pyo3::exceptions::PyRuntimeError::new_err(
-                            format!("Column '{}' (idx {}), Row {}: {}", 
-                                &column_info.names[col_idx], col_idx, row_idx, e)
-                        )
-                    })?
+                type_mapping::sql_to_python(row, col_idx, col_type, py).map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!(
+                        "Column '{}' (idx {}), Row {}: {}",
+                        &column_info.names[col_idx], col_idx, row_idx, e
+                    ))
+                })?
             } else {
                 py.None()
             };
             column_values.push(value);
         }
 
-        let py_list = pyo3::types::PyList::new(py, &column_values)
-            .map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(
-                    format!("Failed to create Python list for column {}: {}", col_idx, e)
-                )
-            })?;
-        let arrow_type = get_arrow_type_with_cache(col_type, &cache, py)
-            .map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(
-                    format!("Failed to determine Arrow type for column {}: {}", col_idx, e)
-                )
-            })?;
+        let py_list = pyo3::types::PyList::new(py, &column_values).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "Failed to create Python list for column {}: {}",
+                col_idx, e
+            ))
+        })?;
+        let arrow_type = get_arrow_type_with_cache(col_type, &cache, py).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "Failed to determine Arrow type for column {}: {}",
+                col_idx, e
+            ))
+        })?;
 
         // Use explicit type for complex types that require schema specification.
         // PyArrow can infer types for simple types (int, float, string, bool) but needs
@@ -222,9 +223,10 @@ pub fn build_arrow_columns(
             }
         }
         .map_err(|e| {
-            pyo3::exceptions::PyRuntimeError::new_err(
-                format!("Failed to create Arrow array for column {}: {}", col_idx, e)
-            )
+            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "Failed to create Arrow array for column {}: {}",
+                col_idx, e
+            ))
         })?;
 
         columns.push(array.unbind());
@@ -234,7 +236,7 @@ pub fn build_arrow_columns(
 }
 
 /// Constructs a PyArrow Table from pre-built columns and names.
-/// 
+///
 /// PyArrow Table construction maps column names to Arrow arrays. This function
 /// handles the final assembly step after column conversion.
 ///
@@ -254,19 +256,16 @@ pub fn arrow_arrays_to_pyarrow_table(
 
     let dict = PyDict::new(py);
     for (name, array) in column_names.iter().zip(arrays.iter()) {
-        dict.set_item(name, array)
-            .map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(
-                    format!("Failed to add column '{}' to PyArrow table: {}", name, e)
-                )
-            })?;
+        dict.set_item(name, array).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "Failed to add column '{}' to PyArrow table: {}",
+                name, e
+            ))
+        })?;
     }
 
-    let table = table_class.call1((dict,))
-        .map_err(|e| {
-            pyo3::exceptions::PyRuntimeError::new_err(
-                format!("Failed to create PyArrow Table: {}", e)
-            )
-        })?;
+    let table = table_class.call1((dict,)).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to create PyArrow Table: {}", e))
+    })?;
     Ok(table.unbind())
 }
