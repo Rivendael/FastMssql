@@ -12,10 +12,6 @@ pub struct PySslConfig {
     pub trust_server_certificate: bool,
     /// Path to custom CA certificate file (.pem, .crt, or .der)
     pub ca_certificate_path: Option<PathBuf>,
-    /// Enable Server Name Indication (SNI)
-    pub enable_sni: bool,
-    /// Custom server name for certificate validation
-    pub server_name: Option<String>,
 }
 
 /// Encryption levels for TLS connections
@@ -27,7 +23,7 @@ pub enum EncryptionLevel {
     /// Only login procedure is encrypted
     LoginOnly,
     /// No encryption (not recommended)
-    Off,
+    Disabled,
 }
 
 #[pymethods]
@@ -39,13 +35,13 @@ impl EncryptionLevel {
     const LOGIN_ONLY: EncryptionLevel = EncryptionLevel::LoginOnly;
 
     #[classattr]
-    const OFF: EncryptionLevel = EncryptionLevel::Off;
+    const DISABLED: EncryptionLevel = EncryptionLevel::Disabled;
 
     pub fn __str__(&self) -> String {
         match self {
             EncryptionLevel::Required => "Required".into(),
             EncryptionLevel::LoginOnly => "LoginOnly".into(),
-            EncryptionLevel::Off => "Off".into(),
+            EncryptionLevel::Disabled => "Disabled".into(),
         }
     }
 
@@ -56,12 +52,12 @@ impl EncryptionLevel {
 
 /// Helper function to convert string to EncryptionLevel
 fn parse_encryption_level(level: &str) -> PyResult<EncryptionLevel> {
-    match level {
-        "Required" => Ok(EncryptionLevel::Required),
-        "LoginOnly" => Ok(EncryptionLevel::LoginOnly),
-        "Off" => Ok(EncryptionLevel::Off),
+    match level.to_lowercase().as_str() {
+        "required" => Ok(EncryptionLevel::Required),
+        "loginonly" | "login_only" => Ok(EncryptionLevel::LoginOnly),
+        "off" | "disabled" => Ok(EncryptionLevel::Disabled),
         _ => Err(PyValueError::new_err(format!(
-            "Invalid encryption_level '{}'. Valid values are: 'Required', 'LoginOnly', 'Off'",
+            "Invalid encryption_level '{}'. Valid values are: 'Required', 'LoginOnly', or 'Disabled'",
             level
         ))),
     }
@@ -119,49 +115,20 @@ impl PySslConfig {
         Ok(())
     }
 
-    /// Validate encryption level configuration
-    fn validate_encryption_config(
-        encryption_level: EncryptionLevel,
-        trust_server_certificate: bool,
-        ca_certificate_path: &Option<String>,
-    ) -> PyResult<()> {
-        // For Required and LoginOnly encryption, ensure we have trust settings
-        match encryption_level {
-            EncryptionLevel::Required | EncryptionLevel::LoginOnly => {
-                if !trust_server_certificate && ca_certificate_path.is_none() {
-                    return Err(PyValueError::new_err(
-                        "Encryption level Required or LoginOnly requires either trust_server_certificate=True or a ca_certificate_path",
-                    ));
-                }
-            }
-            EncryptionLevel::Off => {
-                // No encryption, no restrictions on trust settings
-            }
-        }
-        Ok(())
-    }
+
 
     /// Internal constructor for Rust code
     pub fn new_internal(
         encryption_level: EncryptionLevel,
         trust_server_certificate: bool,
         ca_certificate_path: Option<String>,
-        enable_sni: bool,
-        server_name: Option<String>,
     ) -> PyResult<Self> {
         Self::validate_certificate_config(trust_server_certificate, &ca_certificate_path)?;
-        Self::validate_encryption_config(
-            encryption_level.clone(),
-            trust_server_certificate,
-            &ca_certificate_path,
-        )?;
 
         Ok(PySslConfig {
             encryption_level,
             trust_server_certificate,
             ca_certificate_path: ca_certificate_path.map(PathBuf::from),
-            enable_sni,
-            server_name,
         })
     }
 }
@@ -172,16 +139,12 @@ impl PySslConfig {
     #[pyo3(signature = (
         encryption_level = None,
         trust_server_certificate = false,
-        ca_certificate_path = None,
-        enable_sni = true,
-        server_name = None
+        ca_certificate_path = None
     ))]
     pub fn new(
         encryption_level: Option<&Bound<PyAny>>,
         trust_server_certificate: bool,
         ca_certificate_path: Option<String>,
-        enable_sni: bool,
-        server_name: Option<String>,
     ) -> PyResult<Self> {
         // Handle encryption_level which can be either string or EncryptionLevel enum
         let encryption_level = if let Some(level) = encryption_level {
@@ -201,18 +164,11 @@ impl PySslConfig {
         };
 
         Self::validate_certificate_config(trust_server_certificate, &ca_certificate_path)?;
-        Self::validate_encryption_config(
-            encryption_level.clone(),
-            trust_server_certificate,
-            &ca_certificate_path,
-        )?;
 
         Ok(PySslConfig {
             encryption_level,
             trust_server_certificate,
             ca_certificate_path: ca_certificate_path.map(PathBuf::from),
-            enable_sni,
-            server_name,
         })
     }
 
@@ -223,8 +179,6 @@ impl PySslConfig {
             encryption_level: EncryptionLevel::Required,
             trust_server_certificate: true,
             ca_certificate_path: None,
-            enable_sni: false,
-            server_name: None,
         }
     }
 
@@ -235,8 +189,6 @@ impl PySslConfig {
             EncryptionLevel::Required,
             false,
             Some(ca_cert_path),
-            true,
-            None,
         )
     }
 
@@ -248,8 +200,6 @@ impl PySslConfig {
             encryption_level: EncryptionLevel::LoginOnly,
             trust_server_certificate: true,
             ca_certificate_path: None,
-            enable_sni: true,
-            server_name: None,
         }
     }
 
@@ -257,11 +207,9 @@ impl PySslConfig {
     #[staticmethod]
     pub fn disabled() -> Self {
         PySslConfig {
-            encryption_level: EncryptionLevel::Off,
+            encryption_level: EncryptionLevel::Disabled,
             trust_server_certificate: false,
             ca_certificate_path: None,
-            enable_sni: true,
-            server_name: None,
         }
     }
 
@@ -283,25 +231,13 @@ impl PySslConfig {
             .map(|p| p.to_string_lossy().to_string())
     }
 
-    #[getter]
-    pub fn enable_sni(&self) -> bool {
-        self.enable_sni
-    }
-
-    #[getter]
-    pub fn server_name(&self) -> Option<String> {
-        self.server_name.clone()
-    }
-
     /// String representation
     pub fn __str__(&self) -> String {
         format!(
-            "SslConfig(encryption={:?}, trust_cert={}, ca_cert={:?}, sni={}, server_name={:?})",
+            "SslConfig(encryption={:?}, trust_cert={}, ca_cert={:?})",
             self.encryption_level,
             self.trust_server_certificate,
             self.ca_certificate_path,
-            self.enable_sni,
-            self.server_name
         )
     }
 
@@ -317,7 +253,7 @@ impl PySslConfig {
         match self.encryption_level {
             EncryptionLevel::Required => tiberius::EncryptionLevel::Required,
             EncryptionLevel::LoginOnly => tiberius::EncryptionLevel::On,
-            EncryptionLevel::Off => tiberius::EncryptionLevel::Off,
+            EncryptionLevel::Disabled => tiberius::EncryptionLevel::Off,
         }
     }
 
@@ -332,11 +268,5 @@ impl PySslConfig {
         } else if let Some(ca_path) = &self.ca_certificate_path {
             config.trust_cert_ca(ca_path.to_string_lossy().to_string());
         }
-
-        // Note: SNI (Server Name Indication) support in Tiberius is handled automatically
-        // when using rustls. The TLS handshake will use the hostname from the connection
-        // string. The 'server_name' field can be used for custom certificate validation
-        // if needed in future versions, but currently Tiberius handles this internally.
-        // The enable_sni field is preserved for API completeness and future extensibility.
     }
 }

@@ -118,23 +118,17 @@ class SslConfig:
         encryption_level: Level of encryption (Disabled, LoginOnly, or Required)
         trust_server_certificate: Whether to trust the server certificate without validation
         ca_certificate_path: Path to CA certificate file for certificate validation
-        enable_sni: Enable Server Name Indication (SNI) for TLS handshake (default: True)
-        server_name: Custom server name for certificate validation (optional)
     """
 
-    encryption_level: str
+    encryption_level: str | EncryptionLevel
     trust_server_certificate: bool
     ca_certificate_path: Optional[str]
-    enable_sni: bool
-    server_name: Optional[str]
 
     def __init__(
         self,
-        encryption_level: str = "Required",
+        encryption_level: str | EncryptionLevel = "Required",
         trust_server_certificate: bool = False,
         ca_certificate_path: Optional[str] = None,
-        enable_sni: bool = True,
-        server_name: Optional[str] = None,
     ) -> None: ...
     @staticmethod
     def development() -> SslConfig:

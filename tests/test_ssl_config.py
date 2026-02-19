@@ -12,33 +12,39 @@ from fastmssql import EncryptionLevel, SslConfig
 
 def test_ssl_config_creation():
     """Test basic SSL config creation."""
-    # When encryption is Off, trust settings can be None
-    ssl_config = SslConfig(encryption_level=EncryptionLevel.Off)
-    assert str(ssl_config.encryption_level) == "Off"
+    # When encryption is Disabled, trust settings can be None
+    ssl_config = SslConfig(encryption_level=EncryptionLevel.Disabled)
+    assert str(ssl_config.encryption_level) == "Disabled"
     assert not ssl_config.trust_server_certificate
     assert ssl_config.ca_certificate_path is None
 
 
-def test_ssl_config_required_encryption_needs_trust():
-    """Test that Required encryption requires trust settings."""
-    # Should fail: Required encryption but no trust settings
-    with pytest.raises(ValueError, match="requires either trust_server_certificate"):
-        SslConfig(
-            encryption_level=EncryptionLevel.Required,
-            trust_server_certificate=False,
-            ca_certificate_path=None,
-        )
+def test_ssl_config_required_encryption_with_system_default():
+    """Test that Required encryption can use system's default certificate store."""
+    # Should succeed: Required encryption with no explicit trust settings
+    # Uses system default certificate store
+    ssl_config = SslConfig(
+        encryption_level=EncryptionLevel.Required,
+        trust_server_certificate=False,
+        ca_certificate_path=None,
+    )
+    assert str(ssl_config.encryption_level) == "Required"
+    assert not ssl_config.trust_server_certificate
+    assert ssl_config.ca_certificate_path is None
 
 
-def test_ssl_config_login_only_encryption_needs_trust():
-    """Test that LoginOnly encryption requires trust settings."""
-    # Should fail: LoginOnly encryption but no trust settings
-    with pytest.raises(ValueError, match="requires either trust_server_certificate"):
-        SslConfig(
-            encryption_level=EncryptionLevel.LoginOnly,
-            trust_server_certificate=False,
-            ca_certificate_path=None,
-        )
+def test_ssl_config_login_only_encryption_with_system_default():
+    """Test that LoginOnly encryption can use system's default certificate store."""
+    # Should succeed: LoginOnly encryption with no explicit trust settings
+    # Uses system default certificate store
+    ssl_config = SslConfig(
+        encryption_level=EncryptionLevel.LoginOnly,
+        trust_server_certificate=False,
+        ca_certificate_path=None,
+    )
+    assert str(ssl_config.encryption_level) == "LoginOnly"
+    assert not ssl_config.trust_server_certificate
+    assert ssl_config.ca_certificate_path is None
 
 
 def test_ssl_config_development():
@@ -46,7 +52,6 @@ def test_ssl_config_development():
     ssl_config = SslConfig.development()
     assert str(ssl_config.encryption_level) == "Required"
     assert ssl_config.trust_server_certificate
-    assert not ssl_config.enable_sni
 
 
 def test_ssl_config_login_only():
@@ -58,7 +63,7 @@ def test_ssl_config_login_only():
 def test_ssl_config_disabled():
     """Test disabled SSL configuration."""
     ssl_config = SslConfig.disabled()
-    assert str(ssl_config.encryption_level) == "Off"
+    assert str(ssl_config.encryption_level) == "Disabled"
 
 
 def test_ssl_config_custom():
@@ -67,15 +72,75 @@ def test_ssl_config_custom():
         encryption_level=EncryptionLevel.Required,
         trust_server_certificate=True,
         ca_certificate_path=None,
-        enable_sni=True,
-        server_name="custom.server.com",
     )
 
     assert str(ssl_config.encryption_level) == "Required"
     assert ssl_config.trust_server_certificate
     assert ssl_config.ca_certificate_path is None
-    assert ssl_config.enable_sni
-    assert ssl_config.server_name == "custom.server.com"
+
+
+def test_ssl_config_encryption_level_case_insensitive():
+    """Test that encryption level string parsing is case-insensitive."""
+    # Test various case combinations
+    test_cases = [
+        ("required", "Required"),
+        ("REQUIRED", "Required"),
+        ("Required", "Required"),
+        ("rEqUiReD", "Required"),
+        ("loginonly", "LoginOnly"),
+        ("LoginOnly", "LoginOnly"),
+        ("LOGIN_ONLY", "LoginOnly"),
+        ("login_only", "LoginOnly"),
+        ("disabled", "Disabled"),
+        ("DISABLED", "Disabled"),
+        ("off", "Disabled"),
+        ("OFF", "Disabled"),
+    ]
+
+    for input_val, expected in test_cases:
+        ssl_config = SslConfig(encryption_level=input_val)
+        assert str(ssl_config.encryption_level) == expected, f"Failed for input: {input_val}"
+
+
+def test_ssl_config_encryption_level_string_vs_enum():
+    """Test that encryption_level accepts both string and EncryptionLevel enum."""
+    # Test with string
+    ssl_config_str = SslConfig(encryption_level="Required")
+    assert str(ssl_config_str.encryption_level) == "Required"
+
+    # Test with enum
+    ssl_config_enum = SslConfig(encryption_level=EncryptionLevel.Required)
+    assert str(ssl_config_enum.encryption_level) == "Required"
+
+    # Both should be equivalent
+    assert str(ssl_config_str.encryption_level) == str(ssl_config_enum.encryption_level)
+
+
+def test_ssl_config_all_encryption_levels_as_string():
+    """Test all encryption levels can be set as strings."""
+    test_cases = [
+        ("required", "Required"),
+        ("loginonly", "LoginOnly"),
+        ("disabled", "Disabled"),
+        ("off", "Disabled"),
+    ]
+
+    for input_val, expected in test_cases:
+        ssl_config = SslConfig(encryption_level=input_val, trust_server_certificate=True)
+        assert str(ssl_config.encryption_level) == expected
+
+
+def test_ssl_config_all_encryption_levels_as_enum():
+    """Test all encryption levels can be set as EncryptionLevel enum."""
+    test_cases = [
+        (EncryptionLevel.Required, "Required"),
+        (EncryptionLevel.LoginOnly, "LoginOnly"),
+        (EncryptionLevel.Disabled, "Disabled"),
+    ]
+
+    for input_val, expected in test_cases:
+        ssl_config = SslConfig(encryption_level=input_val)
+        assert str(ssl_config.encryption_level) == expected
 
 
 def test_ssl_config_invalid_encryption_level():
@@ -109,54 +174,7 @@ def test_ssl_config_nonexistent_ca_certificate():
 
 def test_ssl_config_repr():
     """Test SSL config string representation."""
-    ssl_config = SslConfig(encryption_level=EncryptionLevel.Off)
+    ssl_config = SslConfig(encryption_level=EncryptionLevel.Disabled)
     repr_str = repr(ssl_config)
     assert "SslConfig" in repr_str
-    assert "Off" in repr_str
-
-
-if __name__ == "__main__":
-    # Run tests manually if not using pytest
-    print("Running SSL configuration tests...")
-
-    try:
-        test_ssl_config_creation()
-        print("✅ test_ssl_config_creation passed")
-
-        test_ssl_config_required_encryption_needs_trust()
-        print("✅ test_ssl_config_required_encryption_needs_trust passed")
-
-        test_ssl_config_login_only_encryption_needs_trust()
-        print("✅ test_ssl_config_login_only_encryption_needs_trust passed")
-
-        test_ssl_config_development()
-        print("✅ test_ssl_config_development passed")
-
-        test_ssl_config_login_only()
-        print("✅ test_ssl_config_login_only passed")
-
-        test_ssl_config_disabled()
-        print("✅ test_ssl_config_disabled passed")
-
-        test_ssl_config_custom()
-        print("✅ test_ssl_config_custom passed")
-
-        test_ssl_config_invalid_encryption_level()
-        print("✅ test_ssl_config_invalid_encryption_level passed")
-
-        test_ssl_config_ca_certificate()
-        print("✅ test_ssl_config_ca_certificate passed")
-
-        test_ssl_config_nonexistent_ca_certificate()
-        print("✅ test_ssl_config_nonexistent_ca_certificate passed")
-
-        test_ssl_config_repr()
-        print("✅ test_ssl_config_repr passed")
-
-        print("\n🎉 All tests passed!")
-
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
-        import traceback
-
-        traceback.print_exc()
+    assert "Disabled" in repr_str
