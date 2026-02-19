@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Realistic SQL load test simulating normal database workloads.
 Tests mixed read/write operations with parameterized queries and transactions.
@@ -14,6 +13,17 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from fastmssql import Connection, PoolConfig
+
+
+def setup_uvloop():
+    """Setup uvloop as the event loop policy if available."""
+    try:
+        import uvloop
+
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        return True
+    except ImportError:
+        return False
 
 
 @dataclass
@@ -562,4 +572,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    uvloop_available = setup_uvloop()
+    if uvloop_available:
+        print("\n🚀 Using uvloop for high-performance event loop")
     asyncio.run(main())
