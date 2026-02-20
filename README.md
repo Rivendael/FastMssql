@@ -447,7 +447,7 @@ async with Connection(conn_str, pool_config=PoolConfig.adaptive(20)) as conn:
     rows = (await conn.query("SELECT 1 AS ok")).rows()
 
 # Or use presets
-async with Connection(conn_str, pool_config=high) as conn:
+async with Connection(conn_str, pool_config=PoolConfig.high_throughput()) as conn:
     rows = (await conn.query("SELECT 1 AS ok")).rows()
 ```
 
