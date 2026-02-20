@@ -315,7 +315,7 @@ impl PyConnection {
         })
     }
 
-    /// Enter context manager (async version)
+    /// Enter context manager
     pub fn __aenter__<'p>(slf: &'p Bound<Self>, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let borrowed = slf.borrow();
         let pool = Arc::clone(&borrowed.pool);
@@ -336,7 +336,7 @@ impl PyConnection {
         })
     }
 
-    /// Exit context manager (async version)
+    /// Exit context manager
     pub fn __aexit__<'p>(
         &self,
         py: Python<'p>,
