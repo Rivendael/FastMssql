@@ -50,7 +50,7 @@ class TestSslConnectionIntegration:
 
     def test_connection_with_disabled_encryption(self):
         """Test connection creation with disabled encryption."""
-        ssl_config = SslConfig(encryption_level=EncryptionLevel.Off)
+        ssl_config = SslConfig(encryption_level=EncryptionLevel.Disabled)
 
         connection = Connection(
             server="localhost",
@@ -108,12 +108,11 @@ class TestSslConnectionIntegration:
         finally:
             os.unlink(temp_cert_path)
 
-    def test_connection_with_custom_server_name(self):
-        """Test connection creation with custom server name in SSL config."""
+    def test_connection_with_custom_encryption(self):
+        """Test connection creation with custom encryption settings."""
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            server_name="custom.database.server.com",
         )
 
         connection = Connection(
@@ -160,8 +159,6 @@ class TestSslConnectionStrings:
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            enable_sni=False,  # Disable SNI for older servers
-            server_name="localhost",
         )
 
         connection = Connection(connection_string=conn_string, ssl_config=ssl_config)
@@ -172,13 +169,13 @@ class TestSslConnectionStrings:
 class TestSslConfigCombinations:
     """Test various combinations of SSL configuration options."""
 
-    def test_all_encryption_levels_with_sni_disabled(self):
-        """Test all encryption levels with SNI disabled."""
-        encryption_levels = ["Required", "LoginOnly", "Off"]
+    def test_all_encryption_levels_with_trust(self):
+        """Test all encryption levels with certificate trust."""
+        encryption_levels = ["Required", "LoginOnly", "Disabled"]
 
         for level in encryption_levels:
             ssl_config = SslConfig(
-                encryption_level=level, trust_server_certificate=True, enable_sni=False
+                encryption_level=level, trust_server_certificate=True
             )
 
             connection = Connection(
@@ -191,7 +188,6 @@ class TestSslConfigCombinations:
 
             assert connection is not None
             assert ssl_config.encryption_level == level
-            assert ssl_config.enable_sni is False
 
     def test_ssl_config_with_sql_server_auth(self):
         """Test SSL configuration with SQL Server authentication."""
@@ -230,15 +226,13 @@ class TestSslConfigCombinations:
         ssl_configs = [
             SslConfig(
                 encryption_level=EncryptionLevel.Required,
-                enable_sni=True,
                 trust_server_certificate=True,
             ),
             SslConfig(
                 encryption_level=EncryptionLevel.LoginOnly,
-                enable_sni=False,
                 trust_server_certificate=True,
             ),
-            SslConfig(encryption_level=EncryptionLevel.Off),
+            SslConfig(encryption_level=EncryptionLevel.Disabled),
             SslConfig.development(),
             SslConfig.login_only(),
             SslConfig.disabled(),
@@ -287,8 +281,6 @@ class TestSslConfigErrorHandling:
                     encryption_level=EncryptionLevel.Required,
                     trust_server_certificate=True,
                     ca_certificate_path=temp_cert_path,
-                    enable_sni=True,
-                    server_name=None,
                 )
         finally:
             os.unlink(temp_cert_path)
@@ -324,8 +316,6 @@ class TestSslConfigPerformance:
             config = SslConfig(
                 encryption_level=EncryptionLevel.Required,
                 trust_server_certificate=True,
-                enable_sni=True,
-                server_name=f"server{i}.com",
             )
             configs.append(config)
 
@@ -343,8 +333,6 @@ class TestSslConfigPerformance:
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            enable_sni=True,
-            server_name="test.server.com",
         )
 
         start_time = time.time()
@@ -353,8 +341,6 @@ class TestSslConfigPerformance:
         for _ in range(10000):
             _ = ssl_config.encryption_level
             _ = ssl_config.trust_server_certificate
-            _ = ssl_config.enable_sni
-            _ = ssl_config.server_name
             _ = ssl_config.ca_certificate_path
 
         end_time = time.time()
@@ -395,27 +381,24 @@ class TestSslConfigPerformance:
         config1 = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            server_name="server1.com",
         )
 
         config2 = SslConfig(
             encryption_level=EncryptionLevel.LoginOnly,
             trust_server_certificate=True,
-            server_name="server2.com",
         )
 
         config3 = SslConfig.disabled()
 
         # Verify they are independent
         assert config1.encryption_level != config2.encryption_level
-        assert config1.server_name != config2.server_name
         assert (
             config1.encryption_level != config3.encryption_level
         )  # Check encryption level instead
 
         # Modifying one shouldn't affect others (no shared state)
-        assert config1.server_name == "server1.com"
-        assert config2.server_name == "server2.com"
+        assert config1.encryption_level == "Required"
+        assert config2.encryption_level == "LoginOnly"
 
 
 class TestSslConfigRealWorldScenarios:
@@ -426,8 +409,6 @@ class TestSslConfigRealWorldScenarios:
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            enable_sni=True,
-            server_name=None,  # Let the system determine
         )
 
         connection = Connection(
@@ -440,7 +421,6 @@ class TestSslConfigRealWorldScenarios:
 
         assert connection is not None
         assert str(ssl_config.encryption_level) == "Required"
-        assert ssl_config.enable_sni is True
 
     def test_on_premises_sql_server_with_self_signed_cert(self):
         """Test SSL configuration for on-premises SQL Server with self-signed certificate."""
@@ -485,7 +465,7 @@ class TestSslConfigRealWorldScenarios:
         )
 
         assert connection is not None
-        assert str(ssl_config.encryption_level) == "Off"
+        assert str(ssl_config.encryption_level) == "Disabled"
 
     def test_corporate_environment_with_custom_ca(self):
         """Test SSL configuration for corporate environment with custom CA certificate."""
@@ -506,7 +486,6 @@ class TestSslConfigRealWorldScenarios:
             ssl_config = SslConfig(
                 encryption_level=EncryptionLevel.Required,
                 ca_certificate_path=temp_cert_path,
-                enable_sni=True,
             )
 
             connection = Connection(

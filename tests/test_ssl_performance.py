@@ -28,8 +28,6 @@ class TestSslConfigPerformance:
             SslConfig(
                 encryption_level=EncryptionLevel.Required,
                 trust_server_certificate=True,
-                enable_sni=True,
-                server_name=f"server{i}.com",
             )
 
         end_time = time.perf_counter()
@@ -77,8 +75,6 @@ class TestSslConfigPerformance:
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            enable_sni=True,
-            server_name="test.server.com",
         )
 
         num_iterations = 10000
@@ -89,23 +85,21 @@ class TestSslConfigPerformance:
             # Access all properties
             _ = ssl_config.encryption_level
             _ = ssl_config.trust_server_certificate
-            _ = ssl_config.enable_sni
-            _ = ssl_config.server_name
             _ = ssl_config.ca_certificate_path
 
         end_time = time.perf_counter()
         total_time = end_time - start_time
-        avg_time = total_time / (num_iterations * 5)  # 5 properties per iteration
+        avg_time = total_time / (num_iterations * 3)  # 3 properties per iteration
 
         print("\nSSL Config Property Access Performance:")
         print(
-            f"Total time for {num_iterations * 5} property accesses: {total_time:.4f}s"
+            f"Total time for {num_iterations * 3} property accesses: {total_time:.4f}s"
         )
         print(f"Average time per property access: {avg_time:.8f}s")
-        print(f"Property accesses per second: {(num_iterations * 5) / total_time:.0f}")
+        print(f"Property accesses per second: {(num_iterations * 3) / total_time:.0f}")
 
         # Property access should be very fast
-        assert (num_iterations * 5) / total_time > 100000
+        assert (num_iterations * 3) / total_time > 100000
 
     def test_ssl_config_with_certificate_file_performance(self):
         """Benchmark SSL config creation with certificate files."""
@@ -190,7 +184,6 @@ class TestSslConfigConcurrentPerformance:
                 ssl_config = SslConfig(
                     encryption_level=EncryptionLevel.Required,
                     trust_server_certificate=True,
-                    server_name=f"server{thread_id}_{i}.com",
                 )
                 configs.append(ssl_config)
             return configs
@@ -223,23 +216,19 @@ class TestSslConfigConcurrentPerformance:
         ssl_config = SslConfig(
             encryption_level=EncryptionLevel.Required,
             trust_server_certificate=True,
-            enable_sni=True,
-            server_name="test.server.com",
         )
 
         num_threads = 5
         accesses_per_thread = 1000
-        total_accesses = num_threads * accesses_per_thread * 5  # 5 properties
+        total_accesses = num_threads * accesses_per_thread * 3  # 3 properties
+        start_time = time.perf_counter()
 
         def access_properties(thread_id):
             for _ in range(accesses_per_thread):
                 _ = ssl_config.encryption_level
                 _ = ssl_config.trust_server_certificate
-                _ = ssl_config.enable_sni
-                _ = ssl_config.server_name
                 _ = ssl_config.ca_certificate_path
 
-        start_time = time.perf_counter()
 
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             futures = [
@@ -281,7 +270,6 @@ class TestSslConfigConcurrentPerformance:
                     ssl_config = SslConfig(
                         encryption_level=EncryptionLevel.Required,
                         trust_server_certificate=True,
-                        server_name=f"server{thread_id}_{i}.com",
                     )
 
                 # Access properties
@@ -335,7 +323,6 @@ class TestSslConfigConcurrentPerformance:
                 SslConfig(
                     encryption_level=EncryptionLevel.Required,
                     trust_server_certificate=True,
-                    server_name=f"server{i}.com",
                 )
             )
             ssl_configs.append(SslConfig.development())
@@ -389,7 +376,6 @@ class TestSslConfigConcurrentPerformance:
                     ssl_config = SslConfig(
                         encryption_level=EncryptionLevel.Required,
                         trust_server_certificate=True,
-                        server_name=f"t{thread_id}_s{i}.com",
                     )
                     configs.append(ssl_config)
                 return configs

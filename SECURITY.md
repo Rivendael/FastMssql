@@ -59,7 +59,7 @@ async with Connection("Server=...", ssl_config=ssl_config) as conn:
   - Suitable for internal networks only
   - **Not recommended for production**
 
-- **`EncryptionLevel.Off`** (default, development only)
+- **`EncryptionLevel.Disabled`** (development only)
   - No encryption
   - **Never use in production**
   - Development and testing only
@@ -126,26 +126,12 @@ ssl_config = SslConfig(
 )
 ```
 
-### 3. Server Name Indication (SNI)
+### 3. Server Certificate Validation
 
-For servers hosting multiple TLS certificates on the same IP, enable SNI:
+When using `EncryptionLevel.Required`, you must validate the server's
+certificate. Choose one of two approaches:
 
-```python
-ssl_config = SslConfig(
-    encryption_level=EncryptionLevel.Required,
-    ca_certificate_path="/path/to/ca-cert.pem",
-    enable_sni=True,  # ✅ Send server name in TLS handshake
-    server_name="myserver.example.com"  # Certificate should match this
-)
-```
-
-**When to enable:**
-
-- Cloud databases (Azure SQL, AWS RDS, etc.)
-- Reverse proxies or load balancers
-- Any environment where IP != hostname in the certificate
-
-### 4. Credentials Management
+#### Option A: Trust the Server Certificate (Use Cautiously)
 
 **Never hardcode credentials in your source code.**
 
@@ -200,7 +186,7 @@ For SQL Server:
 - Use strong, randomly generated passwords
 - Rotate passwords regularly
 
-### 5. Connection Pooling Security
+### 4. Credentials Management
 
 FastMSSQL uses connection pooling (bb8-based) with smart defaults:
 
@@ -223,7 +209,7 @@ async with Connection(conn_str, pool_config=pool_config) as conn:
 - Connection objects are not reused across security contexts
 - Each connection uses the credentials provided at creation time
 
-### 6. SQL Injection Prevention
+### 5. Connection Pooling Security
 
 Always use **parameterized queries**. Never concatenate user input into SQL
 strings.
@@ -248,7 +234,7 @@ result = await conn.query(
 FastMSSQL handles parameter escaping and type conversion automatically. All user
 input should go through parameters, never into the SQL string.
 
-### 7. Input Validation
+### 6. SQL Injection Prevention
 
 Even with parameterized queries, validate user input:
 
@@ -278,7 +264,7 @@ except ValueError as e:
     return {"error": str(e)}
 ```
 
-### 8. Error Handling
+### 7. Input Validation
 
 Avoid exposing sensitive information in error messages:
 
@@ -313,7 +299,7 @@ except FastMssqlError as e:
 - Never expose connection strings, table names, or query details
 - Never expose stack traces in production
 
-### 9. Network Security
+### 8. Error Handling
 
 #### Use TLS/SSL for All Connections
 
@@ -351,7 +337,7 @@ Content-Type: application/json
 }
 ```
 
-### 10. Dependency Management
+### 9. Network Security
 
 FastMSSQL is built on secure, well-maintained Rust libraries:
 
@@ -466,7 +452,6 @@ Use this checklist before deploying to production:
 - [ ] Enable encryption: `EncryptionLevel.Required`
 - [ ] Validate certificates: Use `ca_certificate_path` (not
     `trust_server_certificate=True`)
-- [ ] Enable SNI: `enable_sni=True` for cloud databases
 - [ ] Rotate credentials: Use strong, unique passwords
 - [ ] Secure storage: Credentials in environment variables or vault
 - [ ] Network access: Database in private subnet, firewall rules configured
