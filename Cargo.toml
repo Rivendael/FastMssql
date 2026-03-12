@@ -1,6 +1,6 @@
 [package]
 name = "fastmssql_core"
-version = "0.6.6"
+version = "0.6.7"
 edition = "2024"
 
 [lib]
@@ -29,19 +29,20 @@ opt-level = 2
 [dependencies]
 pyo3 = { version = "0.28.0", features = ["extension-module", "abi3-py311"] }
 pyo3-async-runtimes = { version = "0.28.0", features = ["tokio", "tokio-runtime"] }
-tokio = { version = "1.49.0", features = ["full"] }
+tokio = { version = "1.50.0", features = ["full"] }
 tiberius = { version = "0.12.3", features = ["chrono", "rustls"], default-features = false }
 tokio-util = { version = "0.7.18", features = ["compat"] }
 bb8 = "0.9.1"
 bb8-tiberius = "0.16"
-chrono = { version = "0.4.43" }
-uuid = { version = "1.21.0" }
+chrono = { version = "0.4.44" }
+uuid = { version = "1.22.0" }
 ahash = "0.8.12"              # Faster hashing algorithm (used in optimized_types.rs)
 smallvec = "1.15.1"          # Stack-allocated vectors for small collections
 parking_lot = "0.12.5"       # Faster mutex/RwLock implementation than std::sync
 mimalloc = { version = "0.1.48", default-features = false } # Microsoft's fast memory allocator
 slab = "0.4.12"              # Pinned sub-dependency due to CVE-2025-55159
 bytes = "1.11.1"             # Pinned sub-dependency due to CVE-2026-25541
+quinn-proto = "0.11.14"      # Pinned sub-dependency due to CVE-2026-31812
 
 # Azure authentication dependencies
 reqwest = { version = "0.13.2", features = ["json", "rustls"], default-features = false }
@@ -50,4 +51,4 @@ serde_urlencoded = "0.7.1"
 
 
 [dev-dependencies]
-tempfile = "3.25.0"
+tempfile = "3.27.0"
