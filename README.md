@@ -16,25 +16,6 @@ Great for data ingestion, bulk inserts, and large-scale query workloads.
 
 [![Rust Backend](https://img.shields.io/badge/backend-rust-orange)](https://github.com/Rivendael/pymssql-rs)
 
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-
-- [Features](#features)
-- [Key API methods](#key-api-methods)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Explicit Connection Management](#explicit-connection-management)
-- [Usage](#usage)
-- [Performance tips](#performance-tips)
-- [Examples & benchmarks](#examples--benchmarks)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-- [Third‑party attributions](#third%E2%80%91party-attributions)
-- [Acknowledgments](#acknowledgments)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 ## Features
 
 - High performance: optimized for very high RPS and low overhead
