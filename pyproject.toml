@@ -148,7 +148,7 @@ dev = [
     "psutil==7.2.2",            # For memory and process monitoring in stress tests
     "pytest-xdist==3.8.0",
     "maturin==1.12.2",
-    "python-dotenv==1.2.1",
+    "python-dotenv==1.2.2",
     "cibuildwheel[uv]>=3.3.1",
     "wheel==0.46.3",
     "filelock==3.24.3",
