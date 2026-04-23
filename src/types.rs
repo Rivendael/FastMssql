@@ -85,6 +85,16 @@ pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
     }
 }
 
+/// Creates a `SqlConnectionError` with the `.message` attribute set to the provided message.
+pub fn create_connection_error(message: impl Into<String>) -> PyErr {
+    let message = message.into();
+    Python::attach(|py| {
+        let exc = SqlConnectionError::new_err(message.clone());
+        let _ = exc.value(py).setattr("message", message.as_str());
+        exc
+    })
+}
+
 /// Memory-optimized to share column metadata across all rows in a result set.
 /// Holds shared column information for a result set to reduce memory usage.
 /// This is shared across all `PyFastRow` instances in a result set.

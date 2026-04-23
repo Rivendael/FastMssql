@@ -136,11 +136,11 @@ class SqlConnectionError(Exception):
     Raised when a network I/O or routing error occurs connecting to SQL Server.
 
     Attributes:
-        message: Human-readable error description.
-        host: For routing errors, the target host SQL Server redirected to.
-        port: For routing errors, the target port SQL Server redirected to.
+        message: Human-readable error description, if provided by the underlying error.
+        host: Redirect target host for routing errors, if available.
+        port: Redirect target port for routing errors, if available.
     """
-    message: str
+    message: Optional[str]
     host: Optional[str]
     port: Optional[int]
     ...

@@ -13,7 +13,7 @@ use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::ssl_config::PySslConfig;
-use crate::types::{create_sql_error, SqlConnectionError};
+use crate::types::{create_connection_error, create_sql_error};
 
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
@@ -55,9 +55,9 @@ impl PyConnection {
         let mut conn = pool.get().await
             .map_err(|e| {
                 if e.to_string().contains("timeout") {
-                    SqlConnectionError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
+                    create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
                 } else {
-                    SqlConnectionError::new_err(format!("Failed to get connection from pool: {}", e))
+                    create_connection_error(format!("Failed to get connection from pool: {}", e))
                 }
             })?;
 
@@ -91,9 +91,9 @@ impl PyConnection {
         let mut conn = pool.get().await
             .map_err(|e| {
                 if e.to_string().contains("timeout") {
-                    SqlConnectionError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
+                    create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
                 } else {
-                    SqlConnectionError::new_err(format!("Failed to get connection from pool: {}", e))
+                    create_connection_error(format!("Failed to get connection from pool: {}", e))
                 }
             })?;
 
