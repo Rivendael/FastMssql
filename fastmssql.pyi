@@ -137,8 +137,12 @@ class SqlConnectionError(Exception):
 
     Attributes:
         message: Human-readable error description.
+        host: For routing errors, the target host SQL Server redirected to.
+        port: For routing errors, the target port SQL Server redirected to.
     """
     message: str
+    host: Optional[str]
+    port: Optional[int]
     ...
 
 class TlsError(Exception):
