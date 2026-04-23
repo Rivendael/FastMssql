@@ -1,10 +1,24 @@
 use crate::type_mapping;
 use ahash::AHashMap as HashMap;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyException, PyRuntimeError};
+use pyo3::{create_exception, exceptions::PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::sync::Arc;
-use tiberius::{ColumnType, Row};
+use tiberius::{ColumnType, Row, error::Error as TError};
+
+create_exception!(crate::fastmssql, SqlError, PyException);
+
+pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
+    match err {
+        TError::Server(s) => {
+            return SqlError::new_err((s.code(), s.message().to_string(), s.state()))
+        }
+        _ => return PyRuntimeError::new_err(format!("{base}: {}", err))
+    }
+}
+
+/// Memory-optimized to share column metadata across all rows in a result set.
 /// Holds shared column information for a result set to reduce memory usage.
 /// This is shared across all `PyFastRow` instances in a result set.
 #[derive(Debug)]

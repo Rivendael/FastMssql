@@ -14,6 +14,7 @@ use crate::azure_auth::PyAzureCredential;
 use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_on_connection};
 use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
+use crate::types::create_sql_error;
 
 /// Extract host and port from connection string
 fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
@@ -204,7 +205,7 @@ impl Transaction {
                 let result = conn_ref
                     .query(&query, &tiberius_params)
                     .await
-                    .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?
+                    .map_err(|e| create_sql_error(e, "Query execution failed"))?
                     .into_first_result()
                     .await
                     .map_err(|e| {
@@ -267,9 +268,7 @@ impl Transaction {
                 let result = conn_ref
                     .execute(&command, &tiberius_params)
                     .await
-                    .map_err(|e| {
-                        PyRuntimeError::new_err(format!("Command execution failed: {}", e))
-                    })?;
+                    .map_err(|e| create_sql_error(e, "Command execution failed"))?;
 
                 drop(conn_guard); // Release lock
 
