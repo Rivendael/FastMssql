@@ -12,9 +12,21 @@ create_exception!(crate::fastmssql, SqlError, PyException);
 pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
     match err {
         TError::Server(s) => {
-            return SqlError::new_err((s.code(), s.message().to_string(), s.state()))
+            let code = s.code();
+            let message = s.message().to_string();
+            let state = s.state();
+            Python::attach(|py| {
+                let exc = SqlError::new_err(message.clone());
+                {
+                    let value = exc.value(py);
+                    let _ = value.setattr("code", code);
+                    let _ = value.setattr("message", message.as_str());
+                    let _ = value.setattr("state", state);
+                }
+                exc
+            })
         }
-        _ => return PyRuntimeError::new_err(format!("{base}: {}", err))
+        _ => PyRuntimeError::new_err(format!("{base}: {}", err))
     }
 }
 

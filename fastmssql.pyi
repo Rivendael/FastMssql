@@ -110,6 +110,27 @@ class ApplicationIntent(StrEnum):
     READ_WRITE: str
     """Read-write workload."""
 
+class SqlError(Exception):
+    """
+    Raised when the SQL Server returns an error response.
+
+    Attributes:
+        code: SQL Server error number (e.g. 208 for object not found).
+        message: Human-readable error message from the server.
+        state: SQL Server error state byte.
+
+    Example::
+
+        try:
+            await conn.execute("INVALID SQL")
+        except SqlError as e:
+            print(e.code, e.message, e.state)
+    """
+    code: int
+    message: str
+    state: int
+    ...
+
 class SslConfig:
     """
     Configuration for SSL/TLS encrypted connections.

@@ -9,7 +9,7 @@ import pytest
 from conftest import Config
 
 try:
-    from fastmssql import ApplicationIntent, Connection, SslConfig
+    from fastmssql import ApplicationIntent, Connection, SqlError, SslConfig
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -37,7 +37,7 @@ async def test_readonly_intent_rejects_write_operations(test_config: Config):
             )
             # If we get here, the server allowed the write (may happen in some configs)
             pytest.skip("Server allowed write on ReadOnly connection")
-        except RuntimeError as e:
+        except SqlError as e:
             # Expected: write operation should be rejected
             assert (
                 "error" in str(e).lower()
