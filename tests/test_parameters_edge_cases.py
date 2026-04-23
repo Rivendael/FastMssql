@@ -8,7 +8,7 @@ import pytest
 from conftest import Config
 
 try:
-    from fastmssql import Connection, Parameter, Parameters
+    from fastmssql import Connection, Parameter, Parameters, SqlError
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -352,7 +352,7 @@ class TestParameterBoundsChecking:
                 try:
                     result = await conn.query(query, params)
                     assert result is not None
-                except RuntimeError as e:
+                except SqlError as e:
                     # May fail due to invalid query syntax, but not due to parameter limits
                     assert (
                         "parameter" not in str(e).lower()

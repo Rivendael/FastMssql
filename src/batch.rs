@@ -3,6 +3,7 @@ use crate::parameter_conversion::{
 };
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized};
+use crate::types::create_sql_error;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -77,7 +78,7 @@ pub async fn execute_batch_on_connection(
         let result = conn
             .execute(sql, &tiberius_params)
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Batch item failed: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Batch item failed"))?;
 
         let affected: u64 = result.rows_affected().iter().sum();
         all_results.push(affected);
@@ -105,12 +106,12 @@ pub async fn query_batch_on_connection(
         let stream = conn
             .query(&query, &tiberius_params)
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Batch query execution failed: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Batch query execution failed"))?;
 
         let rows = stream
             .into_first_result()
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get batch results: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Failed to get batch results"))?;
 
         all_results.push(rows);
     }
@@ -141,7 +142,7 @@ pub fn execute_batch<'p>(
 
         conn.simple_query("BEGIN TRANSACTION")
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to start transaction: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Failed to start transaction"))?;
 
         let all_results = match execute_batch_on_connection(&mut conn, batch_commands).await {
             Ok(results) => results,
@@ -157,7 +158,7 @@ pub fn execute_batch<'p>(
         };
 
         conn.simple_query("COMMIT TRANSACTION").await.map_err(|e| {
-            PyRuntimeError::new_err(format!("Failed to commit batch transaction: {}", e))
+            create_sql_error(e, "Failed to commit batch transaction")
         })?;
 
         Python::attach(|py| {
@@ -300,7 +301,7 @@ pub fn bulk_insert<'p>(
             let result = conn
                 .execute(sql, &params)
                 .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Batch execution failed: {}", e)))?;
+                .map_err(|e| create_sql_error(e, "Batch execution failed"))?;
 
             total_affected += result.rows_affected().iter().sum::<u64>();
         }
