@@ -131,6 +131,46 @@ class SqlError(Exception):
     state: int
     ...
 
+class SqlConnectionError(Exception):
+    """
+    Raised when a network I/O or routing error occurs connecting to SQL Server.
+
+    Attributes:
+        message: Human-readable error description.
+    """
+    message: str
+    ...
+
+class TlsError(Exception):
+    """
+    Raised when a TLS/SSL handshake error occurs.
+
+    Attributes:
+        message: Human-readable error description.
+    """
+    message: str
+    ...
+
+class ProtocolError(Exception):
+    """
+    Raised when a protocol-level parsing error occurs during request or response handling.
+
+    Attributes:
+        message: Human-readable error description.
+    """
+    message: str
+    ...
+
+class ConversionError(Exception):
+    """
+    Raised when a type conversion or encoding error occurs.
+
+    Attributes:
+        message: Human-readable error description.
+    """
+    message: str
+    ...
+
 class SslConfig:
     """
     Configuration for SSL/TLS encrypted connections.
