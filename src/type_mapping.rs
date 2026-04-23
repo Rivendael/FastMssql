@@ -321,7 +321,7 @@ fn handle_intn(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
-            "Failed to convert column {} to INT",
+            "Failed to convert column {} to integer",
             index
         ))),
     }
