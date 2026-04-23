@@ -14,7 +14,7 @@ lto = "fat"                  # Full link-time optimization
 codegen-units = 1            # Better optimization, slower compile
 panic = "abort"              # Smaller binary, faster code
 strip = true                 # Remove debug symbols
-overflow-checks = false      # Disable overflow checks for speed
+overflow-checks = true       # Enable overflow checks for safety
 
 # Performance-focused development profile
 [profile.dev]

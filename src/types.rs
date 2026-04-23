@@ -8,6 +8,10 @@ use std::sync::Arc;
 use tiberius::{ColumnType, Row, error::Error as TError};
 
 create_exception!(crate::fastmssql, SqlError, PyException);
+create_exception!(crate::fastmssql, SqlConnectionError, PyException);
+create_exception!(crate::fastmssql, TlsError, PyException);
+create_exception!(crate::fastmssql, ProtocolError, PyException);
+create_exception!(crate::fastmssql, ConversionError, PyException);
 
 pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
     match err {
@@ -26,8 +30,69 @@ pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
                 exc
             })
         }
-        _ => PyRuntimeError::new_err(format!("{base}: {}", err))
+        TError::Io { kind: _, message } => {
+            Python::attach(|py| {
+                let exc = SqlConnectionError::new_err(format!("{base}: {message}"));
+                let _ = exc.value(py).setattr("message", message.as_str());
+                exc
+            })
+        }
+        TError::Tls(msg) => {
+            Python::attach(|py| {
+                let exc = TlsError::new_err(format!("{base}: {msg}"));
+                let _ = exc.value(py).setattr("message", msg.as_str());
+                exc
+            })
+        }
+        TError::Routing { host, port } => {
+            let message = format!("server redirected to {host}:{port}");
+            Python::attach(|py| {
+                let exc = SqlConnectionError::new_err(format!("{base}: {message}"));
+                {
+                    let value = exc.value(py);
+                    let _ = value.setattr("message", message.as_str());
+                    let _ = value.setattr("host", host.as_str());
+                    let _ = value.setattr("port", port);
+                }
+                exc
+            })
+        }
+        TError::Protocol(msg) => {
+            let message = msg.into_owned();
+            Python::attach(|py| {
+                let exc = ProtocolError::new_err(format!("{base}: {message}"));
+                let _ = exc.value(py).setattr("message", message.as_str());
+                exc
+            })
+        }
+        TError::Encoding(msg) => {
+            let message = format!("encoding error: {msg}");
+            Python::attach(|py| {
+                let exc = ConversionError::new_err(format!("{base}: {message}"));
+                let _ = exc.value(py).setattr("message", message.as_str());
+                exc
+            })
+        }
+        TError::Conversion(msg) => {
+            let message = msg.into_owned();
+            Python::attach(|py| {
+                let exc = ConversionError::new_err(format!("{base}: {message}"));
+                let _ = exc.value(py).setattr("message", message.as_str());
+                exc
+            })
+        }
+        _ => PyRuntimeError::new_err(format!("{base}: {err}"))
     }
+}
+
+/// Creates a `SqlConnectionError` with the `.message` attribute set to the provided message.
+pub fn create_connection_error(message: impl Into<String>) -> PyErr {
+    let message = message.into();
+    Python::attach(|py| {
+        let exc = SqlConnectionError::new_err(message.clone());
+        let _ = exc.value(py).setattr("message", message.as_str());
+        exc
+    })
 }
 
 /// Memory-optimized to share column metadata across all rows in a result set.

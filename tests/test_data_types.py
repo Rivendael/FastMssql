@@ -743,3 +743,147 @@ async def test_supported_guid_type(test_config: Config):
     row = rows[0]
 
     assert row.get("guid_col") is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests for bug fixes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_datetimeoffset_is_timezone_aware(test_config: Config):
+    """Regression test: DATETIMEOFFSET must return a timezone-aware datetime.
+
+    Previously the UTC offset was silently discarded and a naive datetime
+    (tzinfo=None) was returned.  The fix attaches datetime.timezone.utc so
+    callers can distinguish offset-aware values from plain datetimes.
+    """
+    import datetime
+
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            SELECT
+                CAST('2023-06-15 10:20:30.000 +05:30' AS DATETIMEOFFSET) as dto_val,
+                CAST('2023-06-15 10:20:30.000 +00:00' AS DATETIMEOFFSET) as dto_utc,
+                CAST(NULL AS DATETIMEOFFSET) as dto_null
+        """)
+
+    assert result.has_rows()
+    row = result.rows()[0]
+
+    # Non-null DATETIMEOFFSET must be a timezone-aware datetime
+    dto_val = row.get("dto_val")
+    assert dto_val is not None
+    assert isinstance(dto_val, datetime.datetime), (
+        f"Expected datetime, got {type(dto_val)}"
+    )
+    assert dto_val.tzinfo is not None, (
+        "DATETIMEOFFSET must return a timezone-aware datetime (tzinfo must not be None)"
+    )
+
+    # UTC value: Tiberius normalises all DATETIMEOFFSET values to UTC
+    dto_utc = row.get("dto_utc")
+    assert dto_utc is not None
+    assert dto_utc.tzinfo is not None, (
+        "DATETIMEOFFSET +00:00 must still be timezone-aware"
+    )
+    assert dto_utc.year == 2023
+    assert dto_utc.month == 6
+    assert dto_utc.day == 15
+    assert dto_utc.hour == 10
+    assert dto_utc.minute == 20
+    assert dto_utc.second == 30
+
+    # NULL must still be None
+    assert row.get("dto_null") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_nullable_int_columns(test_config: Config):
+    """Regression test: nullable INT/BIGINT/SMALLINT columns use the Intn wire type.
+
+    Previously Intn fell through to a string-based fallback handler which
+    would fail or return wrong data for numeric values.  The fix adds a
+    dedicated handle_intn() that reads i64.
+    """
+    async with Connection(test_config.connection_string) as db_connection:
+        # A table variable forces SQL Server to produce Intn (nullable integer)
+        # column types rather than the non-nullable Int4/Int8 literals.
+        result = await db_connection.query("""
+            DECLARE @t TABLE (
+                col_int       INT          NULL,
+                col_bigint    BIGINT       NULL,
+                col_smallint  SMALLINT     NULL
+            )
+            INSERT INTO @t VALUES (42, 9223372036854775807, -32768)
+            INSERT INTO @t VALUES (NULL, NULL, NULL)
+            SELECT * FROM @t
+        """)
+
+    rows = result.rows()
+    assert len(rows) == 2
+
+    # First row — non-null values
+    row = rows[0]
+    assert row.get("col_int") == 42, (
+        f"Nullable INT should return 42, got {row.get('col_int')!r}"
+    )
+    assert row.get("col_bigint") == 9223372036854775807, (
+        f"Nullable BIGINT should return max i64, got {row.get('col_bigint')!r}"
+    )
+    assert row.get("col_smallint") == -32768, (
+        f"Nullable SMALLINT should return -32768, got {row.get('col_smallint')!r}"
+    )
+
+    # Second row — all NULL
+    row = rows[1]
+    assert row.get("col_int") is None
+    assert row.get("col_bigint") is None
+    assert row.get("col_smallint") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_nullable_float_columns(test_config: Config):
+    """Regression test: nullable FLOAT/REAL columns use the Floatn wire type.
+
+    Previously Floatn fell through to a string-based fallback which would
+    fail for numeric data.  The fix adds a dedicated handle_floatn() that
+    reads f64.
+    """
+    async with Connection(test_config.connection_string) as db_connection:
+        result = await db_connection.query("""
+            DECLARE @t TABLE (
+                col_float  FLOAT  NULL,
+                col_real   REAL   NULL
+            )
+            INSERT INTO @t VALUES (3.14159265359, 2.718)
+            INSERT INTO @t VALUES (NULL, NULL)
+            SELECT * FROM @t
+        """)
+
+    rows = result.rows()
+    assert len(rows) == 2
+
+    # First row — non-null values
+    row = rows[0]
+    col_float = row.get("col_float")
+    assert col_float is not None, "Nullable FLOAT should not be None for a non-null row"
+    assert isinstance(col_float, float), (
+        f"Nullable FLOAT should return float, got {type(col_float)}"
+    )
+    assert abs(col_float - 3.14159265359) < 1e-6
+
+    col_real = row.get("col_real")
+    assert col_real is not None, "Nullable REAL should not be None for a non-null row"
+    assert isinstance(col_real, float), (
+        f"Nullable REAL should return float, got {type(col_real)}"
+    )
+    assert abs(col_real - 2.718) < 0.001
+
+    # Second row — all NULL
+    row = rows[1]
+    assert row.get("col_float") is None
+    assert row.get("col_real") is None

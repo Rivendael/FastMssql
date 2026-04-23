@@ -153,7 +153,7 @@ dev = [
     "cibuildwheel[uv]>=3.4.1",
     "wheel==0.47.0",
     "filelock==3.29.0",
-    "pyarrow==24.0.0",
+    "pyarrow==23.0.1",
     "uvloop==0.22.1"
 
 ]

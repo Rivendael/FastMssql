@@ -3,8 +3,8 @@ use crate::parameter_conversion::{
 };
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized};
-use crate::types::create_sql_error;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use crate::types::{create_connection_error, create_sql_error};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
@@ -138,7 +138,7 @@ pub fn execute_batch<'p>(
         let mut conn = pool_ref
             .get()
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Pool error: {}", e)))?;
+            .map_err(|e| create_connection_error(format!("Pool error: {}", e)))?;
 
         conn.simple_query("BEGIN TRANSACTION")
             .await
@@ -149,7 +149,7 @@ pub fn execute_batch<'p>(
             Err(e) => match conn.simple_query("ROLLBACK TRANSACTION").await {
                 Ok(_) => return Err(e),
                 Err(rollback_err) => {
-                    return Err(PyRuntimeError::new_err(format!(
+                    return Err(create_connection_error(format!(
                         "Batch execution failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
                         e, rollback_err
                     )));
@@ -185,7 +185,7 @@ pub fn query_batch<'p>(
         let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
 
         let mut conn = pool_ref.get().await.map_err(|e| {
-            PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+            create_connection_error(format!("Failed to get connection from pool: {}", e))
         })?;
 
         let all_results = query_batch_on_connection(&mut conn, batch_queries).await?;
@@ -241,7 +241,7 @@ pub fn bulk_insert<'p>(
         let mut conn = pool_ref
             .get()
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Pool error: {}", e)))?;
+            .map_err(|e| create_connection_error(format!("Pool error: {}", e)))?;
 
         let mut total_affected = 0u64;
 

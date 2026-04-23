@@ -14,7 +14,7 @@ use crate::azure_auth::PyAzureCredential;
 use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_on_connection};
 use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
-use crate::types::create_sql_error;
+use crate::types::{create_connection_error, create_sql_error};
 
 /// Extract host and port from connection string
 fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
@@ -501,7 +501,7 @@ impl Transaction {
             let mut conn_guard = conn.lock().await;
             if conn_guard.is_none() {
                 let tcp_stream = TcpStream::connect((server, port)).await.map_err(|e| {
-                    PyRuntimeError::new_err(format!("Failed to connect to server: {}", e))
+                    create_connection_error(format!("Failed to connect to server: {}", e))
                 })?;
 
                 let compat_stream = tcp_stream.compat();
@@ -515,9 +515,7 @@ impl Transaction {
 
                 let new_conn: SingleConnectionType = Client::connect(auth_config, compat_stream)
                     .await
-                    .map_err(|e| {
-                        PyRuntimeError::new_err(format!("Failed to connect to database: {}", e))
-                    })?;
+                    .map_err(|e| create_sql_error(e, "Failed to connect to database"))?;
                 *conn_guard = Some(new_conn);
             }
         }

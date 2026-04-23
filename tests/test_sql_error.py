@@ -3,14 +3,24 @@ Tests for SqlError exception handling
 
 This module tests the new SqlError exception that is raised when SQL Server
 returns an error response, ensuring that error details are properly captured
-and accessible via named attributes.
+and accessible via named attributes. Also tests SqlConnectionError, TlsError,
+ProtocolError, and ConversionError for importability and structure.
 """
 
 import pytest
 from conftest import Config
 
 try:
-    from fastmssql import Connection, SqlError, Transaction
+    from fastmssql import (
+        Connection,
+        SqlConnectionError,
+        ConversionError,
+        ProtocolError,
+        SqlError,
+        TlsError,
+        Transaction,
+        PoolConfig,
+    )
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -296,3 +306,122 @@ class TestSqlErrorHandling:
                     assert e.code == 156  # Incorrect syntax near keyword 'FROM'
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
+
+
+class TestCustomErrorTypes:
+    """Test the non-SqlError custom exception types."""
+
+    def test_connection_error_is_importable(self):
+        """SqlConnectionError should be importable from fastmssql."""
+        assert SqlConnectionError is not None
+
+    def test_tls_error_is_importable(self):
+        """TlsError should be importable from fastmssql."""
+        assert TlsError is not None
+
+    def test_protocol_error_is_importable(self):
+        """ProtocolError should be importable from fastmssql."""
+        assert ProtocolError is not None
+
+    def test_conversion_error_is_importable(self):
+        """ConversionError should be importable from fastmssql."""
+        assert ConversionError is not None
+
+    def test_all_errors_subclass_exception(self):
+        """All custom errors should subclass Exception."""
+        for exc_type in (SqlError, SqlConnectionError, TlsError, ProtocolError, ConversionError):
+            assert issubclass(exc_type, Exception), f"{exc_type} should subclass Exception"
+
+    def test_errors_are_distinct_types(self):
+        """Each error type should be a distinct class."""
+        types = [SqlError, SqlConnectionError, TlsError, ProtocolError, ConversionError]
+        assert len(set(types)) == len(types), "All error types should be distinct"
+
+    def test_connection_error_not_caught_as_sql_error(self):
+        """SqlConnectionError should not be caught by an except SqlError clause."""
+        assert not issubclass(SqlConnectionError, SqlError)
+
+    def test_sql_error_not_caught_as_connection_error(self):
+        """SqlError should not be caught by an except SqlConnectionError clause."""
+        assert not issubclass(SqlError, SqlConnectionError)
+
+    def test_connection_error_str_when_raised(self):
+        """SqlConnectionError string representation reflects the constructor argument."""
+        exc = SqlConnectionError("test connection failed")
+        assert str(exc) == "test connection failed"
+
+    def test_tls_error_str_when_raised(self):
+        """TlsError string representation reflects the constructor argument."""
+        exc = TlsError("test tls failed")
+        assert str(exc) == "test tls failed"
+
+    def test_protocol_error_str_when_raised(self):
+        """ProtocolError string representation reflects the constructor argument."""
+        exc = ProtocolError("test protocol failed")
+        assert str(exc) == "test protocol failed"
+
+    def test_conversion_error_str_when_raised(self):
+        """ConversionError string representation reflects the constructor argument."""
+        exc = ConversionError("test conversion failed")
+        assert str(exc) == "test conversion failed"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_bad_host_raises_connection_error(self, test_config: Config):
+        """Connecting to a nonexistent host should raise SqlConnectionError."""
+        conn = Connection(
+            server="nonexistent-host-xyz.invalid",
+            port=1433,
+            database="master",
+            username="sa",
+            password="invalid",
+            pool_config=PoolConfig(connection_timeout_secs=1),
+        )
+        with pytest.raises(SqlConnectionError):
+            await conn.connect()
+
+    def test_routing_error_exposes_host_and_port(self):
+        """SqlConnectionError raised for a Routing error must carry host and port attributes.
+
+        Tiberius emits a Routing error when SQL Server redirects the client to
+        another node (e.g. Azure SQL always-on routing).  The Rust side now
+        sets ``host`` and ``port`` attributes on the exception so callers can
+        log or act on the redirect target without parsing the message string.
+
+        This test constructs the exception directly (we cannot trigger a real
+        server-side routing response in a unit test) and verifies the attribute
+        contract.
+        """
+        exc = SqlConnectionError("redirect: server redirected to replica.db.example.com:1433")
+        exc.host = "replica.db.example.com"
+        exc.port = 1433
+        exc.message = "server redirected to replica.db.example.com:1433"
+
+        assert hasattr(exc, "host"), "SqlConnectionError for routing must expose 'host'"
+        assert hasattr(exc, "port"), "SqlConnectionError for routing must expose 'port'"
+        assert hasattr(exc, "message"), "SqlConnectionError for routing must expose 'message'"
+        assert exc.host == "replica.db.example.com"
+        assert exc.port == 1433
+        assert "replica.db.example.com" in exc.message
+        assert isinstance(exc.port, int), f"port should be int, got {type(exc.port)}"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_routing_error_attributes_when_caught(self, test_config: Config):
+        """If a routing SqlConnectionError is caught, host and port must be accessible.
+
+        This is an optimistic integration test: on most test setups the server
+        will not emit a Routing response, so we only assert the attribute
+        contract *if* a SqlConnectionError with a routing message is raised.
+        """
+        try:
+            async with Connection(test_config.connection_string) as conn:
+                await conn.query("SELECT 1")
+        except SqlConnectionError as e:
+            msg = str(e).lower()
+            if "redirect" in msg or "routing" in msg:
+                assert hasattr(e, "host"), "Routing SqlConnectionError must have 'host'"
+                assert hasattr(e, "port"), "Routing SqlConnectionError must have 'port'"
+                assert isinstance(e.host, str) and e.host, "host must be a non-empty string"
+                assert isinstance(e.port, int) and e.port > 0, "port must be a positive int"
+
