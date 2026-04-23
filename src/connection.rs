@@ -53,12 +53,9 @@ impl PyConnection {
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
         let mut conn = pool.get().await
-            .map_err(|e| {
-                if e.to_string().contains("timeout") {
-                    create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
-                } else {
-                    create_connection_error(format!("Failed to get connection from pool: {}", e))
-                }
+            .map_err(|e| match e {
+                bb8::RunError::TimedOut => create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size."),
+                bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
             })?;
 
         let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
@@ -89,12 +86,9 @@ impl PyConnection {
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
         let mut conn = pool.get().await
-            .map_err(|e| {
-                if e.to_string().contains("timeout") {
-                    create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
-                } else {
-                    create_connection_error(format!("Failed to get connection from pool: {}", e))
-                }
+            .map_err(|e| match e {
+                bb8::RunError::TimedOut => create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size."),
+                bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
             })?;
 
         let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
