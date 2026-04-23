@@ -1,4 +1,3 @@
-use parking_lot::Mutex as SyncMutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -18,11 +17,29 @@ use crate::types::{create_connection_error, create_sql_error};
 
 /// Extract host and port from connection string
 fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
-    let server_part = conn_str
-        .split("Server=")
-        .nth(1)
-        .and_then(|s| s.split(';').next())
-        .map(|s| s.trim())
+    // ADO.NET legal aliases for the server key (case-insensitive):
+    // Server, Data Source, Addr, Address, Network Address
+    const SERVER_KEYS: &[&str] = &[
+        "server=",
+        "data source=",
+        "addr=",
+        "address=",
+        "network address=",
+    ];
+    let conn_lower = conn_str.to_ascii_lowercase();
+    let server_part = SERVER_KEYS
+        .iter()
+        .find_map(|key| {
+            conn_lower.find(key).map(|pos| {
+                let value_start = pos + key.len();
+                conn_str[value_start..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+            })
+        })
+        .filter(|s| !s.is_empty())
         .unwrap_or("localhost");
 
     if let Some(port_str) = server_part.split(',').nth(1) {
@@ -62,7 +79,6 @@ pub struct Transaction {
     port: u16,      // Port for TCP connection
     _ssl_config: Option<PySslConfig>,
     azure_credential: Option<PyAzureCredential>,
-    connected: Arc<SyncMutex<bool>>,
 }
 
 #[pymethods]
@@ -158,7 +174,6 @@ impl Transaction {
             port,
             _ssl_config: ssl_config,
             azure_credential,
-            connected: Arc::new(SyncMutex::new(false)),
         })
     }
 
@@ -174,7 +189,6 @@ impl Transaction {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
         let azure_credential = self.azure_credential.clone();
@@ -185,7 +199,6 @@ impl Transaction {
                 &config,
                 &server,
                 port,
-                &connected,
                 azure_credential.as_ref(),
             )
             .await?;
@@ -237,7 +250,6 @@ impl Transaction {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
         let azure_credential = self.azure_credential.clone();
@@ -248,7 +260,6 @@ impl Transaction {
                 &config,
                 &server,
                 port,
-                &connected,
                 azure_credential.as_ref(),
             )
             .await?;
@@ -291,7 +302,6 @@ impl Transaction {
         let batch_commands = parse_batch_items(commands, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
         let azure_credential = self.azure_credential.clone();
@@ -302,7 +312,6 @@ impl Transaction {
                 &config,
                 &server,
                 port,
-                &connected,
                 azure_credential.as_ref(),
             )
             .await?;
@@ -334,7 +343,6 @@ impl Transaction {
         let batch_queries = parse_batch_items(queries, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
         let azure_credential = self.azure_credential.clone();
@@ -345,7 +353,6 @@ impl Transaction {
                 &config,
                 &server,
                 port,
-                &connected,
                 azure_credential.as_ref(),
             )
             .await?;
@@ -376,7 +383,6 @@ impl Transaction {
     pub fn begin<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
         let server = self.server.clone();
         let port = self.port;
         let azure_credential = self.azure_credential.clone();
@@ -387,7 +393,6 @@ impl Transaction {
                 &config,
                 &server,
                 port,
-                &connected,
                 azure_credential.as_ref(),
             )
             .await?;
@@ -460,19 +465,16 @@ impl Transaction {
     /// Close the connection
     pub fn close<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
-        let connected = Arc::clone(&self.connected);
 
         future_into_py(py, async move {
             {
                 let mut conn_guard = conn.lock().await;
-                if let Some(_c) = conn_guard.take() {
-                    // Connection will be dropped and closed when it leaves scope
+                if let Some(mut c) = conn_guard.take() {
+                    // Best-effort rollback: silently ignore errors (connection may already be
+                    // broken or no transaction may be active — both are fine).
+                    let _ = c.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION").await;
+                    // Connection is dropped here, closing the TCP stream.
                 }
-            }
-
-            {
-                let mut connected_guard = connected.lock();
-                *connected_guard = false;
             }
 
             Ok(())
@@ -481,7 +483,13 @@ impl Transaction {
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        *self.connected.lock()
+        // Derive connectivity from the actual connection object rather than a stale flag.
+        // If the lock is held (query in progress), the connection is active → true.
+        // If we can peek and it's Some, connected. If None, not connected.
+        match self.conn.try_lock() {
+            Ok(guard) => guard.is_some(),
+            Err(_) => true,
+        }
     }
 }
 
@@ -493,7 +501,6 @@ impl Transaction {
         config: &Arc<Config>,
         server: &str,
         port: u16,
-        connected: &Arc<SyncMutex<bool>>,
         azure_credential: Option<&PyAzureCredential>,
     ) -> PyResult<()> {
         // Establish connection if not already connected
@@ -520,12 +527,174 @@ impl Transaction {
             }
         }
 
-        // Mark as connected
-        {
-            let mut connected_guard = connected.lock();
-            *connected_guard = true;
-        }
-
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_host_port_from_connection_string;
+
+    // Helper to call the parser with a full ADO.NET-style string.
+    fn parse(s: &str) -> (String, u16) {
+        extract_host_port_from_connection_string(s)
+    }
+
+    // --- Server= (original key) ---
+
+    #[test]
+    fn server_hostname_only() {
+        assert_eq!(parse("Server=myhost;Database=db"), ("myhost".into(), 1433));
+    }
+
+    #[test]
+    fn server_hostname_with_port() {
+        assert_eq!(
+            parse("Server=myhost,5000;Database=db"),
+            ("myhost".into(), 5000)
+        );
+    }
+
+    #[test]
+    fn server_hostname_with_instance() {
+        assert_eq!(
+            parse(r"Server=myhost\SQLEXPRESS;Database=db"),
+            ("myhost".into(), 1433)
+        );
+    }
+
+    #[test]
+    fn server_key_case_insensitive_upper() {
+        assert_eq!(parse("SERVER=myhost;Database=db"), ("myhost".into(), 1433));
+    }
+
+    #[test]
+    fn server_key_case_insensitive_mixed() {
+        assert_eq!(parse("Server=myhost;Database=db"), ("myhost".into(), 1433));
+    }
+
+    // --- Data Source= ---
+
+    #[test]
+    fn data_source_hostname_only() {
+        assert_eq!(
+            parse("Data Source=myhost;Database=db"),
+            ("myhost".into(), 1433)
+        );
+    }
+
+    #[test]
+    fn data_source_hostname_with_port() {
+        assert_eq!(
+            parse("Data Source=myhost,1500;Database=db"),
+            ("myhost".into(), 1500)
+        );
+    }
+
+    #[test]
+    fn data_source_case_insensitive() {
+        assert_eq!(
+            parse("DATA SOURCE=myhost;Database=db"),
+            ("myhost".into(), 1433)
+        );
+    }
+
+    // --- Addr= ---
+
+    #[test]
+    fn addr_hostname_only() {
+        assert_eq!(parse("Addr=myhost;Database=db"), ("myhost".into(), 1433));
+    }
+
+    #[test]
+    fn addr_hostname_with_port() {
+        assert_eq!(
+            parse("Addr=myhost,2000;Database=db"),
+            ("myhost".into(), 2000)
+        );
+    }
+
+    #[test]
+    fn addr_case_insensitive() {
+        assert_eq!(parse("ADDR=myhost;Database=db"), ("myhost".into(), 1433));
+    }
+
+    // --- Address= ---
+
+    #[test]
+    fn address_hostname_only() {
+        assert_eq!(
+            parse("Address=myhost;Database=db"),
+            ("myhost".into(), 1433)
+        );
+    }
+
+    #[test]
+    fn address_hostname_with_port() {
+        assert_eq!(
+            parse("Address=myhost,3000;Database=db"),
+            ("myhost".into(), 3000)
+        );
+    }
+
+    // --- Network Address= ---
+
+    #[test]
+    fn network_address_hostname_only() {
+        assert_eq!(
+            parse("Network Address=myhost;Database=db"),
+            ("myhost".into(), 1433)
+        );
+    }
+
+    #[test]
+    fn network_address_hostname_with_port() {
+        assert_eq!(
+            parse("Network Address=myhost,4000;Database=db"),
+            ("myhost".into(), 4000)
+        );
+    }
+
+    #[test]
+    fn network_address_case_insensitive() {
+        assert_eq!(
+            parse("NETWORK ADDRESS=myhost;Database=db"),
+            ("myhost".into(), 1433)
+        );
+    }
+
+    // --- Fallback ---
+
+    #[test]
+    fn empty_string_falls_back_to_localhost() {
+        assert_eq!(parse(""), ("localhost".into(), 1433));
+    }
+
+    #[test]
+    fn unknown_key_falls_back_to_localhost() {
+        assert_eq!(
+            parse("Database=mydb;User Id=sa"),
+            ("localhost".into(), 1433)
+        );
+    }
+
+    // --- Hostname case preservation ---
+
+    #[test]
+    fn hostname_case_preserved() {
+        assert_eq!(
+            parse("Server=MyMixedCaseHost;Database=db"),
+            ("MyMixedCaseHost".into(), 1433)
+        );
+    }
+
+    // --- Invalid port falls back to 1433 ---
+
+    #[test]
+    fn invalid_port_falls_back_to_1433() {
+        assert_eq!(
+            parse("Server=myhost,notaport;Database=db"),
+            ("myhost".into(), 1433)
+        );
     }
 }

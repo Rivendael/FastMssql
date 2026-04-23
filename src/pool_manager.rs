@@ -51,35 +51,6 @@ pub async fn establish_pool(
     Ok(pool)
 }
 
-pub async fn ensure_pool_initialized(
-    pool: Arc<RwLock<Option<ConnectionPool>>>,
-    config: Arc<Config>,
-    pool_config: &PyPoolConfig,
-) -> PyResult<ConnectionPool> {
-    // Fast path: check if pool already exists with read lock
-    {
-        let read_guard = pool.read().await;
-        if let Some(existing_pool) = read_guard.as_ref() {
-            return Ok(existing_pool.clone());
-        }
-    }
-
-    // Slow path: initialize pool with write lock
-    let mut write_guard = pool.write().await;
-
-    // Double-check in case another task initialized while we waited for write lock
-    if let Some(existing_pool) = write_guard.as_ref() {
-        return Ok(existing_pool.clone());
-    }
-
-    // Initialize new pool and store it directly to avoid cloning
-    let new_pool = establish_pool(&config, pool_config).await?;
-    *write_guard = Some(new_pool.clone());
-    drop(write_guard);
-
-    Ok(new_pool)
-}
-
 pub async fn ensure_pool_initialized_with_auth(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
@@ -116,11 +87,9 @@ pub async fn ensure_pool_initialized_with_auth(
 /// Warms up the connection pool by pre-establishing min_idle connections
 /// This eliminates cold-start latency on first queries
 pub async fn warmup_pool(pool: &ConnectionPool, target_connections: u32) -> PyResult<()> {
-    let concurrent_warmup = std::cmp::min(target_connections, 4);
+    let mut handles = Vec::with_capacity(target_connections as usize);
 
-    let mut handles = Vec::with_capacity(concurrent_warmup as usize);
-
-    for _ in 0..concurrent_warmup {
+    for _ in 0..target_connections {
         let pool_clone = pool.clone();
         let handle = tokio::spawn(async move {
             match pool_clone.get().await {
