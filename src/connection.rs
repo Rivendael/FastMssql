@@ -13,6 +13,7 @@ use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::ssl_config::PySslConfig;
+use crate::types::create_sql_error;
 
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
@@ -70,7 +71,7 @@ impl PyConnection {
         let stream = conn
             .query(query, &tiberius_params)
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Query execution failed"))?;
 
         let result = stream
             .into_first_result()
@@ -107,7 +108,7 @@ impl PyConnection {
         let result = conn
             .execute(query, &tiberius_params)
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Command execution failed: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Command execution failed"))?;
 
         let total_affected = result.rows_affected().iter().sum::<u64>();
 
