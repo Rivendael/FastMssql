@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "fastmssql"
+name = "fastmssql-dbproj"
 version = "0.6.7"
 
 description = "A high-performance async Python library for Microsoft SQL Server built on Rust for heavy workloads and low latency."
