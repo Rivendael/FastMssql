@@ -48,7 +48,12 @@ pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
             let message = format!("server redirected to {host}:{port}");
             Python::attach(|py| {
                 let exc = SqlConnectionError::new_err(format!("{base}: {message}"));
-                let _ = exc.value(py).setattr("message", message.as_str());
+                {
+                    let value = exc.value(py);
+                    let _ = value.setattr("message", message.as_str());
+                    let _ = value.setattr("host", host.as_str());
+                    let _ = value.setattr("port", port);
+                }
                 exc
             })
         }

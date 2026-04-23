@@ -1,8 +1,8 @@
 use crate::azure_auth::PyAzureCredential;
 use crate::pool_config::PyPoolConfig;
+use crate::types::SqlConnectionError;
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use std::sync::Arc;
 use tiberius::Config;
@@ -41,7 +41,7 @@ pub async fn establish_pool(
     let pool = builder
         .build(manager)
         .await
-        .map_err(|e| PyRuntimeError::new_err(format!("Failed to create connection pool: {}", e)))?;
+        .map_err(|e| SqlConnectionError::new_err(format!("Failed to create connection pool: {}", e)))?;
 
     // Warmup pool if min_idle is configured to eliminate cold-start latency
     if let Some(min_idle) = pool_config.min_idle {
@@ -134,8 +134,8 @@ pub async fn warmup_pool(pool: &ConnectionPool, target_connections: u32) -> PyRe
     for handle in handles {
         handle
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Connection warmup task failed: {}", e)))?
-            .map_err(|e| PyRuntimeError::new_err(format!("Connection warmup failed: {}", e)))?;
+            .map_err(|e| SqlConnectionError::new_err(format!("Connection warmup task failed: {}", e)))?
+            .map_err(|e| SqlConnectionError::new_err(format!("Connection warmup failed: {}", e)))?;
     }
 
     Ok(())

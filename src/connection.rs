@@ -13,7 +13,7 @@ use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::ssl_config::PySslConfig;
-use crate::types::create_sql_error;
+use crate::types::{create_sql_error, SqlConnectionError};
 
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
@@ -54,11 +54,10 @@ impl PyConnection {
     ) -> PyResult<Vec<Row>> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                // Only allocate error string if error actually occurred
                 if e.to_string().contains("timeout") {
-                    PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
+                    SqlConnectionError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
                 } else {
-                    PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+                    SqlConnectionError::new_err(format!("Failed to get connection from pool: {}", e))
                 }
             })?;
 
@@ -91,11 +90,10 @@ impl PyConnection {
     ) -> PyResult<u64> {
         let mut conn = pool.get().await
             .map_err(|e| {
-                // Only allocate error string if error actually occurred
                 if e.to_string().contains("timeout") {
-                    PyRuntimeError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
+                    SqlConnectionError::new_err("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size.")
                 } else {
-                    PyRuntimeError::new_err(format!("Failed to get connection from pool: {}", e))
+                    SqlConnectionError::new_err(format!("Failed to get connection from pool: {}", e))
                 }
             })?;
 
