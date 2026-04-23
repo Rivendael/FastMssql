@@ -472,7 +472,7 @@ For more control, explicitly call `begin()`, `commit()`, and `rollback()`:
 
 ```python
 import asyncio
-from fastmssql import Transaction
+from fastmssql import Transaction, SqlError
 
 async def main():
     conn_str = "Server=localhost;Database=master;User Id=myuser;Password=mypass"
@@ -488,7 +488,7 @@ async def main():
         await transaction.execute("UPDATE accounts SET balance = balance + @P1 WHERE id = @P2", [50, 2])
         
         await transaction.commit()
-    except Exception as e:
+    except SqlError as e:
         await transaction.rollback()
         raise
     finally:
