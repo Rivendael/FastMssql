@@ -333,7 +333,7 @@ fn handle_floatn(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
         Ok(Some(val)) => Ok(val.into_pyobject(py)?.into_any().unbind()),
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
-            "Failed to convert column {} to FLOAT",
+            "Failed to convert column {} to floating-point",
             index
         ))),
     }
