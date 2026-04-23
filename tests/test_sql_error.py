@@ -368,7 +368,7 @@ class TestCustomErrorTypes:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_bad_host_raises_connection_error(self, test_config: Config):
-        """Connecting to a nonexistent host should raise ConnectionError."""
+        """Connecting to a nonexistent host should raise SqlConnectionError."""
         conn = Connection(
             server="nonexistent-host-xyz.invalid",
             port=1433,
