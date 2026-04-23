@@ -17,6 +17,7 @@ from .fastmssql import (
     Parameters,
     PoolConfig,
     QueryStream,
+    SqlError,
     SslConfig,
     version,
 )
@@ -162,6 +163,7 @@ __all__ = [
     "Connection",
     "Transaction",
     "PoolConfig",
+    "SqlError",
     "SslConfig",
     "QueryStream",
     "FastRow",
