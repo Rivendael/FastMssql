@@ -168,6 +168,11 @@ class Transaction:
                 await self.rollback()
             except Exception:
                 pass
+        finally:
+            # Always close the TCP connection so it is not held open until GC.
+            # close() issues a best-effort ROLLBACK before dropping the stream,
+            # so calling it here is safe even after a successful commit/rollback.
+            await self.close()
 
         self._reset_transaction_flags()
         return False  # Don't suppress exceptions

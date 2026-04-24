@@ -368,17 +368,19 @@ impl PyAzureCredential {
                     PyRuntimeError::new_err("Access token not found in Azure CLI response")
                 })?;
 
-                // Parse the expiresOn timestamp from Azure CLI response
+                // Parse the expiresOn timestamp from Azure CLI response.
+                // `az account get-access-token` emits this field as
+                // "YYYY-MM-DD HH:MM:SS.ffffff" (space separator, no timezone);
+                // it is NOT RFC 3339 and parse_from_rfc3339 always fails on it.
                 let expires_on = json["expiresOn"].as_str().ok_or_else(|| {
                     PyRuntimeError::new_err("expiresOn not found in Azure CLI response")
                 })?;
 
-                // Parse ISO 8601 timestamp and calculate seconds until expiration
-                let expires_at = chrono::DateTime::parse_from_rfc3339(expires_on)
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to parse expiresOn: {}", e)))?;
-                
+                let expires_at = chrono::NaiveDateTime::parse_from_str(expires_on, "%Y-%m-%d %H:%M:%S%.f")
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to parse expiresOn '{}': {}", expires_on, e)))?;
+
                 let now = chrono::Utc::now();
-                let expires_in = (expires_at.timestamp() - now.timestamp()).max(0) as u64;
+                let expires_in = (expires_at.and_utc().timestamp() - now.timestamp()).max(0) as u64;
 
                 Ok((access_token.to_string(), expires_in))
             }

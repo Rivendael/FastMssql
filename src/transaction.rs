@@ -15,56 +15,6 @@ use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
 use crate::types::{create_connection_error, create_sql_error};
 
-/// Extract host and port from connection string
-fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
-    // ADO.NET legal aliases for the server key (case-insensitive):
-    // Server, Data Source, Addr, Address, Network Address
-    const SERVER_KEYS: &[&str] = &[
-        "server=",
-        "data source=",
-        "addr=",
-        "address=",
-        "network address=",
-    ];
-    let conn_lower = conn_str.to_ascii_lowercase();
-    let server_part = SERVER_KEYS
-        .iter()
-        .find_map(|key| {
-            conn_lower.find(key).map(|pos| {
-                let value_start = pos + key.len();
-                conn_str[value_start..]
-                    .split(';')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-            })
-        })
-        .filter(|s| !s.is_empty())
-        .unwrap_or("localhost");
-
-    if let Some(port_str) = server_part.split(',').nth(1) {
-        // Format: "hostname,port"
-        let srv = server_part
-            .split(',')
-            .next()
-            .unwrap_or("localhost")
-            .to_string();
-        let p = port_str.trim().parse::<u16>().unwrap_or(1433);
-        (srv, p)
-    } else if server_part.contains('\\') {
-        // Format: "hostname\\instance"
-        let srv = server_part
-            .split('\\')
-            .next()
-            .unwrap_or("localhost")
-            .to_string();
-        (srv, 1433u16)
-    } else {
-        // Format: "hostname"
-        (server_part.to_string(), 1433u16)
-    }
-}
-
 /// Type for a single direct connection (not pooled)
 type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 
@@ -75,8 +25,6 @@ type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 pub struct Transaction {
     conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
     config: Arc<Config>,
-    server: String, // Server host/address for TCP connection
-    port: u16,      // Port for TCP connection
     _ssl_config: Option<PySslConfig>,
     azure_credential: Option<PyAzureCredential>,
 }
@@ -101,14 +49,9 @@ impl Transaction {
         // Store the original server parameter for validation before it gets reassigned
         let server_param = server.clone();
 
-        let (config, server, port) = if let Some(conn_str) = connection_string {
-            let config = Config::from_ado_string(&conn_str)
-                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
-
-            // Extract server and port from connection string
-            let (server, port) = extract_host_port_from_connection_string(&conn_str);
-
-            (config, server, port)
+        let config = if let Some(conn_str) = connection_string {
+            Config::from_ado_string(&conn_str)
+                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
         } else if let Some(srv) = server {
             let mut config = Config::new();
             config.host(&srv);
@@ -153,7 +96,7 @@ impl Transaction {
             if let Some(ref ssl_cfg) = ssl_config {
                 ssl_cfg.apply_to_config(&mut config);
             }
-            (config, srv, port.unwrap_or(1433))
+            config
         } else {
             return Err(PyValueError::new_err(
                 "Either connection_string or server must be provided",
@@ -170,8 +113,6 @@ impl Transaction {
         Ok(Transaction {
             conn: Arc::new(AsyncMutex::new(None)),
             config: Arc::new(config),
-            server,
-            port,
             _ssl_config: ssl_config,
             azure_credential,
         })
@@ -189,19 +130,10 @@ impl Transaction {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             // Execute query on the held connection
             let execution_result = {
@@ -250,19 +182,10 @@ impl Transaction {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             // Execute command on the held connection
             let affected = {
@@ -302,19 +225,10 @@ impl Transaction {
         let batch_commands = parse_batch_items(commands, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -343,19 +257,10 @@ impl Transaction {
         let batch_queries = parse_batch_items(queries, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -383,19 +288,10 @@ impl Transaction {
     pub fn begin<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             // Execute BEGIN TRANSACTION
             {
@@ -499,15 +395,13 @@ impl Transaction {
     async fn ensure_connected(
         conn: &Arc<AsyncMutex<Option<SingleConnectionType>>>,
         config: &Arc<Config>,
-        server: &str,
-        port: u16,
         azure_credential: Option<&PyAzureCredential>,
     ) -> PyResult<()> {
         // Establish connection if not already connected
         {
             let mut conn_guard = conn.lock().await;
             if conn_guard.is_none() {
-                let tcp_stream = TcpStream::connect((server, port)).await.map_err(|e| {
+                let tcp_stream = TcpStream::connect(config.get_addr()).await.map_err(|e| {
                     create_connection_error(format!("Failed to connect to server: {}", e))
                 })?;
 
@@ -531,170 +425,3 @@ impl Transaction {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::extract_host_port_from_connection_string;
-
-    // Helper to call the parser with a full ADO.NET-style string.
-    fn parse(s: &str) -> (String, u16) {
-        extract_host_port_from_connection_string(s)
-    }
-
-    // --- Server= (original key) ---
-
-    #[test]
-    fn server_hostname_only() {
-        assert_eq!(parse("Server=myhost;Database=db"), ("myhost".into(), 1433));
-    }
-
-    #[test]
-    fn server_hostname_with_port() {
-        assert_eq!(
-            parse("Server=myhost,5000;Database=db"),
-            ("myhost".into(), 5000)
-        );
-    }
-
-    #[test]
-    fn server_hostname_with_instance() {
-        assert_eq!(
-            parse(r"Server=myhost\SQLEXPRESS;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-
-    #[test]
-    fn server_key_case_insensitive_upper() {
-        assert_eq!(parse("SERVER=myhost;Database=db"), ("myhost".into(), 1433));
-    }
-
-    #[test]
-    fn server_key_case_insensitive_mixed() {
-        assert_eq!(parse("Server=myhost;Database=db"), ("myhost".into(), 1433));
-    }
-
-    // --- Data Source= ---
-
-    #[test]
-    fn data_source_hostname_only() {
-        assert_eq!(
-            parse("Data Source=myhost;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-
-    #[test]
-    fn data_source_hostname_with_port() {
-        assert_eq!(
-            parse("Data Source=myhost,1500;Database=db"),
-            ("myhost".into(), 1500)
-        );
-    }
-
-    #[test]
-    fn data_source_case_insensitive() {
-        assert_eq!(
-            parse("DATA SOURCE=myhost;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-
-    // --- Addr= ---
-
-    #[test]
-    fn addr_hostname_only() {
-        assert_eq!(parse("Addr=myhost;Database=db"), ("myhost".into(), 1433));
-    }
-
-    #[test]
-    fn addr_hostname_with_port() {
-        assert_eq!(
-            parse("Addr=myhost,2000;Database=db"),
-            ("myhost".into(), 2000)
-        );
-    }
-
-    #[test]
-    fn addr_case_insensitive() {
-        assert_eq!(parse("ADDR=myhost;Database=db"), ("myhost".into(), 1433));
-    }
-
-    // --- Address= ---
-
-    #[test]
-    fn address_hostname_only() {
-        assert_eq!(
-            parse("Address=myhost;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-
-    #[test]
-    fn address_hostname_with_port() {
-        assert_eq!(
-            parse("Address=myhost,3000;Database=db"),
-            ("myhost".into(), 3000)
-        );
-    }
-
-    // --- Network Address= ---
-
-    #[test]
-    fn network_address_hostname_only() {
-        assert_eq!(
-            parse("Network Address=myhost;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-
-    #[test]
-    fn network_address_hostname_with_port() {
-        assert_eq!(
-            parse("Network Address=myhost,4000;Database=db"),
-            ("myhost".into(), 4000)
-        );
-    }
-
-    #[test]
-    fn network_address_case_insensitive() {
-        assert_eq!(
-            parse("NETWORK ADDRESS=myhost;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-
-    // --- Fallback ---
-
-    #[test]
-    fn empty_string_falls_back_to_localhost() {
-        assert_eq!(parse(""), ("localhost".into(), 1433));
-    }
-
-    #[test]
-    fn unknown_key_falls_back_to_localhost() {
-        assert_eq!(
-            parse("Database=mydb;User Id=sa"),
-            ("localhost".into(), 1433)
-        );
-    }
-
-    // --- Hostname case preservation ---
-
-    #[test]
-    fn hostname_case_preserved() {
-        assert_eq!(
-            parse("Server=MyMixedCaseHost;Database=db"),
-            ("MyMixedCaseHost".into(), 1433)
-        );
-    }
-
-    // --- Invalid port falls back to 1433 ---
-
-    #[test]
-    fn invalid_port_falls_back_to_1433() {
-        assert_eq!(
-            parse("Server=myhost,notaport;Database=db"),
-            ("myhost".into(), 1433)
-        );
-    }
-}
