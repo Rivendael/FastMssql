@@ -102,6 +102,18 @@ class Transaction:
         """Execute an INSERT/UPDATE/DELETE/DDL command."""
         return await self._rust_conn.execute(sql, params)
 
+    async def execute_batch(self, commands):
+        """Execute multiple commands in sequence on this connection."""
+        return await self._rust_conn.execute_batch(commands)
+
+    async def query_batch(self, queries):
+        """Execute multiple SELECT queries in sequence on this connection."""
+        return await self._rust_conn.query_batch(queries)
+
+    def is_connected(self):
+        """Return True if the underlying connection is currently established."""
+        return self._rust_conn.is_connected()
+
     async def begin(self):
         """Begin a transaction."""
         # If previous transaction completed, reset flags to allow reuse

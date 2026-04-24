@@ -210,12 +210,11 @@ pub fn query_batch<'p>(
     })
 }
 
-/// Wraps a SQL Server identifier in square brackets and escapes embedded `]` as `]]`.
-/// This prevents SQL injection when identifiers are concatenated into query strings.
-fn quote_identifier(name: &str) -> String {
-    let mut quoted = String::with_capacity(name.len() + 2);
+/// Wraps a single SQL Server identifier part in square brackets and escapes `]` as `]]`.
+fn quote_identifier_part(part: &str) -> String {
+    let mut quoted = String::with_capacity(part.len() + 2);
     quoted.push('[');
-    for ch in name.chars() {
+    for ch in part.chars() {
         if ch == ']' {
             quoted.push(']'); // escape ] by doubling
         }
@@ -223,6 +222,31 @@ fn quote_identifier(name: &str) -> String {
     }
     quoted.push(']');
     quoted
+}
+
+/// Quotes a (possibly multipart) SQL Server identifier, handling forms like:
+///   table, schema.table, db.schema.table, db..table
+///
+/// Each dot-separated part is independently bracket-quoted so that:
+/// - `dbo.users`     → `[dbo].[users]`
+/// - `mydb..users`   → `[mydb]..[users]`  (empty middle part preserved as-is)
+/// - `users`         → `[users]`
+///
+/// This prevents SQL injection while keeping qualification semantics intact.
+fn quote_identifier(name: &str) -> String {
+    let parts: Vec<&str> = name.split('.').collect();
+    let mut result = String::with_capacity(name.len() + parts.len() * 2);
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            result.push('.');
+        }
+        if part.is_empty() {
+            // preserve empty parts (e.g. the middle segment in db..table)
+        } else {
+            result.push_str(&quote_identifier_part(part));
+        }
+    }
+    result
 }
 
 pub fn bulk_insert<'p>(

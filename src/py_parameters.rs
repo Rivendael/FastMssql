@@ -138,6 +138,21 @@ impl Parameters {
     }
 
     pub fn to_list(&self, py: Python) -> PyResult<Py<PyList>> {
+        let named_len = self.named.bind(py).len();
+        if named_len > 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Named parameters are not supported by the SQL Server wire protocol. \
+                 Use positional parameters (Parameters(value1, value2, ...)) instead. \
+                 Found {} named parameter(s): {:?}",
+                named_len,
+                self.named
+                    .bind(py)
+                    .keys()
+                    .iter()
+                    .map(|k| k.str().map(|s| s.to_string()).unwrap_or_default())
+                    .collect::<Vec<_>>()
+            )));
+        }
         let mut values = Vec::new();
         for param_py in &self.positional {
             let param = param_py.borrow(py);

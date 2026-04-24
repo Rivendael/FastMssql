@@ -853,6 +853,10 @@ class Transaction:
         """Close the connection."""
         ...
 
+    def is_connected(self) -> bool:
+        """Return True if the underlying connection is currently established."""
+        ...
+
     async def __aenter__(self) -> Transaction:
         """Async context manager entry (begins transaction)."""
         ...

@@ -198,10 +198,14 @@ impl PyAzureCredential {
         };
 
         // Compute expiry with safety buffer and write directly into the held guard.
-        let buffer_secs = ((expires_in as f64 * 0.10) as u64).max(30).min(600);
+        // Clamp the buffer so it never exceeds expires_in, preventing subtraction overflow
+        // if the token endpoint returns a small or zero expires_in value.
+        let buffer_secs = ((expires_in as f64 * 0.10) as u64)
+            .max(30)
+            .min(600)
+            .min(expires_in);
         let expires_at = Instant::now()
-            + Duration::from_secs(expires_in)
-            - Duration::from_secs(buffer_secs);
+            + Duration::from_secs(expires_in.saturating_sub(buffer_secs));
         *cache_guard = Some(CachedToken {
             access_token: token.clone(),
             expires_at,
