@@ -337,7 +337,11 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>,
         _traceback: Option<Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        future_into_py(py, async move { Ok(()) })
+        let pool = Arc::clone(&self.pool);
+        future_into_py(py, async move {
+            *pool.write().await = None;
+            Ok(())
+        })
     }
 
     /// Explicitly establish a connection (initialize the pool if not already connected)
@@ -380,6 +384,7 @@ impl PyConnection {
             Arc::clone(&self.pool),
             Arc::clone(&self.config),
             self.pool_config.clone(),
+            self.azure_credential.clone(),
             py,
             queries,
         )
@@ -396,6 +401,7 @@ impl PyConnection {
             Arc::clone(&self.pool),
             Arc::clone(&self.config),
             self.pool_config.clone(),
+            self.azure_credential.clone(),
             py,
             table_name,
             columns,
@@ -412,6 +418,7 @@ impl PyConnection {
             Arc::clone(&self.pool),
             Arc::clone(&self.config),
             self.pool_config.clone(),
+            self.azure_credential.clone(),
             py,
             commands,
         )

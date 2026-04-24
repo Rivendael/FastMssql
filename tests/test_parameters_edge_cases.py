@@ -429,3 +429,61 @@ class TestParameterBoundsChecking:
                 ), f"Expected parameter limit error, got: {exc_info.value}"
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
+
+
+class TestNamedParametersRejected:
+    """Finding #14: Parameters.to_list() must raise ValueError for named params.
+
+    SQL Server only supports positional parameters. Named parameters passed via
+    Parameters(key=value) or .set() must be rejected with a clear error rather
+    than silently discarded.
+    """
+
+    def test_to_list_raises_for_named_only(self):
+        """to_list() raises ValueError when only named parameters are present."""
+        params = Parameters(city="London")
+        with pytest.raises(ValueError, match="Named parameters are not supported"):
+            params.to_list()
+
+    def test_to_list_raises_for_mixed_positional_and_named(self):
+        """to_list() raises ValueError when both positional and named params exist."""
+        params = Parameters(42, "hello", city="London")
+        with pytest.raises(ValueError, match="Named parameters are not supported"):
+            params.to_list()
+
+    def test_to_list_raises_for_set_method(self):
+        """to_list() raises ValueError when named param was added via .set()."""
+        params = Parameters().add(1).set("key", "value")
+        with pytest.raises(ValueError, match="Named parameters are not supported"):
+            params.to_list()
+
+    def test_to_list_error_message_includes_param_names(self):
+        """ValueError message includes the names of the offending parameters."""
+        params = Parameters(user_id=42, city="London")
+        with pytest.raises(ValueError) as exc_info:
+            params.to_list()
+        msg = str(exc_info.value)
+        assert "user_id" in msg or "city" in msg
+
+    def test_to_list_succeeds_with_positional_only(self):
+        """to_list() still works correctly when there are no named parameters."""
+        params = Parameters(1, "hello", 3.14)
+        result = params.to_list()
+        assert result == [1, "hello", 3.14]
+
+    def test_to_list_succeeds_with_empty_parameters(self):
+        """to_list() works on an empty Parameters object (no regression)."""
+        params = Parameters()
+        assert params.to_list() == []
+
+    def test_len_still_counts_named_params(self):
+        """len(Parameters) still reflects named params even though to_list() rejects them."""
+        params = Parameters(1, 2, city="London")
+        assert len(params) == 3
+
+    def test_named_dict_accessible_before_to_list(self):
+        """The .named property is still readable even though to_list() will reject them."""
+        params = Parameters(city="London", country="UK")
+        assert len(params.named) == 2
+        assert params.named["city"].value == "London"
+        assert params.named["country"].value == "UK"

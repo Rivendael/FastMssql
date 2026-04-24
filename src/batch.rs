@@ -1,8 +1,9 @@
+use crate::azure_auth::PyAzureCredential;
 use crate::parameter_conversion::{
     FastParameter, convert_parameters_to_fast, python_to_fast_parameter,
 };
 use crate::pool_config::PyPoolConfig;
-use crate::pool_manager::{ConnectionPool, ensure_pool_initialized};
+use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::types::{create_connection_error, create_sql_error};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -123,6 +124,7 @@ pub fn execute_batch<'p>(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
+    azure_credential: Option<PyAzureCredential>,
     py: Python<'p>,
     commands: &Bound<'p, PyList>,
 ) -> PyResult<Bound<'p, PyAny>> {
@@ -133,7 +135,9 @@ pub fn execute_batch<'p>(
     let pool_config = pool_config.clone();
 
     future_into_py(py, async move {
-        let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
+        let pool_ref =
+            ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                .await?;
 
         let mut conn = pool_ref
             .get()
@@ -172,6 +176,7 @@ pub fn query_batch<'p>(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
+    azure_credential: Option<PyAzureCredential>,
     py: Python<'p>,
     queries: &Bound<'p, PyList>,
 ) -> PyResult<Bound<'p, PyAny>> {
@@ -182,7 +187,9 @@ pub fn query_batch<'p>(
     let pool_config = pool_config.clone();
 
     future_into_py(py, async move {
-        let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
+        let pool_ref =
+            ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                .await?;
 
         let mut conn = pool_ref.get().await.map_err(|e| {
             create_connection_error(format!("Failed to get connection from pool: {}", e))
@@ -203,10 +210,50 @@ pub fn query_batch<'p>(
     })
 }
 
+/// Wraps a single SQL Server identifier part in square brackets and escapes `]` as `]]`.
+fn quote_identifier_part(part: &str) -> String {
+    let mut quoted = String::with_capacity(part.len() + 2);
+    quoted.push('[');
+    for ch in part.chars() {
+        if ch == ']' {
+            quoted.push(']'); // escape ] by doubling
+        }
+        quoted.push(ch);
+    }
+    quoted.push(']');
+    quoted
+}
+
+/// Quotes a (possibly multipart) SQL Server identifier, handling forms like:
+///   table, schema.table, db.schema.table, db..table
+///
+/// Each dot-separated part is independently bracket-quoted so that:
+/// - `dbo.users`     → `[dbo].[users]`
+/// - `mydb..users`   → `[mydb]..[users]`  (empty middle part preserved as-is)
+/// - `users`         → `[users]`
+///
+/// This prevents SQL injection while keeping qualification semantics intact.
+fn quote_identifier(name: &str) -> String {
+    let parts: Vec<&str> = name.split('.').collect();
+    let mut result = String::with_capacity(name.len() + parts.len() * 2);
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            result.push('.');
+        }
+        if part.is_empty() {
+            // preserve empty parts (e.g. the middle segment in db..table)
+        } else {
+            result.push_str(&quote_identifier_part(part));
+        }
+    }
+    result
+}
+
 pub fn bulk_insert<'p>(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
+    azure_credential: Option<PyAzureCredential>,
     py: Python<'p>,
     table_name: String,
     columns: Vec<String>,
@@ -236,7 +283,9 @@ pub fn bulk_insert<'p>(
     let col_count = columns.len();
 
     future_into_py(py, async move {
-        let pool_ref = ensure_pool_initialized(pool, config, &pool_config).await?;
+        let pool_ref =
+            ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                .await?;
 
         let mut conn = pool_ref
             .get()
@@ -256,8 +305,13 @@ pub fn bulk_insert<'p>(
             rows_per_batch
         };
 
-        // Pre-build the column list once
-        let columns_sql = columns.join(", ");
+        // Quote identifiers to prevent SQL injection (bracket-quote per SQL Server rules)
+        let quoted_table = quote_identifier(&table_name);
+        let columns_sql = columns
+            .iter()
+            .map(|c| quote_identifier(c))
+            .collect::<Vec<_>>()
+            .join(", ");
 
         for chunk in flat_data.chunks(rows_per_batch * col_count) {
             let row_count_in_batch = chunk.len() / col_count;
@@ -265,7 +319,7 @@ pub fn bulk_insert<'p>(
             // Optimize: Use String with pre-allocated capacity instead of format!
             let mut sql = String::with_capacity(100 + row_count_in_batch * (col_count * 5));
             sql.push_str("INSERT INTO ");
-            sql.push_str(&table_name);
+            sql.push_str(&quoted_table);
             sql.push_str(" (");
             sql.push_str(&columns_sql);
             sql.push_str(") VALUES ");

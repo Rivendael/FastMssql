@@ -102,6 +102,18 @@ class Transaction:
         """Execute an INSERT/UPDATE/DELETE/DDL command."""
         return await self._rust_conn.execute(sql, params)
 
+    async def execute_batch(self, commands):
+        """Execute multiple commands in sequence on this connection."""
+        return await self._rust_conn.execute_batch(commands)
+
+    async def query_batch(self, queries):
+        """Execute multiple SELECT queries in sequence on this connection."""
+        return await self._rust_conn.query_batch(queries)
+
+    def is_connected(self):
+        """Return True if the underlying connection is currently established."""
+        return self._rust_conn.is_connected()
+
     async def begin(self):
         """Begin a transaction."""
         # If previous transaction completed, reset flags to allow reuse
@@ -156,6 +168,11 @@ class Transaction:
                 await self.rollback()
             except Exception:
                 pass
+        finally:
+            # Always close the TCP connection so it is not held open until GC.
+            # close() issues a best-effort ROLLBACK before dropping the stream,
+            # so calling it here is safe even after a successful commit/rollback.
+            await self.close()
 
         self._reset_transaction_flags()
         return False  # Don't suppress exceptions

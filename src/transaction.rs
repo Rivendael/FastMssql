@@ -1,4 +1,3 @@
-use parking_lot::Mutex as SyncMutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -16,38 +15,6 @@ use crate::parameter_conversion::convert_parameters_to_fast;
 use crate::ssl_config::PySslConfig;
 use crate::types::{create_connection_error, create_sql_error};
 
-/// Extract host and port from connection string
-fn extract_host_port_from_connection_string(conn_str: &str) -> (String, u16) {
-    let server_part = conn_str
-        .split("Server=")
-        .nth(1)
-        .and_then(|s| s.split(';').next())
-        .map(|s| s.trim())
-        .unwrap_or("localhost");
-
-    if let Some(port_str) = server_part.split(',').nth(1) {
-        // Format: "hostname,port"
-        let srv = server_part
-            .split(',')
-            .next()
-            .unwrap_or("localhost")
-            .to_string();
-        let p = port_str.trim().parse::<u16>().unwrap_or(1433);
-        (srv, p)
-    } else if server_part.contains('\\') {
-        // Format: "hostname\\instance"
-        let srv = server_part
-            .split('\\')
-            .next()
-            .unwrap_or("localhost")
-            .to_string();
-        (srv, 1433u16)
-    } else {
-        // Format: "hostname"
-        (server_part.to_string(), 1433u16)
-    }
-}
-
 /// Type for a single direct connection (not pooled)
 type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 
@@ -58,11 +25,8 @@ type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
 pub struct Transaction {
     conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
     config: Arc<Config>,
-    server: String, // Server host/address for TCP connection
-    port: u16,      // Port for TCP connection
     _ssl_config: Option<PySslConfig>,
     azure_credential: Option<PyAzureCredential>,
-    connected: Arc<SyncMutex<bool>>,
 }
 
 #[pymethods]
@@ -85,14 +49,9 @@ impl Transaction {
         // Store the original server parameter for validation before it gets reassigned
         let server_param = server.clone();
 
-        let (config, server, port) = if let Some(conn_str) = connection_string {
-            let config = Config::from_ado_string(&conn_str)
-                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?;
-
-            // Extract server and port from connection string
-            let (server, port) = extract_host_port_from_connection_string(&conn_str);
-
-            (config, server, port)
+        let config = if let Some(conn_str) = connection_string {
+            Config::from_ado_string(&conn_str)
+                .map_err(|e| PyValueError::new_err(format!("Invalid connection string: {}", e)))?
         } else if let Some(srv) = server {
             let mut config = Config::new();
             config.host(&srv);
@@ -137,7 +96,7 @@ impl Transaction {
             if let Some(ref ssl_cfg) = ssl_config {
                 ssl_cfg.apply_to_config(&mut config);
             }
-            (config, srv, port.unwrap_or(1433))
+            config
         } else {
             return Err(PyValueError::new_err(
                 "Either connection_string or server must be provided",
@@ -154,11 +113,8 @@ impl Transaction {
         Ok(Transaction {
             conn: Arc::new(AsyncMutex::new(None)),
             config: Arc::new(config),
-            server,
-            port,
             _ssl_config: ssl_config,
             azure_credential,
-            connected: Arc::new(SyncMutex::new(false)),
         })
     }
 
@@ -174,21 +130,10 @@ impl Transaction {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                &connected,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             // Execute query on the held connection
             let execution_result = {
@@ -237,21 +182,10 @@ impl Transaction {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                &connected,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             // Execute command on the held connection
             let affected = {
@@ -291,21 +225,10 @@ impl Transaction {
         let batch_commands = parse_batch_items(commands, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                &connected,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -334,21 +257,10 @@ impl Transaction {
         let batch_queries = parse_batch_items(queries, py)?;
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                &connected,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             let all_results = {
                 let mut conn_guard = conn.lock().await;
@@ -376,21 +288,10 @@ impl Transaction {
     pub fn begin<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
         let config = Arc::clone(&self.config);
-        let connected = Arc::clone(&self.connected);
-        let server = self.server.clone();
-        let port = self.port;
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            Self::ensure_connected(
-                &conn,
-                &config,
-                &server,
-                port,
-                &connected,
-                azure_credential.as_ref(),
-            )
-            .await?;
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
 
             // Execute BEGIN TRANSACTION
             {
@@ -460,19 +361,16 @@ impl Transaction {
     /// Close the connection
     pub fn close<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
-        let connected = Arc::clone(&self.connected);
 
         future_into_py(py, async move {
             {
                 let mut conn_guard = conn.lock().await;
-                if let Some(_c) = conn_guard.take() {
-                    // Connection will be dropped and closed when it leaves scope
+                if let Some(mut c) = conn_guard.take() {
+                    // Best-effort rollback: silently ignore errors (connection may already be
+                    // broken or no transaction may be active — both are fine).
+                    let _ = c.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION").await;
+                    // Connection is dropped here, closing the TCP stream.
                 }
-            }
-
-            {
-                let mut connected_guard = connected.lock();
-                *connected_guard = false;
             }
 
             Ok(())
@@ -481,7 +379,13 @@ impl Transaction {
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        *self.connected.lock()
+        // Derive connectivity from the actual connection object rather than a stale flag.
+        // If the lock is held (query in progress), the connection is active → true.
+        // If we can peek and it's Some, connected. If None, not connected.
+        match self.conn.try_lock() {
+            Ok(guard) => guard.is_some(),
+            Err(_) => true,
+        }
     }
 }
 
@@ -491,16 +395,13 @@ impl Transaction {
     async fn ensure_connected(
         conn: &Arc<AsyncMutex<Option<SingleConnectionType>>>,
         config: &Arc<Config>,
-        server: &str,
-        port: u16,
-        connected: &Arc<SyncMutex<bool>>,
         azure_credential: Option<&PyAzureCredential>,
     ) -> PyResult<()> {
         // Establish connection if not already connected
         {
             let mut conn_guard = conn.lock().await;
             if conn_guard.is_none() {
-                let tcp_stream = TcpStream::connect((server, port)).await.map_err(|e| {
+                let tcp_stream = TcpStream::connect(config.get_addr()).await.map_err(|e| {
                     create_connection_error(format!("Failed to connect to server: {}", e))
                 })?;
 
@@ -520,12 +421,7 @@ impl Transaction {
             }
         }
 
-        // Mark as connected
-        {
-            let mut connected_guard = connected.lock();
-            *connected_guard = true;
-        }
-
         Ok(())
     }
 }
+

@@ -128,13 +128,22 @@ fn handle_binary(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 }
 
 #[inline(always)]
+fn money_to_decimal_string(val: f64) -> String {
+    // MONEY/SMALLMONEY are stored on the wire as integer * 10^-4.
+    // Reconstruct via integer arithmetic so the f64 representation never
+    // introduces rounding artefacts into the final Decimal string.
+    let units = (val * 10_000.0).round() as i64;
+    let sign = if units < 0 { "-" } else { "" };
+    let abs_units = units.unsigned_abs();
+    format!("{}{}.{:04}", sign, abs_units / 10_000, abs_units % 10_000)
+}
+
+#[inline(always)]
 fn handle_money(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => {
-            // Convert to Decimal to preserve precision for financial data
             let decimal_class = py.import("decimal")?.getattr("Decimal")?;
-            let decimal_str = val.to_string();
-            Ok(decimal_class.call1((decimal_str,))?.unbind())
+            Ok(decimal_class.call1((money_to_decimal_string(val),))?.unbind())
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
@@ -148,10 +157,8 @@ fn handle_money(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_money4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<f64, usize>(index) {
         Ok(Some(val)) => {
-            // Convert to Decimal to preserve precision for financial data
             let decimal_class = py.import("decimal")?.getattr("Decimal")?;
-            let decimal_str = val.to_string();
-            Ok(decimal_class.call1((decimal_str,))?.unbind())
+            Ok(decimal_class.call1((money_to_decimal_string(val),))?.unbind())
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(

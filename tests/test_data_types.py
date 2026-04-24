@@ -887,3 +887,113 @@ async def test_nullable_float_columns(test_config: Config):
     row = rows[1]
     assert row.get("col_float") is None
     assert row.get("col_real") is None
+
+
+# ---------------------------------------------------------------------------
+# MONEY / SMALLMONEY precision tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_money_returns_decimal(test_config: Config):
+    """MONEY and SMALLMONEY columns must come back as Decimal, not float."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(1.23 AS MONEY) AS m, CAST(1.23 AS SMALLMONEY) AS sm"
+        )
+    row = result.rows()[0]
+    assert isinstance(row.get("m"), Decimal), (
+        f"MONEY should be Decimal, got {type(row.get('m'))}"
+    )
+    assert isinstance(row.get("sm"), Decimal), (
+        f"SMALLMONEY should be Decimal, got {type(row.get('sm'))}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_money_exact_four_decimal_places(test_config: Config):
+    """Values with all four significant decimal places must be exact."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(9999.9999 AS MONEY) AS m, CAST(9999.9999 AS SMALLMONEY) AS sm"
+        )
+    row = result.rows()[0]
+    assert row.get("m") == Decimal("9999.9999"), (
+        f"MONEY precision failure: {row.get('m')!r}"
+    )
+    assert row.get("sm") == Decimal("9999.9999"), (
+        f"SMALLMONEY precision failure: {row.get('sm')!r}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_money_negative_value(test_config: Config):
+    """Negative MONEY/SMALLMONEY values must preserve sign and precision."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(-1234.5678 AS MONEY) AS m, CAST(-1234.5678 AS SMALLMONEY) AS sm"
+        )
+    row = result.rows()[0]
+    assert row.get("m") == Decimal("-1234.5678"), (
+        f"Negative MONEY precision failure: {row.get('m')!r}"
+    )
+    assert row.get("sm") == Decimal("-1234.5678"), (
+        f"Negative SMALLMONEY precision failure: {row.get('sm')!r}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_money_zero(test_config: Config):
+    """Zero MONEY/SMALLMONEY must round-trip cleanly."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(0 AS MONEY) AS m, CAST(0 AS SMALLMONEY) AS sm"
+        )
+    row = result.rows()[0]
+    assert row.get("m") == Decimal("0"), f"MONEY zero failure: {row.get('m')!r}"
+    assert row.get("sm") == Decimal("0"), f"SMALLMONEY zero failure: {row.get('sm')!r}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_money_null(test_config: Config):
+    """NULL MONEY/SMALLMONEY must come back as None."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(NULL AS MONEY) AS m, CAST(NULL AS SMALLMONEY) AS sm"
+        )
+    row = result.rows()[0]
+    assert row.get("m") is None, "NULL MONEY should be None"
+    assert row.get("sm") is None, "NULL SMALLMONEY should be None"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_money_no_precision_loss_vs_decimal_column(test_config: Config):
+    """The Decimal returned for MONEY must equal the same value from a DECIMAL column.
+
+    This is the regression test for the f64→Decimal precision bug: if the
+    conversion went through f64.to_string() any rounding artefact would make
+    the MONEY value differ from the exact DECIMAL value.
+    """
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT
+                CAST(1234.5679 AS MONEY)          AS money_val,
+                CAST(1234.5679 AS DECIMAL(18, 4)) AS decimal_val,
+                CAST(1234.5679 AS SMALLMONEY)     AS smallmoney_val
+        """)
+    row = result.rows()[0]
+    money_val = row.get("money_val")
+    decimal_val = row.get("decimal_val")
+    smallmoney_val = row.get("smallmoney_val")
+
+    assert money_val == decimal_val, (
+        f"MONEY {money_val!r} != DECIMAL {decimal_val!r}: precision loss detected"
+    )
+    assert smallmoney_val == decimal_val, (
+        f"SMALLMONEY {smallmoney_val!r} != DECIMAL {decimal_val!r}: precision loss detected"
+    )

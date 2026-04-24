@@ -87,7 +87,7 @@ async def test_context_manager_sql_error(test_config: Config):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_context_manager_exit_cleanup(test_config: Config):
-    """Test that context manager properly cleans up resources."""
+    """Test that context manager properly closes the pool on exit."""
     try:
         conn = Connection(test_config.connection_string)
 
@@ -100,10 +100,26 @@ async def test_context_manager_exit_cleanup(test_config: Config):
             result = await conn.query("SELECT 1 as val")
             assert result.rows()[0]["val"] == 1
 
-        # After context - connection might be reused, so just test it's still usable
-        # The context manager may not disconnect immediately
-        result = await conn.query("SELECT 1 as val")
-        assert result.has_rows()
+        # After context - pool must be closed
+        assert not await conn.is_connected()
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_context_manager_exit_cleanup_on_exception(test_config: Config):
+    """Test that context manager closes the pool even when an exception is raised."""
+    try:
+        conn = Connection(test_config.connection_string)
+
+        with pytest.raises(ValueError):
+            async with conn:
+                assert await conn.is_connected()
+                raise ValueError("Test exception")
+
+        # Pool must be closed despite the exception
+        assert not await conn.is_connected()
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
 
