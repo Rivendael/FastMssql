@@ -12,7 +12,7 @@ import pytest
 from conftest import Config
 
 try:
-    from fastmssql import Connection, Transaction, TypedNull, SqlError
+    from fastmssql import Connection, TypedNull
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -438,32 +438,20 @@ async def test_parameter_type_explicit_casting(test_config: Config):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_parameter_typed_null(test_config: Config):
-    """Test explicit type casting in queries."""
+    """Test explicit typed nulls in queries (unfortunately cant use stored procedures here)."""
     try:
-        async with Transaction(test_config.connection_string) as tx:
-            # Create test stored procedure
+        async with Connection(test_config.connection_string) as conn:
+            # This should yield NULL (1 + tinyint of null)
+            res = await conn.query("SELECT 1 + @P1 as value", [None])
+            value = res.rows()[0]["value"]
+            assert value is None
+
+            err = None
             try:
-                await tx.execute("CREATE PROCEDURE test_proc (@dt date) AS BEGIN; THROW 56000, 'ok', 0 END")
+                res = await conn.query("SELECT 1 + @P1 as value", [TypedNull.DATE])
             except Exception as e:
-                if "Incorrect syntax near the keyword 'PROCEDURE'" in str(e):
-                    pytest.skip(
-                        "Stored procedures not supported in this SQL Server edition"
-                    )
-                else:
-                    raise
+                err = str(e)
+            assert err is not None and "date is incompatible with int" in err
 
-            # This should fail
-            try:
-                await tx.execute("EXECUTE test_proc @P1", [None])
-            except Exception as e:
-                assert "tinyint" in str(e) and "date" in str(e)
-
-            # Should work with a code of 56000
-            try:
-                await tx.execute("EXECUTE test_proc @P1", [TypedNull.DATE])
-            except SqlError as e:
-                assert e.code == 56000
-
-            await tx.rollback()
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
