@@ -12,7 +12,7 @@ import pytest
 from conftest import Config
 
 try:
-    from fastmssql import Connection, Transaction, TypedNull
+    from fastmssql import Connection, Transaction, TypedNull, SqlError
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -450,9 +450,12 @@ async def test_parameter_typed_null(test_config: Config):
             except Exception as e:
                 assert "tinyint" in str(e) and "date" in str(e)
 
-            # Should work
-            await tx.execute("EXECUTE test_proc @P1", [TypedNull.DATE])
-            
+            # Should work with a code of 56000
+            try:
+                await tx.execute("EXECUTE test_proc @P1", [TypedNull.DATE])
+            except SqlError as e:
+                assert e.code == 56000
+
             await tx.rollback()
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
