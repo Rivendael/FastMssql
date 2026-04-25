@@ -446,12 +446,12 @@ async def test_parameter_typed_null(test_config: Config):
 
             # This should fail
             try:
-                await tx.execute("EXECUTE test_proc @P1", None)
+                await tx.execute("EXECUTE test_proc @P1", [None])
             except Exception as e:
                 assert "tinyint" in str(e) and "date" in str(e)
 
             # Should work
-            await tx.execute("EXECUTE test_proc @P1", TypedNull.DATE)
+            await tx.execute("EXECUTE test_proc @P1", [TypedNull.DATE])
             
             await tx.rollback()
     except Exception as e:
