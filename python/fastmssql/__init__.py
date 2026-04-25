@@ -23,6 +23,7 @@ from .fastmssql import (
     SqlError,
     SslConfig,
     TlsError,
+    TypedNull,
     version,
 )
 from .fastmssql import (
@@ -196,5 +197,6 @@ __all__ = [
     "TlsError",
     "Transaction",
     "ApplicationIntent",
+    "TypedNull",
     "version",
 ]
