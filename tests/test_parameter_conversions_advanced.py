@@ -12,7 +12,7 @@ import pytest
 from conftest import Config
 
 try:
-    from fastmssql import Connection
+    from fastmssql import Connection, Transaction, TypedNull
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -432,5 +432,27 @@ async def test_parameter_type_explicit_casting(test_config: Config):
             value = result.rows()[0]["value"]
             if value is not None:
                 assert abs(float(value) - 3.14) < 0.1
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_parameter_typed_null(test_config: Config):
+    """Test explicit type casting in queries."""
+    try:
+        async with Transaction(test_config.connection_string) as tx:
+            # Create test stored procedure
+            await tx.execute("CREATE OR ALTER PROCEDURE test_proc (@dt date) AS BEGIN; THROW 56000, 'ok', 0 END")
+
+            # This should fail
+            try:
+                await tx.execute("EXECUTE test_proc @P1", None)
+            except Exception as e:
+                assert "tinyint" in str(e) and "date" in str(e)
+
+            # Should work
+            await tx.execute("EXECUTE test_proc @P1", TypedNull.DATE)
+            
+            await tx.rollback()
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
