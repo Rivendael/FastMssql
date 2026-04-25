@@ -26,6 +26,8 @@ pub use ssl_config::{EncryptionLevel, PySslConfig};
 pub use transaction::Transaction;
 pub use types::{PyFastRow, PyQueryStream, SqlError, SqlConnectionError, TlsError, ProtocolError, ConversionError};
 
+use crate::parameter_conversion::TypedNull;
+
 #[pyfunction]
 fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -61,6 +63,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<EncryptionLevel>()?;
     m.add_class::<PyAzureCredential>()?;
     m.add_class::<AzureCredentialType>()?;
+    m.add_class::<TypedNull>()?;
     
     {
         let py = m.py();

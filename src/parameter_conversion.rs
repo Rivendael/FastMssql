@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 
 #[derive(Debug, Clone)]
 pub enum FastParameter {
-    Null,
+    Null(TypedNull),
     Bool(bool),
     I64(i64),
     F64(f64),
@@ -18,7 +18,7 @@ pub enum FastParameter {
 impl tiberius::ToSql for FastParameter {
     fn to_sql(&self) -> tiberius::ColumnData<'_> {
         match self {
-            FastParameter::Null => tiberius::ColumnData::U8(None),
+            FastParameter::Null(t) => t.to_sql(),
             FastParameter::Bool(b) => b.to_sql(),
             FastParameter::I64(i) => i.to_sql(),
             FastParameter::F64(f) => f.to_sql(),
@@ -30,7 +30,12 @@ impl tiberius::ToSql for FastParameter {
 
 pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     if obj.is_none() {
-        return Ok(FastParameter::Null);
+        return Ok(FastParameter::Null(TypedNull::U8));
+    }
+
+    // Typed nulls
+    if let Ok(tn) = obj.extract::<TypedNull>() {
+        return Ok(FastParameter::Null(tn))
     }
 
     if let Ok(py_i) = obj.cast::<PyInt>() {
@@ -213,4 +218,124 @@ where
     }
 
     Ok(())
+}
+
+/// Class to store a typed null value
+/// 
+/// This is required as some SQL Server features such as stored procedures etc. sometimes require type information for which is 
+/// not possible for nulls when just using `None`. In such cases, SQL Server will complain about being unable to cast 'tinyint'
+/// to the desired data type.
+#[pyclass(name = "TypedNull", from_py_object)]
+#[derive(Debug, Clone)]
+pub enum TypedNull {
+    U8,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+    Bit,
+    String,
+    Guid,
+    Binary,
+    Numeric,
+    Xml,
+    DateTime,
+    SmallDateTime,
+    Time,
+    Date,
+    DateTime2,
+    DateTimeOffset
+}
+
+impl tiberius::ToSql for TypedNull {
+    fn to_sql(&self) -> tiberius::ColumnData<'_> {
+        match self {
+            TypedNull::U8 => tiberius::ColumnData::U8(None),
+            TypedNull::I16 => tiberius::ColumnData::I16(None),
+            TypedNull::I32 => tiberius::ColumnData::I32(None),
+            TypedNull::I64 => tiberius::ColumnData::I64(None),
+            TypedNull::F32 => tiberius::ColumnData::F32(None),
+            TypedNull::F64 => tiberius::ColumnData::F64(None),
+            TypedNull::Bit => tiberius::ColumnData::Bit(None),
+            TypedNull::String => tiberius::ColumnData::String(None),
+            TypedNull::Guid => tiberius::ColumnData::Guid(None),
+            TypedNull::Binary => tiberius::ColumnData::Binary(None),
+            TypedNull::Numeric => tiberius::ColumnData::Numeric(None),
+            TypedNull::Xml => tiberius::ColumnData::Xml(None),
+            TypedNull::DateTime => tiberius::ColumnData::DateTime(None),
+            TypedNull::SmallDateTime => tiberius::ColumnData::SmallDateTime(None),
+            TypedNull::Time => tiberius::ColumnData::Time(None),
+            TypedNull::Date => tiberius::ColumnData::Date(None),
+            TypedNull::DateTime2 => tiberius::ColumnData::DateTime2(None),
+            TypedNull::DateTimeOffset => tiberius::ColumnData::DateTimeOffset(None),
+        }
+    }
+}
+
+#[pymethods]
+impl TypedNull {
+    #[classattr]
+    const TINYINT: TypedNull = TypedNull::U8;
+    #[classattr]
+    const SMALLINT: TypedNull = TypedNull::I16;
+    #[classattr]
+    const INT: TypedNull = TypedNull::I32;
+    #[classattr]
+    const BIGINT: TypedNull = TypedNull::I64;
+    #[classattr]
+    const FLOAT32: TypedNull = TypedNull::F32;
+    #[classattr]
+    const FLOAT64: TypedNull = TypedNull::F64;
+    #[classattr]
+    const BIT: TypedNull = TypedNull::Bit;
+    #[classattr]
+    const STRING: TypedNull = TypedNull::String;
+    #[classattr]
+    const GUID: TypedNull = TypedNull::Guid;
+    #[classattr]
+    const BINARY: TypedNull = TypedNull::Binary;
+    #[classattr]
+    const NUMERIC: TypedNull = TypedNull::Numeric;
+    #[classattr]
+    const XML: TypedNull = TypedNull::Xml;
+    #[classattr]
+    const DATETIME: TypedNull = TypedNull::DateTime;
+    #[classattr]
+    const SMALLDATETIME: TypedNull = TypedNull::SmallDateTime;
+    #[classattr]
+    const TIME: TypedNull = TypedNull::Time;
+    #[classattr]
+    const DATE: TypedNull = TypedNull::Date;
+    #[classattr]
+    const DATETIME2: TypedNull = TypedNull::DateTime2;
+    #[classattr]
+    const DATETIMEOFFSET: TypedNull = TypedNull::DateTimeOffset;
+
+    pub fn __str__(&self) -> String {
+        match self {
+            TypedNull::U8 => "TINYINT".into(),
+            TypedNull::I16 => "SMALLINT".into(),
+            TypedNull::I32 => "INT".into(),
+            TypedNull::I64 => "BIGINT".into(),
+            TypedNull::F32 => "FLOAT32".into(),
+            TypedNull::F64 => "FLOAT64".into(),
+            TypedNull::Bit => "BIT".into(),
+            TypedNull::String => "STRING".into(),
+            TypedNull::Guid => "GUID".into(),
+            TypedNull::Binary => "BINARY".into(),
+            TypedNull::Numeric => "NUMERIC".into(),
+            TypedNull::Xml => "XML".into(),
+            TypedNull::DateTime => "DATETIME".into(),
+            TypedNull::SmallDateTime => "SMALLDATETIME".into(),
+            TypedNull::Time => "TIME".into(),
+            TypedNull::Date => "DATE".into(),
+            TypedNull::DateTime2 => "DATETIME2".into(),
+            TypedNull::DateTimeOffset => "DATETIMEOFFSET".into(),
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("TypedNull.{}", self.__str__())
+    }
 }
