@@ -1,6 +1,5 @@
-use chrono::{Datelike, Timelike};
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
+use pyo3::{IntoPyObjectExt, prelude::*};
 use pyo3::types::{PyBytes, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use tiberius::{ColumnType, Row};
 
@@ -189,18 +188,7 @@ fn handle_decimal(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_datetime(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<chrono::NaiveDateTime, usize>(index) {
         Ok(Some(val)) => {
-            let dt = pyo3::types::PyDateTime::new(
-                py,
-                val.year(),
-                val.month() as u8,
-                val.day() as u8,
-                val.hour() as u8,
-                val.minute() as u8,
-                val.second() as u8,
-                val.nanosecond() / 1000,
-                None,
-            )?;
-            Ok(dt.into_any().unbind())
+            val.into_py_any(py)
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
@@ -214,9 +202,7 @@ fn handle_datetime(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_date(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<chrono::NaiveDate, usize>(index) {
         Ok(Some(val)) => {
-            let date =
-                pyo3::types::PyDate::new(py, val.year(), val.month() as u8, val.day() as u8)?;
-            Ok(date.into_any().unbind())
+            Ok(val.into_py_any(py)?)
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
@@ -230,15 +216,7 @@ fn handle_date(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_time(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<chrono::NaiveTime, usize>(index) {
         Ok(Some(val)) => {
-            let time = pyo3::types::PyTime::new(
-                py,
-                val.hour() as u8,
-                val.minute() as u8,
-                val.second() as u8,
-                val.nanosecond() / 1000,
-                None,
-            )?;
-            Ok(time.into_any().unbind())
+            Ok(val.into_py_any(py)?)
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
@@ -252,24 +230,7 @@ fn handle_time(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 fn handle_datetimeoffset(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<chrono::DateTime<chrono::Utc>, usize>(index) {
         Ok(Some(val)) => {
-            let datetime_mod = py.import("datetime")?;
-            let timezone_class = datetime_mod.getattr("timezone")?;
-            let utc_obj = timezone_class.getattr("utc")?;
-            let tzinfo = utc_obj
-                .cast::<pyo3::types::PyTzInfo>()
-                .map_err(|_| PyValueError::new_err("Failed to get UTC timezone"))?;
-            let dt = pyo3::types::PyDateTime::new(
-                py,
-                val.year(),
-                val.month() as u8,
-                val.day() as u8,
-                val.hour() as u8,
-                val.minute() as u8,
-                val.second() as u8,
-                val.nanosecond() / 1000,
-                Some(tzinfo),
-            )?;
-            Ok(dt.into_any().unbind())
+            Ok(val.into_py_any(py)?)
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(

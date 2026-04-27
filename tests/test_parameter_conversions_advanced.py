@@ -438,20 +438,41 @@ async def test_parameter_type_explicit_casting(test_config: Config):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_parameter_typed_null(test_config: Config):
-    """Test explicit typed nulls in queries (unfortunately cant use stored procedures here)."""
+    """Test explicit typed nulls in queries (unfortunately cant use stored procedures here *yet*)."""
     try:
         async with Connection(test_config.connection_string) as conn:
+            await conn.execute(
+                """
+                CREATE PROCEDURE test_proc(@foo date)
+                AS
+                BEGIN
+                END
+                """
+            )
+
             # This should yield NULL (1 + tinyint of null)
             res = await conn.query("SELECT 1 + @P1 as value", [None])
             value = res.rows()[0]["value"]
             assert value is None
 
-            err = None
-            try:
-                res = await conn.query("SELECT 1 + @P1 as value", [TypedNull.DATE])
-            except Exception as e:
-                err = str(e)
-            assert err is not None and "date is incompatible with int" in err
+            # Due to ms-sql casting rules, these are the only types that seem to trigger for this specific
+            # check
+            for typ in [
+                (TypedNull.GUID, "uniqueidentifier"),
+                (TypedNull.TIME, "time"),
+                (TypedNull.DATE, "date"), 
+                (TypedNull.DATETIME2, "datetime2"),
+                (TypedNull.DATETIMEOFFSET, "datetimeoffset"),
+            ]:
+                print(typ)
+                err = None
+                try:
+                    res = await conn.query("SELECT 1 + @P1 as value", [typ[0]])
+                    print(res[0])
+                except Exception as e:
+                    err = str(e)
+                print(err)
+                assert err is not None and f"{typ[1]} is incompatible with int" in err
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
