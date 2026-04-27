@@ -441,15 +441,6 @@ async def test_parameter_typed_null(test_config: Config):
     """Test explicit typed nulls in queries (unfortunately cant use stored procedures here *yet*)."""
     try:
         async with Connection(test_config.connection_string) as conn:
-            await conn.execute(
-                """
-                CREATE PROCEDURE test_proc(@foo date)
-                AS
-                BEGIN
-                END
-                """
-            )
-
             # This should yield NULL (1 + tinyint of null)
             res = await conn.query("SELECT 1 + @P1 as value", [None])
             value = res.rows()[0]["value"]
