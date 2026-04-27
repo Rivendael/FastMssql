@@ -12,7 +12,7 @@ import pytest
 from conftest import Config
 
 try:
-    from fastmssql import Connection
+    from fastmssql import Connection, TypedNull
 except ImportError:
     pytest.fail("fastmssql not available - run 'maturin develop' first")
 
@@ -432,5 +432,26 @@ async def test_parameter_type_explicit_casting(test_config: Config):
             value = result.rows()[0]["value"]
             if value is not None:
                 assert abs(float(value) - 3.14) < 0.1
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_parameter_typed_null(test_config: Config):
+    """Test explicit typed nulls in queries (unfortunately cant use stored procedures here)."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            # This should yield NULL (1 + tinyint of null)
+            res = await conn.query("SELECT 1 + @P1 as value", [None])
+            value = res.rows()[0]["value"]
+            assert value is None
+
+            err = None
+            try:
+                res = await conn.query("SELECT 1 + @P1 as value", [TypedNull.DATE])
+            except Exception as e:
+                err = str(e)
+            assert err is not None and "date is incompatible with int" in err
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

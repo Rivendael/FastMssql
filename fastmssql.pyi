@@ -865,4 +865,34 @@ class Transaction:
         """Async context manager exit (commits or rolls back)."""
         ...
 
+class TypedNull(StrEnum):
+    """Class to store a typed null value
+
+    This is required as some SQL Server features such as stored procedures etc. sometimes require type information for which is 
+    not possible for nulls when just using `None`. In such cases, SQL Server will complain about being unable to cast 'tinyint'
+    to the desired data type.
+
+    If a TypedNull is not explicitly used, fastmssql will default to using tinyint as the 'underlying type'
+    when sending to SQL server
+    """
+
+    TINYINT = "TINYINT"
+    SMALLINT = "SMALLINT"
+    INT = "INT"
+    BIGINT = "BIGINT"
+    FLOAT32 = "FLOAT32"
+    FLOAT64 = "FLOAT64"
+    BIT = "BIT"
+    STRING = "STRING"
+    GUID = "GUID"
+    BINARY = "BINARY"
+    NUMERIC = "NUMERIC"
+    XML = "XML"
+    DATETIME = "DATETIME"
+    SMALLDATETIME = "SMALLDATETIME"
+    TIME = "TIME"
+    DATE = "DATE"
+    DATETIME2 = "DATETIME2"
+    DATETIMEOFFSET = "DATETIMEOFFSET"
+
 def version() -> str: ...
