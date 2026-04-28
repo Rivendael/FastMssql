@@ -667,6 +667,24 @@ class Connection:
         """
         ...
 
+    def simple_query(
+        self,
+        sql: str,
+    ) -> Coroutine[Any, Any, QueryStream]:
+        """
+        Execute a raw SQL query (non-prepared statement) that returns rows as an async stream.
+
+        Only use this when required (creating stored procedures may require this in certain cases)
+
+        Returns a QueryStream for memory-efficient iteration over large result sets.
+
+        Args:
+            sql: Raw SQL query
+        Returns:
+            QueryStream for iterating over result rows
+        """
+        ...
+
     def execute(
         self,
         sql: str,
@@ -792,6 +810,24 @@ class Transaction:
         params: Optional[List[Any]] = None,
     ) -> Coroutine[Any, Any, QueryStream]:
         """Execute a SELECT query that returns rows as a stream."""
+        ...
+
+    def simple_query(
+        self,
+        sql: str,
+    ) -> Coroutine[Any, Any, QueryStream]:
+        """
+        Execute a raw SQL query (non-prepared statement) that returns rows as an async stream.
+
+        Only use this when required (creating stored procedures may require this in certain cases)
+
+        Returns a QueryStream for memory-efficient iteration over large result sets.
+
+        Args:
+            sql: Raw SQL query
+        Returns:
+            QueryStream for iterating over result rows
+        """
         ...
 
     def execute(
