@@ -486,5 +486,7 @@ async def test_parameter_typed_null(test_config: Config):
                 res = await conn.query("EXECUTE test_sproc @P1", [typ[0]])
                 assert res[0]['status'] == 5
 
+            await conn.simple_query("DROP PROCEDURE IF EXISTS test_sproc")
+
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
