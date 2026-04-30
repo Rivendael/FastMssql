@@ -1,5 +1,6 @@
 use crate::py_parameters::Parameters;
 use crate::type_mapping;
+use chrono::{NaiveDate, NaiveDateTime};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PyString};
@@ -13,6 +14,8 @@ pub enum FastParameter {
     F64(f64),
     String(String),
     Bytes(Vec<u8>),
+    Date(NaiveDate),
+    DateTime(NaiveDateTime)
 }
 
 impl tiberius::ToSql for FastParameter {
@@ -24,6 +27,8 @@ impl tiberius::ToSql for FastParameter {
             FastParameter::F64(f) => f.to_sql(),
             FastParameter::String(s) => s.to_sql(),
             FastParameter::Bytes(b) => b.to_sql(),
+            FastParameter::Date(d) => d.to_sql(),
+            FastParameter::DateTime(dt) => dt.to_sql()
         }
     }
 }
@@ -55,6 +60,12 @@ pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     }
     if let Ok(py_by) = obj.cast::<PyBytes>() {
         return Ok(FastParameter::Bytes(py_by.as_bytes().to_vec()));
+    }
+    if let Ok(py_date) = obj.extract::<NaiveDate>() {
+        return Ok(FastParameter::Date(py_date));
+    }
+    if let Ok(py_dt) = obj.extract::<NaiveDateTime>() {
+        return Ok(FastParameter::DateTime(py_dt));
     }
 
     // Fallback for custom types

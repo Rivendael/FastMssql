@@ -170,6 +170,51 @@ impl Transaction {
         })
     }
 
+    /// Execute a raw (non-prepared statement) SQL query
+    /// Returns rows as QueryStream
+    #[pyo3(signature = (query))]
+    pub fn simple_query<'p>(
+        &self,
+        py: Python<'p>,
+        query: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let conn = Arc::clone(&self.conn);
+        let config = Arc::clone(&self.config);
+        let azure_credential = self.azure_credential.clone();
+
+        future_into_py(py, async move {
+            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+
+            // Execute query on the held connection
+            let execution_result = {
+                let mut conn_guard = conn.lock().await;
+                let conn_ref = conn_guard
+                    .as_mut()
+                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+
+                let result = conn_ref
+                    .simple_query(&query)
+                    .await
+                    .map_err(|e| create_sql_error(e, "Query execution failed"))?
+                    .into_first_result()
+                    .await
+                    .map_err(|e| {
+                        PyRuntimeError::new_err(format!("Failed to get results: {}", e))
+                    })?;
+
+                drop(conn_guard); // Release lock after consuming all results
+                result
+            };
+
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let query_stream =
+                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
+                let py_result = Py::new(py, query_stream)?;
+                Ok(py_result.into_any())
+            })
+        })
+    }
+
     /// Execute a SQL command that doesn't return rows (INSERT/UPDATE/DELETE/DDL)
     /// Returns the number of affected rows
     #[pyo3(signature = (command, parameters=None))]

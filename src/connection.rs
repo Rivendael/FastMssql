@@ -45,6 +45,15 @@ impl PyConnection {
         Self::execute_command_internal_gil_free(pool, query, parameters).await
     }
 
+    /// For queries that return rows (SELECT statements) but need to be raw non-prepared statements
+    #[inline]
+    async fn execute_simple_query_async_gil_free(
+        pool: &ConnectionPool,
+        query: &str,
+    ) -> PyResult<Vec<Row>> {
+        Self::execute_simple_query_internal_gil_free(pool, query).await
+    }
+
     /// Uses query() method to get rows
     #[inline]
     async fn execute_query_internal_gil_free(
@@ -66,6 +75,32 @@ impl PyConnection {
 
         let stream = conn
             .query(query, &tiberius_params)
+            .await
+            .map_err(|e| create_sql_error(e, "Query execution failed"))?;
+
+        let result = stream
+            .into_first_result()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
+
+        drop(conn);
+        Ok(result)
+    }
+
+    /// Uses simple_query() method to execute raw SQL
+    #[inline]
+    async fn execute_simple_query_internal_gil_free(
+        pool: &ConnectionPool,
+        query: &str,
+    ) -> PyResult<Vec<Row>> {
+        let mut conn = pool.get().await
+            .map_err(|e| match e {
+                bb8::RunError::TimedOut => create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size."),
+                bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
+            })?;
+
+        let stream = conn
+            .simple_query(query)
             .await
             .map_err(|e| create_sql_error(e, "Query execution failed"))?;
 
@@ -223,6 +258,36 @@ impl PyConnection {
 
             let execution_result =
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
+
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let query_stream =
+                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
+                let py_result = Py::new(py, query_stream)?;
+                Ok(py_result.into_any())
+            })
+        })
+    }
+
+    /// Execute a raw (non-prepared statement) SQL query
+    /// Returns rows as PyQueryStream
+    #[pyo3(signature = (query))]
+    pub fn simple_query<'p>(
+        &self,
+        py: Python<'p>,
+        query: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let pool = Arc::clone(&self.pool);
+        let config = Arc::clone(&self.config);
+        let pool_config = self.pool_config.clone();
+        let azure_credential = self.azure_credential.clone();
+
+        future_into_py(py, async move {
+            let pool_ref =
+                ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
+                    .await?;
+
+            let execution_result =
+                Self::execute_simple_query_async_gil_free(&pool_ref, &query).await?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let query_stream =

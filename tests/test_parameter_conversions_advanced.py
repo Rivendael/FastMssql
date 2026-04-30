@@ -438,7 +438,7 @@ async def test_parameter_type_explicit_casting(test_config: Config):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_parameter_typed_null(test_config: Config):
-    """Test explicit typed nulls in queries (unfortunately cant use stored procedures here)."""
+    """Test explicit typed nulls in queries (unfortunately cant use stored procedures here *yet*)."""
     try:
         async with Connection(test_config.connection_string) as conn:
             # This should yield NULL (1 + tinyint of null)
@@ -446,12 +446,47 @@ async def test_parameter_typed_null(test_config: Config):
             value = res.rows()[0]["value"]
             assert value is None
 
-            err = None
-            try:
-                res = await conn.query("SELECT 1 + @P1 as value", [TypedNull.DATE])
-            except Exception as e:
-                err = str(e)
-            assert err is not None and "date is incompatible with int" in err
+            # Due to ms-sql casting rules, these are the only types that seem to trigger for this specific
+            # check
+            for typ in [
+                (TypedNull.GUID, "uniqueidentifier"),
+                (TypedNull.TIME, "time"),
+                (TypedNull.DATE, "date"), 
+                (TypedNull.DATETIME2, "datetime2"),
+                (TypedNull.DATETIMEOFFSET, "datetimeoffset"),
+            ]:  
+                # Test 1: ms-sql casting
+                err = None
+                try:
+                    res = await conn.query("SELECT 1 + @P1 as value", [typ[0]])
+                except Exception as e:
+                    err = str(e)
+                assert err is not None and f"{typ[1]} is incompatible with int" in err
+
+                # Test 2: sproc with non-typed null + typed null
+
+                # Create test sproc, note that simple_query must be used for CREATE OR ALTER PROCEDURE
+                await conn.simple_query(f"""
+                    CREATE OR ALTER PROCEDURE test_sproc (@Foo {typ[1]})
+                    AS
+                    BEGIN
+                        SELECT 5 AS status
+                    END
+                """)
+
+                # This fails as normal None is a 'tinyint null'
+                err = None
+                try:
+                    res = await conn.query("EXECUTE test_sproc @P1", [None])
+                except Exception as e:
+                    err = str(e)
+                assert err is not None and f"tinyint is incompatible with {typ[1]}" in err
+
+                # This works as normal None is a 'Typed null'
+                res = await conn.query("EXECUTE test_sproc @P1", [typ[0]])
+                assert res[0]['status'] == 5
+
+            await conn.simple_query("DROP PROCEDURE IF EXISTS test_sproc")
 
     except Exception as e:
         pytest.fail(f"Database not available: {e}")

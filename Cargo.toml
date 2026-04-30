@@ -27,7 +27,7 @@ debug = true               # Keep debug info for development
 opt-level = 2
 
 [dependencies]
-pyo3 = { version = "0.28.3", features = ["extension-module", "abi3-py311"] }
+pyo3 = { version = "0.28.3", features = ["extension-module", "abi3-py311", "chrono"] }
 pyo3-async-runtimes = { version = "0.28.0", features = ["tokio", "tokio-runtime"] }
 tokio = { version = "1.52.1", features = ["full"] }
 tokio-util = { version = "0.7.18", features = ["compat"] }
