@@ -379,8 +379,19 @@ impl PyAzureCredential {
                 let expires_at = chrono::NaiveDateTime::parse_from_str(expires_on, "%Y-%m-%d %H:%M:%S%.f")
                     .map_err(|e| PyRuntimeError::new_err(format!("Failed to parse expiresOn '{}': {}", expires_on, e)))?;
 
-                let now = chrono::Utc::now();
-                let expires_in = (expires_at.and_utc().timestamp() - now.timestamp()).max(0) as u64;
+                let now_naive = chrono::Local::now().naive_local();
+                let expires_in = expires_at
+                    .signed_duration_since(now_naive)
+                    .num_seconds()
+                    .max(0) as u64;
+
+                if expires_in == 0 {
+                    return Err(PyRuntimeError::new_err(format!(
+                        "Azure CLI returned an already-expired token (expiresOn: {}). \
+                         Run 'az login' to refresh your credentials.",
+                        expires_on
+                    )));
+                }
 
                 Ok((access_token.to_string(), expires_in))
             }

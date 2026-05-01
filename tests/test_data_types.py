@@ -192,8 +192,18 @@ async def test_special_types(test_config: Config):
     assert len(rows) == 1
     row = rows[0]
 
-    assert row["bit_true"]
-    assert not row["bit_false"]
+    assert row["bit_true"] is True, (
+        f"BIT 1 should be Python True, got {row['bit_true']!r} ({type(row['bit_true'])})"
+    )
+    assert row["bit_false"] is False, (
+        f"BIT 0 should be Python False, got {row['bit_false']!r} ({type(row['bit_false'])})"
+    )
+    assert isinstance(row["bit_true"], bool), (
+        f"BIT should return bool, got {type(row['bit_true'])}"
+    )
+    assert isinstance(row["bit_false"], bool), (
+        f"BIT should return bool, got {type(row['bit_false'])}"
+    )
     assert row["bit_null"] is None
     assert row["uniqueidentifier_val"] is not None
     assert row["xml_val"] is not None
@@ -725,7 +735,12 @@ async def test_supported_bit_type(test_config: Config):
     assert len(rows) == 1
     row = rows[0]
 
-    assert row.get("bit_col") == 1
+    assert row.get("bit_col") is True, (
+        f"BIT 1 should be Python True (bool), got {row.get('bit_col')!r} ({type(row.get('bit_col'))})"
+    )
+    assert isinstance(row.get("bit_col"), bool), (
+        f"BIT column should return bool, not int"
+    )
 
 
 @pytest.mark.integration
@@ -997,3 +1012,90 @@ async def test_money_no_precision_loss_vs_decimal_column(test_config: Config):
     assert smallmoney_val == decimal_val, (
         f"SMALLMONEY {smallmoney_val!r} != DECIMAL {decimal_val!r}: precision loss detected"
     )
+
+
+# ---------------------------------------------------------------------------
+# BIT returns bool regression tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bit_true_is_bool(test_config: Config):
+    """Regression: BIT 1 must return Python True (bool), not integer 1."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1 AS BIT) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, bool), f"BIT 1 should be bool, got {type(val)}"
+    assert val is True, f"BIT 1 should be True, got {val!r}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bit_false_is_bool(test_config: Config):
+    """Regression: BIT 0 must return Python False (bool), not integer 0."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(0 AS BIT) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, bool), f"BIT 0 should be bool, got {type(val)}"
+    assert val is False, f"BIT 0 should be False, got {val!r}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bit_null_is_none(test_config: Config):
+    """BIT NULL must come back as None (unchanged by the bool fix)."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(NULL AS BIT) AS val")
+    val = result.rows()[0].get("val")
+    assert val is None, f"NULL BIT should be None, got {val!r}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bit_not_int(test_config: Config):
+    """Regression: BIT values must not be plain ints.
+
+    Before the fix, handle_bit() downgraded bool -> i32, so
+    isinstance(val, bool) returned False and 'val is True' failed.
+    """
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(1 AS BIT) AS t, CAST(0 AS BIT) AS f"
+        )
+    row = result.rows()[0]
+    t_val = row.get("t")
+    f_val = row.get("f")
+
+    # Must be exactly bool, not int
+    assert type(t_val) is bool, f"BIT 1 must be exactly bool, got {type(t_val)}"
+    assert type(f_val) is bool, f"BIT 0 must be exactly bool, got {type(f_val)}"
+
+    # Identity checks that broke before the fix
+    assert t_val is True
+    assert f_val is False
+
+    # Equality with int still works (bool subclasses int in Python)
+    assert t_val == 1
+    assert f_val == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bit_multiple_rows(test_config: Config):
+    """BIT type consistency across multiple rows including NULL."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT CAST(1 AS BIT) AS val
+            UNION ALL SELECT CAST(0 AS BIT)
+            UNION ALL SELECT CAST(NULL AS BIT)
+        """)
+    rows = result.rows()
+    assert len(rows) == 3
+
+    assert rows[0].get("val") is True
+    assert rows[1].get("val") is False
+    assert rows[2].get("val") is None
+
+    assert isinstance(rows[0].get("val"), bool)
+    assert isinstance(rows[1].get("val"), bool)

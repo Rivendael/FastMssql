@@ -1,6 +1,6 @@
 use crate::azure_auth::PyAzureCredential;
 use crate::parameter_conversion::{
-    FastParameter, convert_parameters_to_fast, python_to_fast_parameter,
+    FastParameter, TypedNull, convert_parameters_to_fast, python_to_fast_parameter,
 };
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
@@ -249,6 +249,46 @@ fn quote_identifier(name: &str) -> String {
     result
 }
 
+/// Fix untyped (U8/tinyint) NULL placeholders in a flat row-major buffer.
+///
+/// When Python `None` is converted with `python_to_fast_parameter` it becomes
+/// `Null(TypedNull::U8)` — a tinyint-typed NULL.  In a multi-row VALUES INSERT
+/// SQL Server reconciles parameter types across the same column position in
+/// every row, so a tinyint null alongside a nvarchar value causes a conversion
+/// error.  This function scans each column, infers the correct type from the
+/// first non-null sibling value, and patches every untyped NULL in that column.
+fn fix_bulk_null_types(flat_data: &mut [FastParameter], col_count: usize) {
+    if col_count == 0 || flat_data.is_empty() {
+        return;
+    }
+    let row_count = flat_data.len() / col_count;
+
+    for col in 0..col_count {
+        // Infer the null type from the first non-null value in this column.
+        let null_type = (0..row_count)
+            .map(|row| &flat_data[row * col_count + col])
+            .find_map(|p| match p {
+                FastParameter::String(_) => Some(TypedNull::String),
+                FastParameter::I64(_) => Some(TypedNull::I64),
+                FastParameter::F64(_) => Some(TypedNull::F64),
+                FastParameter::Bool(_) => Some(TypedNull::Bit),
+                FastParameter::Bytes(_) => Some(TypedNull::Binary),
+                FastParameter::Date(_) => Some(TypedNull::Date),
+                FastParameter::DateTime(_) => Some(TypedNull::DateTime),
+                FastParameter::Null(_) => None,
+            })
+            .unwrap_or(TypedNull::String); // all-null column → nvarchar null is safe
+
+        // Patch every untyped Null in this column.
+        for row in 0..row_count {
+            let idx = row * col_count + col;
+            if matches!(&flat_data[idx], FastParameter::Null(TypedNull::U8)) {
+                flat_data[idx] = FastParameter::Null(null_type.clone());
+            }
+        }
+    }
+}
+
 pub fn bulk_insert<'p>(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
@@ -281,6 +321,11 @@ pub fn bulk_insert<'p>(
     }
 
     let col_count = columns.len();
+
+    // Fix untyped (tinyint) NULLs so they match the type of their column siblings.
+    // Without this, a multi-row VALUES insert mixing NULLs with typed values causes
+    // SQL Server to fail with a conversion error during parameter type reconciliation.
+    fix_bulk_null_types(&mut flat_data, col_count);
 
     future_into_py(py, async move {
         let pool_ref =
