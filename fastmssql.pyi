@@ -270,11 +270,11 @@ class QueryStream:
         """Get the next row in the stream (for async iteration)."""
         ...
 
-    async def all(self) -> List[FastRow]:
+    def all(self) -> List[FastRow]:
         """Load and return all remaining rows at once."""
         ...
 
-    async def fetch(self, n: int) -> List[FastRow]:
+    def fetch(self, n: int) -> List[FastRow]:
         """Fetch the next n rows as a batch."""
         ...
 
