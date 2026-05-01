@@ -111,6 +111,10 @@ class Transaction:
         """Execute multiple SELECT queries in sequence on this connection."""
         return await self._rust_conn.query_batch(queries)
 
+    async def simple_query(self, sql):
+        """Execute a raw (non-prepared) SQL query and return a QueryStream."""
+        return await self._rust_conn.simple_query(sql)
+
     def is_connected(self):
         """Return True if the underlying connection is currently established."""
         return self._rust_conn.is_connected()
