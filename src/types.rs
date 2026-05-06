@@ -178,12 +178,17 @@ impl PyFastRow {
                     name
                 )))
             }
-        } else if let Ok(index) = key.extract::<usize>() {
+        } else if let Ok(index) = key.extract::<isize>() {
             // Access by index: Direct O(1) Vec access - extremely fast!
-            if let Some(value) = self.values.get(index) {
-                Ok(value.clone_ref(py))
+            // Normalise negative indices the same way Python sequences do.
+            let len = self.values.len() as isize;
+            let actual = if index < 0 { len + index } else { index };
+            if actual < 0 || actual >= len {
+                Err(pyo3::exceptions::PyIndexError::new_err(
+                    "Column index out of range",
+                ))
             } else {
-                Err(PyValueError::new_err("Column index out of range"))
+                Ok(self.values[actual as usize].clone_ref(py))
             }
         } else {
             Err(PyValueError::new_err("Key must be string or integer"))

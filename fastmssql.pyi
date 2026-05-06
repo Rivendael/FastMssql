@@ -197,7 +197,7 @@ class SslConfig:
     ) -> None: ...
     @staticmethod
     def development() -> SslConfig:
-        """Development configuration (LoginOnly encryption, trust server certificate)."""
+        """Development configuration (Required encryption, trust server certificate)."""
         ...
 
     @staticmethod
@@ -212,8 +212,9 @@ class SslConfig:
 
     @staticmethod
     def with_ca_certificate(path: str) -> SslConfig:
-        """Create config with CA certificate validation from file path."""
+        """Create config with CA certificate validation from file path (.pem, .crt, .cer, or .der)."""
         ...
+    def __eq__(self, other: object) -> bool: ...
 
 class FastRow:
     """
@@ -270,11 +271,11 @@ class QueryStream:
         """Get the next row in the stream (for async iteration)."""
         ...
 
-    async def all(self) -> List[FastRow]:
+    def all(self) -> List[FastRow]:
         """Load and return all remaining rows at once."""
         ...
 
-    async def fetch(self, n: int) -> List[FastRow]:
+    def fetch(self, n: int) -> List[FastRow]:
         """Fetch the next n rows as a batch."""
         ...
 

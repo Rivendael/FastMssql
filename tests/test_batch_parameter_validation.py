@@ -315,3 +315,96 @@ class TestBatchParameterEdgeCases:
 
         except Exception as e:
             pytest.fail(f"Database not available: {e}")
+
+
+class TestBatchItemStructureValidation:
+    """Validate batch item shape errors without needing a DB connection.
+
+    parse_batch_items() and the bulk_insert() column/row checks run synchronously
+    (before the async pool work), so a Connection built from keyword args is
+    sufficient – the pool is never actually opened.
+    """
+
+    def _offline_conn(self):
+        """Return a Connection whose pool is not yet open."""
+        return Connection(
+            server="localhost", database="tempdb", username="sa", password="x"
+        )
+
+    # ── execute_batch structural errors ──────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_non_tuple_item_raises(self):
+        """A plain string in the batch list should raise ValueError/TypeError."""
+        conn = self._offline_conn()
+        with pytest.raises((ValueError, TypeError)):
+            await conn.execute_batch(["SELECT 1"])
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_dict_item_raises(self):
+        """A dict item in the batch list should raise ValueError/TypeError."""
+        conn = self._offline_conn()
+        with pytest.raises((ValueError, TypeError)):
+            await conn.execute_batch([{"sql": "SELECT 1", "params": None}])
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_tuple_one_element_raises(self):
+        """A 1-element tuple (missing params) should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="2 elements"):
+            await conn.execute_batch([("SELECT 1",)])
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_tuple_three_elements_raises(self):
+        """A 3-element tuple should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="2 elements"):
+            await conn.execute_batch([("SELECT 1", None, "extra")])
+
+    # ── query_batch structural errors ─────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_query_batch_non_tuple_item_raises(self):
+        """A plain string in a query_batch list should raise ValueError/TypeError."""
+        conn = self._offline_conn()
+        with pytest.raises((ValueError, TypeError)):
+            await conn.query_batch(["SELECT 1"])
+
+    @pytest.mark.asyncio
+    async def test_query_batch_tuple_one_element_raises(self):
+        """A 1-element tuple in query_batch should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="2 elements"):
+            await conn.query_batch([("SELECT 1",)])
+
+    @pytest.mark.asyncio
+    async def test_query_batch_tuple_three_elements_raises(self):
+        """A 3-element tuple in query_batch should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="2 elements"):
+            await conn.query_batch([("SELECT 1", None, "extra")])
+
+    # ── bulk_insert structural errors ─────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_bulk_insert_empty_columns_raises(self):
+        """bulk_insert with an empty columns list should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="column"):
+            await conn.bulk_insert("test_table", [], [[1, 2]])
+
+    @pytest.mark.asyncio
+    async def test_bulk_insert_row_column_count_mismatch_raises(self):
+        """A row with the wrong number of values should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="column"):
+            # 1 value but 2 columns declared
+            await conn.bulk_insert("test_table", ["a", "b"], [[1]])
+
+    @pytest.mark.asyncio
+    async def test_bulk_insert_extra_values_in_row_raises(self):
+        """A row with too many values should raise ValueError."""
+        conn = self._offline_conn()
+        with pytest.raises(ValueError, match="column"):
+            # 3 values but 2 columns declared
+            await conn.bulk_insert("test_table", ["a", "b"], [[1, 2, 3]])

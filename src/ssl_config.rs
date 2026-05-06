@@ -100,14 +100,14 @@ impl PySslConfig {
             // Check file extension
             if let Some(ext) = path.extension() {
                 let ext = ext.to_string_lossy().to_lowercase();
-                if !matches!(ext.as_str(), "pem" | "crt" | "der") {
+                if !matches!(ext.as_str(), "pem" | "crt" | "cer" | "der") {
                     return Err(PyValueError::new_err(
-                        "CA certificate must be .pem, .crt, or .der file",
+                        "CA certificate must be .pem, .crt, .cer, or .der file",
                     ));
                 }
             } else {
                 return Err(PyValueError::new_err(
-                    "CA certificate file must have .pem, .crt, or .der extension",
+                    "CA certificate file must have .pem, .crt, .cer, or .der extension",
                 ));
             }
         }
@@ -193,12 +193,11 @@ impl PySslConfig {
     }
 
     /// Create SSL config that only encrypts login (legacy mode)
-    /// Note: This trusts server certificates for compatibility
     #[staticmethod]
     pub fn login_only() -> Self {
         PySslConfig {
             encryption_level: EncryptionLevel::LoginOnly,
-            trust_server_certificate: true,
+            trust_server_certificate: false,
             ca_certificate_path: None,
         }
     }
@@ -243,7 +242,21 @@ impl PySslConfig {
 
     /// Representation
     pub fn __repr__(&self) -> String {
-        self.__str__()
+        format!(
+            "SslConfig(encryption_level={:?}, trust_server_certificate={}, ca_certificate_path={:?})",
+            self.encryption_level.__str__(),
+            self.trust_server_certificate,
+            self.ca_certificate_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+        )
+    }
+
+    /// Equality comparison
+    pub fn __eq__(&self, other: &PySslConfig) -> bool {
+        self.encryption_level == other.encryption_level
+            && self.trust_server_certificate == other.trust_server_certificate
+            && self.ca_certificate_path == other.ca_certificate_path
     }
 }
 
@@ -252,8 +265,9 @@ impl PySslConfig {
     pub fn to_tiberius_encryption(&self) -> tiberius::EncryptionLevel {
         match self.encryption_level {
             EncryptionLevel::Required => tiberius::EncryptionLevel::Required,
-            EncryptionLevel::LoginOnly => tiberius::EncryptionLevel::On,
-            EncryptionLevel::Disabled => tiberius::EncryptionLevel::Off,
+            // Off = login packet only encrypted; NotSupported = no encryption at all
+            EncryptionLevel::LoginOnly => tiberius::EncryptionLevel::Off,
+            EncryptionLevel::Disabled => tiberius::EncryptionLevel::NotSupported,
         }
     }
 

@@ -102,10 +102,7 @@ fn handle_varchar(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
 #[inline(always)]
 fn handle_bit(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<bool, usize>(index) {
-        Ok(Some(val)) => {
-            let int_val = if val { 1i32 } else { 0i32 };
-            Ok(int_val.into_pyobject(py)?.into_any().unbind())
-        }
+        Ok(Some(val)) => val.into_py_any(py),
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(
             "Failed to convert column {} to BIT",

@@ -165,3 +165,70 @@ async def test_begin_after_context_manager_exit(test_config):
     await t.begin()
     await t.commit()
     await t.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_exception_propagates_from_context_manager(test_config):
+    """Context manager must not suppress exceptions (__aexit__ returns False)."""
+    with pytest.raises(ValueError, match="intentional"):
+        async with Transaction(test_config.connection_string) as t:
+            await t.query("SELECT 1")
+            raise ValueError("intentional")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_manual_rollback_then_exception_no_double_rollback(test_config):
+    """If user manually rolls back then raises, __aexit__ must not attempt a second rollback."""
+    with pytest.raises(RuntimeError, match="abort"):
+        async with Transaction(test_config.connection_string) as t:
+            await t.query("SELECT 1")
+            await t.rollback()
+            # After manual rollback the flags are set; raising now should not
+            # cause __aexit__ to call rollback again (which would raise
+            # "already rolled back" and mask the real exception).
+            raise RuntimeError("abort")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_commit_failure_reraises(test_config):
+    """Regression for Bug 2: a commit failure must propagate to the caller.
+
+    We simulate a commit failure by closing the underlying connection before
+    __aexit__ attempts to auto-commit.
+    """
+    exc_seen = None
+    try:
+        async with Transaction(test_config.connection_string) as t:
+            await t.query("SELECT 1")
+            # Forcibly drop the connection so commit() fails
+            await t.close()
+    except Exception as e:
+        exc_seen = e
+
+    # An exception must have been raised (not silently swallowed)
+    assert exc_seen is not None, (
+        "Expected an exception from the failed commit, but none was raised"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_context_manager_exception_triggers_rollback_not_commit(test_config):
+    """When an exception escapes the block, __aexit__ must rollback, not commit."""
+    t = Transaction(test_config.connection_string)
+    try:
+        async with t:
+            await t.query("SELECT 1")
+            raise ValueError("boom")
+    except ValueError:
+        pass
+
+    # After rollback the flags should reflect a rolled-back (not committed) state.
+    # Calling commit now must raise because the transaction was rolled back.
+    with pytest.raises(RuntimeError):
+        await t.commit()
+
+    await t.close()

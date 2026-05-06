@@ -57,6 +57,24 @@ Fw0zNDAzMDUyMzU5NTlaaa123bbcA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQEL
         finally:
             os.unlink(cert_path)
 
+    def test_cer_format_certificate(self):
+        """Test CER format certificate file (Windows-style DER/PEM extension)."""
+        cer_content = """-----BEGIN CERTIFICATE-----
+MIIDXTCCAkWgAwIBAgIJAKoK/heBjcOuMA0GCSqGSIb3DQEBBQUAMEUxCzAJBgNV
+BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+aWRnaXRzIFB0eSBMdGQwHhcNMTMwODI3MjM1NDA3WhcNMTQwODI3MjM1NDA3WjBF
+-----END CERTIFICATE-----"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".cer", delete=False) as f:
+            f.write(cer_content)
+            cert_path = f.name
+
+        try:
+            ssl_config = SslConfig(ca_certificate_path=cert_path)
+            assert ssl_config.ca_certificate_path == cert_path
+        finally:
+            os.unlink(cert_path)
+
     def test_der_format_certificate(self):
         """Test DER format certificate file."""
         # Simulate DER binary data (not a real certificate, but binary format)

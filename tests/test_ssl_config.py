@@ -58,6 +58,9 @@ def test_ssl_config_login_only():
     """Test login-only SSL configuration."""
     ssl_config = SslConfig.login_only()
     assert str(ssl_config.encryption_level) == "LoginOnly"
+    # Should NOT silently trust all server certificates
+    assert not ssl_config.trust_server_certificate
+    assert ssl_config.ca_certificate_path is None
 
 
 def test_ssl_config_disabled():
@@ -173,8 +176,67 @@ def test_ssl_config_nonexistent_ca_certificate():
 
 
 def test_ssl_config_repr():
-    """Test SSL config string representation."""
+    """Test SSL config string representation is Pythonic with key=value pairs."""
     ssl_config = SslConfig(encryption_level=EncryptionLevel.Disabled)
     repr_str = repr(ssl_config)
     assert "SslConfig" in repr_str
     assert "Disabled" in repr_str
+    assert "encryption_level" in repr_str
+    assert "trust_server_certificate" in repr_str
+    assert "ca_certificate_path" in repr_str
+
+
+def test_ssl_config_repr_with_ca_path():
+    """Test that repr includes ca_certificate_path when set."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
+        f.write("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n")
+        cert_path = f.name
+    try:
+        ssl_config = SslConfig.with_ca_certificate(cert_path)
+        repr_str = repr(ssl_config)
+        assert cert_path in repr_str
+    finally:
+        os.unlink(cert_path)
+
+
+def test_ssl_config_equality_same_values():
+    """Test that two SslConfig instances with identical values compare equal."""
+    a = SslConfig(encryption_level=EncryptionLevel.Required, trust_server_certificate=False)
+    b = SslConfig(encryption_level=EncryptionLevel.Required, trust_server_certificate=False)
+    assert a == b
+
+
+def test_ssl_config_equality_different_encryption():
+    """Test that configs with different encryption levels are not equal."""
+    a = SslConfig(encryption_level=EncryptionLevel.Required)
+    b = SslConfig(encryption_level=EncryptionLevel.Disabled)
+    assert a != b
+
+
+def test_ssl_config_equality_different_trust():
+    """Test that configs with different trust_server_certificate are not equal."""
+    a = SslConfig(encryption_level=EncryptionLevel.Required, trust_server_certificate=True)
+    b = SslConfig(encryption_level=EncryptionLevel.Required, trust_server_certificate=False)
+    assert a != b
+
+
+def test_ssl_config_equality_factory_methods():
+    """Test equality between factory-method instances and equivalent manual configs."""
+    assert SslConfig.development() == SslConfig(
+        encryption_level=EncryptionLevel.Required, trust_server_certificate=True
+    )
+    assert SslConfig.login_only() == SslConfig(
+        encryption_level=EncryptionLevel.LoginOnly, trust_server_certificate=False
+    )
+    assert SslConfig.disabled() == SslConfig(
+        encryption_level=EncryptionLevel.Disabled, trust_server_certificate=False
+    )
+
+
+def test_ssl_config_inequality_with_non_ssl_object():
+    """Test that SslConfig does not equal arbitrary Python objects."""
+    ssl_config = SslConfig.development()
+    assert ssl_config != "not an SslConfig"
+    assert ssl_config != 42
+    assert ssl_config != None  # noqa: E711

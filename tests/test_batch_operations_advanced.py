@@ -547,3 +547,161 @@ async def test_execute_batch_return_values(test_config: Config):
             await conn.execute("DROP TABLE ##batch_returns")
     except Exception as e:
         pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_execute_batch_full_atomicity_on_failure(test_config: Config):
+    """execute_batch wraps everything in a transaction: a mid-batch failure must
+    roll back ALL previously-executed items in that batch, not just some."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            await conn.execute("""
+                IF OBJECT_ID('tempdb..##batch_atomicity', 'U') IS NOT NULL
+                    DROP TABLE ##batch_atomicity
+            """)
+            await conn.execute("""
+                CREATE TABLE ##batch_atomicity (id INT PRIMARY KEY, value VARCHAR(50))
+            """)
+
+            batch_items = [
+                ("INSERT INTO ##batch_atomicity VALUES (@P1, @P2)", [1, "first"]),
+                ("INSERT INTO ##batch_atomicity VALUES (@P1, @P2)", [2, "second"]),
+                ("RAISERROR('forced failure', 16, 1)", []),  # mid-batch failure
+                ("INSERT INTO ##batch_atomicity VALUES (@P1, @P2)", [3, "third"]),
+            ]
+
+            with pytest.raises(Exception):
+                await conn.execute_batch(batch_items)
+
+            # All rows must be absent – the transaction must have rolled back fully.
+            result = await conn.query(
+                "SELECT COUNT(*) as cnt FROM ##batch_atomicity"
+            )
+            assert result.rows()[0]["cnt"] == 0, (
+                "execute_batch must roll back all items on failure, not just the failing one"
+            )
+
+            await conn.execute("DROP TABLE ##batch_atomicity")
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bulk_insert_null_values(test_config: Config):
+    """bulk_insert correctly stores NULL values for nullable columns."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            await conn.execute("""
+                IF OBJECT_ID('tempdb..##bulk_nulls', 'U') IS NOT NULL
+                    DROP TABLE ##bulk_nulls
+            """)
+            await conn.execute("""
+                CREATE TABLE ##bulk_nulls (
+                    id INT,
+                    name VARCHAR(50) NULL,
+                    score FLOAT NULL
+                )
+            """)
+
+            rows = [
+                [1, "Alice", 9.5],
+                [2, None, 8.0],   # NULL name
+                [3, "Bob", None],  # NULL score
+                [4, None, None],   # both NULL
+            ]
+
+            affected = await conn.bulk_insert(
+                "##bulk_nulls", ["id", "name", "score"], rows
+            )
+            assert affected == 4
+
+            result = await conn.query(
+                "SELECT * FROM ##bulk_nulls ORDER BY id"
+            )
+            data = result.rows()
+            assert len(data) == 4
+            assert data[1]["name"] is None
+            assert data[2]["score"] is None
+            assert data[3]["name"] is None and data[3]["score"] is None
+
+            await conn.execute("DROP TABLE ##bulk_nulls")
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bulk_insert_crosses_chunk_boundary(test_config: Config):
+    """bulk_insert correctly spans multiple SQL batches.
+
+    With 10 columns the Rust code uses rows_per_batch = 2000 / 10 = 200.
+    Inserting 201 rows forces exactly 2 batches; verify all rows land.
+    """
+    col_count = 10
+    row_count = 201  # one more than a single batch can hold
+
+    columns = [f"c{i}" for i in range(col_count)]
+    col_defs = ", ".join(f"{c} INT" for c in columns)
+
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            await conn.execute("""
+                IF OBJECT_ID('tempdb..##bulk_chunk', 'U') IS NOT NULL
+                    DROP TABLE ##bulk_chunk
+            """)
+            await conn.execute(f"CREATE TABLE ##bulk_chunk ({col_defs})")
+
+            rows = [[i + j for j in range(col_count)] for i in range(row_count)]
+
+            affected = await conn.bulk_insert("##bulk_chunk", columns, rows)
+            assert affected == row_count
+
+            result = await conn.query(
+                "SELECT COUNT(*) as cnt FROM ##bulk_chunk"
+            )
+            assert result.rows()[0]["cnt"] == row_count
+
+            await conn.execute("DROP TABLE ##bulk_chunk")
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bulk_insert_reserved_keyword_column_names(test_config: Config):
+    """bulk_insert bracket-quotes column names, so SQL reserved words are safe."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            await conn.execute("""
+                IF OBJECT_ID('tempdb..##bulk_keywords', 'U') IS NOT NULL
+                    DROP TABLE ##bulk_keywords
+            """)
+            # Column names that are SQL Server reserved keywords
+            await conn.execute("""
+                CREATE TABLE ##bulk_keywords (
+                    [select] INT,
+                    [from]   VARCHAR(50),
+                    [order]  INT
+                )
+            """)
+
+            rows = [
+                [1, "alpha", 10],
+                [2, "beta",  20],
+            ]
+
+            affected = await conn.bulk_insert(
+                "##bulk_keywords", ["select", "from", "order"], rows
+            )
+            assert affected == 2
+
+            result = await conn.query(
+                "SELECT COUNT(*) as cnt FROM ##bulk_keywords"
+            )
+            assert result.rows()[0]["cnt"] == 2
+
+            await conn.execute("DROP TABLE ##bulk_keywords")
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")

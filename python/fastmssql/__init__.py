@@ -159,20 +159,25 @@ class Transaction:
         """Async context manager exit - automatically COMMIT or ROLLBACK."""
         try:
             if exc_type is not None:
-                # An exception occurred - rollback
-                try:
-                    await self.rollback()
-                except Exception:
-                    pass
+                # An exception occurred - rollback (unless already settled)
+                if not self._TRANSACTION_COMMITTED and not self._TRANSACTION_ROLLEDBACK:
+                    try:
+                        await self.rollback()
+                    except Exception:
+                        pass
             else:
-                # No exception - commit
-                await self.commit()
-        except Exception:
-            # If commit fails, try to rollback
-            try:
-                await self.rollback()
-            except Exception:
-                pass
+                # No exception - commit (unless user already committed/rolled back manually)
+                if not self._TRANSACTION_COMMITTED and not self._TRANSACTION_ROLLEDBACK:
+                    try:
+                        await self.commit()
+                    except Exception as commit_err:
+                        # Commit failed - attempt rollback then re-raise so the
+                        # caller knows the transaction was never committed.
+                        try:
+                            await self.rollback()
+                        except Exception:
+                            pass
+                        raise commit_err
         finally:
             # Always close the TCP connection so it is not held open until GC.
             # close() issues a best-effort ROLLBACK before dropping the stream,
