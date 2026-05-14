@@ -1,6 +1,6 @@
 use crate::azure_auth::PyAzureCredential;
 use crate::pool_config::PyPoolConfig;
-use crate::types::create_connection_error;
+use crate::types::{create_connection_error, create_sql_error};
 use bb8::Pool;
 use pyo3::prelude::*;
 use std::fmt;
@@ -44,6 +44,26 @@ impl From<std::io::Error> for PoolConnectionError {
 impl From<tiberius::error::Error> for PoolConnectionError {
     fn from(e: tiberius::error::Error) -> Self {
         PoolConnectionError::Tiberius(e)
+    }
+}
+
+/// Convert a [`PoolConnectionError`] into a typed Python exception,
+/// preserving the structured context of the underlying [`tiberius::error::Error`]
+/// (SQL error code/state, TLS details, routing info, etc.) rather than
+/// collapsing everything into an opaque string via `Display`.
+impl From<PoolConnectionError> for pyo3::PyErr {
+    fn from(e: PoolConnectionError) -> Self {
+        match e {
+            PoolConnectionError::Tiberius(terr) => {
+                create_sql_error(terr, "Connection error")
+            }
+            PoolConnectionError::Io(err) => {
+                create_connection_error(format!("I/O error: {err}"))
+            }
+            PoolConnectionError::Auth(msg) => {
+                create_connection_error(format!("Authentication error: {msg}"))
+            }
+        }
     }
 }
 
@@ -113,6 +133,13 @@ impl bb8::ManageConnection for AzureConnectionManager {
     }
 
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
+        // Roll back any uncommitted transaction that might have leaked onto this
+        // connection (e.g., future dropped between BEGIN and COMMIT).
+        // This runs only when test_on_check_out = true or on periodic lifetime /
+        // idle-timeout health checks — never on every routine checkout.
+        // The SELECT 1 that follows confirms the connection is still alive.
+        conn.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+            .await?;
         conn.simple_query("SELECT 1").await?;
         Ok(())
     }
@@ -160,11 +187,15 @@ pub async fn establish_pool(
     let pool = builder
         .build(manager)
         .await
-        .map_err(|e| create_connection_error(format!("Failed to create connection pool: {}", e)))?;
+        .map_err(pyo3::PyErr::from)?;
 
     // Warmup pool if min_idle is configured to eliminate cold-start latency.
     if let Some(min_idle) = pool_config.min_idle {
-        warmup_pool(&pool, min_idle).await?;
+        // Derive per-connection budget from pool_config; fall back to 30 s.
+        let conn_timeout = pool_config
+            .connection_timeout
+            .unwrap_or(std::time::Duration::from_secs(30));
+        warmup_pool(&pool, min_idle, conn_timeout).await?;
     }
 
     Ok(pool)
@@ -201,25 +232,67 @@ pub async fn ensure_pool_initialized_with_auth(
 
 /// Warms up the connection pool by pre-establishing `target_connections` connections.
 /// This eliminates cold-start latency on first queries.
-pub async fn warmup_pool(pool: &ConnectionPool, target_connections: u32) -> PyResult<()> {
-    let mut handles = Vec::with_capacity(target_connections as usize);
+///
+/// All tasks run concurrently via a [`tokio::task::JoinSet`].  The total budget is
+/// `connection_timeout × target_connections` (capped at 120 s).  If the deadline
+/// expires, all outstanding tasks are cancelled via [`JoinSet::shutdown`] and an
+/// error is returned.  All individual errors are collected and surfaced together
+/// rather than bailing on the first failure.
+pub async fn warmup_pool(
+    pool: &ConnectionPool,
+    target_connections: u32,
+    connection_timeout: std::time::Duration,
+) -> PyResult<()> {
+    use tokio::task::JoinSet;
+
+    // Total warmup budget: per-connection timeout × number of connections, capped at
+    // 2 minutes.  bb8 will enforce connection_timeout per task when calling
+    // pool.get(); this outer deadline is a safety net to guarantee that
+    // warmup_pool() always returns even if bb8's own timeout is misconfigured or
+    // bypassed.
+    let warmup_budget = (connection_timeout * target_connections.max(1))
+        .min(std::time::Duration::from_secs(120));
+
+    let mut set: JoinSet<Result<(), bb8::RunError<PoolConnectionError>>> = JoinSet::new();
 
     for _ in 0..target_connections {
         let pool_clone = pool.clone();
-        let handle = tokio::spawn(async move {
-            match pool_clone.get().await {
-                Ok(_conn) => Ok(()),
-                Err(e) => Err(e),
-            }
-        });
-        handles.push(handle);
+        // Each task acquires one connection (exercising the full connect path) then
+        // immediately drops the guard, returning it to the pool.
+        set.spawn(async move { pool_clone.get().await.map(|_conn| ()) });
     }
 
-    for handle in handles {
-        handle
-            .await
-            .map_err(|e| create_connection_error(format!("Connection warmup task failed: {}", e)))?
-            .map_err(|e| create_connection_error(format!("Connection warmup failed: {}", e)))?;
+    let deadline = tokio::time::Instant::now() + warmup_budget;
+    let mut errors: Vec<String> = Vec::new();
+
+    loop {
+        match tokio::time::timeout_at(deadline, set.join_next()).await {
+            // Task completed successfully.
+            Ok(Some(Ok(Ok(())))) => {}
+            // Task returned a bb8/connection error – collect it and continue.
+            Ok(Some(Ok(Err(e)))) => errors.push(e.to_string()),
+            // Task panicked or was cancelled – record the join error and continue.
+            Ok(Some(Err(join_err))) => errors.push(format!("task panicked: {join_err}")),
+            // All tasks finished.
+            Ok(None) => break,
+            // Overall deadline exceeded – abort every outstanding task.
+            Err(_elapsed) => {
+                let outstanding = set.len();
+                set.shutdown().await;
+                return Err(create_connection_error(format!(
+                    "Connection pool warmup timed out after {}s ({outstanding} task(s) cancelled)",
+                    warmup_budget.as_secs(),
+                )));
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(create_connection_error(format!(
+            "Connection pool warmup encountered {} error(s): {}",
+            errors.len(),
+            errors.join("; "),
+        )));
     }
 
     Ok(())

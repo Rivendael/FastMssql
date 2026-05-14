@@ -174,9 +174,9 @@ class TestCertificateFileValidation:
             cert_path = f.name
 
         try:
-            # Should still pass validation at creation time (content validation happens later)
-            ssl_config = SslConfig(ca_certificate_path=cert_path)
-            assert ssl_config.ca_certificate_path == cert_path
+            # Content validation now happens at creation time - empty file is rejected
+            with pytest.raises(ValueError, match="does not contain valid PEM or DER certificate data"):
+                SslConfig(ca_certificate_path=cert_path)
         finally:
             os.unlink(cert_path)
 
@@ -199,7 +199,7 @@ It's missing proper base64 encoding
             os.unlink(cert_path)
 
     def test_certificate_with_extra_content(self):
-        """Test certificate file with extra content."""
+        """Test certificate file with extra content before the PEM header."""
         content_with_extra = """Some extra content at the beginning
 -----BEGIN CERTIFICATE-----
 MIIDXTCCAkWgAwIBAgIJAKoK/heBjcOuMA0GCSqGSIb3DQEBBQUAMEUxCzAJBgNV
@@ -213,8 +213,9 @@ Some extra content at the end"""
             cert_path = f.name
 
         try:
-            ssl_config = SslConfig(ca_certificate_path=cert_path)
-            assert ssl_config.ca_certificate_path == cert_path
+            # Content validation checks the first bytes — non-PEM prefix is rejected
+            with pytest.raises(ValueError, match="does not contain valid PEM or DER certificate data"):
+                SslConfig(ca_certificate_path=cert_path)
         finally:
             os.unlink(cert_path)
 
@@ -242,17 +243,18 @@ BgNVBAoMC1BheVBhbCBJbmMuMRMwEQYDVQQLDApzYW5kYm94XzEwMTQwMgYDVQQD
             os.unlink(cert_path)
 
     def test_binary_garbage_in_der_file(self):
-        """Test DER file with binary garbage data."""
-        garbage_data = os.urandom(1024)  # Random binary data
+        """Test DER file with binary garbage data (not starting with ASN.1 0x30)."""
+        # Force first byte to be non-0x30 binary garbage
+        garbage_data = b"\xFF" + os.urandom(1023)
 
         with tempfile.NamedTemporaryFile(mode="wb", suffix=".der", delete=False) as f:
             f.write(garbage_data)
             cert_path = f.name
 
         try:
-            # Should pass creation (validation happens during TLS handshake)
-            ssl_config = SslConfig(ca_certificate_path=cert_path)
-            assert ssl_config.ca_certificate_path == cert_path
+            # Content validation now happens at creation time - invalid DER is rejected
+            with pytest.raises(ValueError, match="does not contain valid PEM or DER certificate data"):
+                SslConfig(ca_certificate_path=cert_path)
         finally:
             os.unlink(cert_path)
 
@@ -517,7 +519,7 @@ LL2gVGVTX/7ZZP6yjZvddNgf9/qEQJoNELMu4KBc1iJHdT4J7x7Y1N4N4J7x7Y1N
             os.unlink(cert_path)
 
     def test_certificate_with_comments(self):
-        """Test certificate file with comments."""
+        """Test certificate file with comments before the PEM header."""
         content_with_comments = """# This is a test certificate
 # Created for testing purposes
 -----BEGIN CERTIFICATE-----
@@ -532,8 +534,9 @@ aWRnaXRzIFB0eSBMdGQwHhcNMTMwODI3MjM1NDA3WhcNMTQwODI3MjM1NDA3WjBF
             cert_path = f.name
 
         try:
-            ssl_config = SslConfig(ca_certificate_path=cert_path)
-            assert ssl_config.ca_certificate_path == cert_path
+            # Content validation checks first bytes — '#' comment prefix is rejected
+            with pytest.raises(ValueError, match="does not contain valid PEM or DER certificate data"):
+                SslConfig(ca_certificate_path=cert_path)
         finally:
             os.unlink(cert_path)
 
@@ -579,11 +582,11 @@ ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
             os.unlink(cert_path)
 
     def test_certificate_file_size_limits(self):
-        """Test certificate file at various size boundaries."""
+        """Test that files of various sizes without valid cert headers are rejected."""
         sizes = [1, 100, 1024, 10240, 102400]  # 1B, 100B, 1KB, 10KB, 100KB
 
         for size in sizes:
-            content = "A" * size
+            content = "A" * size  # Random ASCII content, not a valid PEM/DER cert
 
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".pem", delete=False
@@ -592,8 +595,9 @@ ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
                 cert_path = f.name
 
             try:
-                ssl_config = SslConfig(ca_certificate_path=cert_path)
-                assert ssl_config.ca_certificate_path == cert_path
+                # Content validation rejects files not starting with '-----BEGIN'
+                with pytest.raises(ValueError, match="does not contain valid PEM or DER certificate data"):
+                    SslConfig(ca_certificate_path=cert_path)
             finally:
                 os.unlink(cert_path)
 

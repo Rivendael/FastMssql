@@ -43,12 +43,21 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     builder
         .enable_all()
-        .worker_threads((cpu_count * 2).max(4).min(512)) // 2x CPUs for I/O-bound database work
-        .max_blocking_threads((cpu_count * 64).min(1024)) // More blocking threads for DB I/O surge capacity
-        .thread_keep_alive(std::time::Duration::from_secs(900)) // 15 minutes to avoid thrashing
-        .thread_stack_size(2 * 1024 * 1024) // 2MB stack = 2x more threads, optimal for high concurrency
-        .global_queue_interval(31) // Lower frequency = better locality, less stealing overhead
-        .event_interval(61); // Less frequent epoll = more batching
+        // Async I/O workload: 1× CPU workers is optimal. More workers increase work-stealing
+        // contention without improving throughput for DB-latency-bound operations.
+        .worker_threads(cpu_count.max(4).min(16))
+        // No spawn_blocking is used anywhere in this codebase — all DB I/O is async.
+        // A small ceiling gives a safety margin for any future sync work without
+        // ballooning virtual memory (2 MB stack × N threads).
+        .max_blocking_threads((cpu_count * 2).min(32))
+        // 60 s amortises burst thread creation while releasing idle threads promptly.
+        // The previous 900 s value kept surge threads alive for 15 minutes.
+        .thread_keep_alive(std::time::Duration::from_secs(60))
+        .thread_stack_size(2 * 1024 * 1024) // 2 MB — matches Tokio's recommendation
+        // Tokio default (61). Smaller values cause excessive global-queue polling;
+        // the previous value of 31 doubled poll frequency with no measured benefit.
+        .global_queue_interval(61)
+        .event_interval(61); // Tokio default — batches I/O event polling per scheduler tick
 
     pyo3_async_runtimes::tokio::init(builder);
 

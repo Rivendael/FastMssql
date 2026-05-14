@@ -79,6 +79,23 @@ pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
     }
 }
 
+/// Convert a `&[FastParameter]` into a `SmallVec` of `&dyn tiberius::ToSql` fat-pointer
+/// references for passing directly to tiberius `query`/`execute` methods.
+///
+/// Performance characteristics:
+/// - ≤16 parameters → zero heap allocation (entire buffer on the stack)
+/// - >16 parameters → exactly one heap allocation
+///
+/// Buffer reuse across async call boundaries is architecturally impossible in safe Rust
+/// because the references borrow from per-call locals. This helper centralises the
+/// conversion so the pattern is implemented once and used consistently everywhere.
+#[inline]
+pub fn params_as_sql_refs(params: &[FastParameter]) -> SmallVec<[&dyn tiberius::ToSql; 16]> {
+    // slice::iter() provides an ExactSizeIterator, so SmallVec's FromIterator impl
+    // can honour the size hint and stay on the stack for ≤16 elements.
+    params.iter().map(|p| p as &dyn tiberius::ToSql).collect()
+}
+
 pub fn convert_parameters_to_fast(
     parameters: Option<&Bound<PyAny>>,
     py: Python,

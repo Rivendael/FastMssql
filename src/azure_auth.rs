@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tiberius::AuthMethod;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 #[derive(Clone, Debug)]
 struct CachedToken {
@@ -20,8 +20,9 @@ struct CachedToken {
 pub struct PyAzureCredential {
     pub credential_type: AzureCredentialType,
     pub config: HashMap<String, String>,
-    // Thread-safe token cache
-    token_cache: Arc<Mutex<Option<CachedToken>>>,
+    // Thread-safe token cache — RwLock allows concurrent reads (valid-token fast path)
+    // while serialising the rare write (token refresh).
+    token_cache: Arc<RwLock<Option<CachedToken>>>,
 }
 
 /// Types of Azure credentials supported
@@ -74,7 +75,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::ServicePrincipal,
             config,
-            token_cache: Arc::new(Mutex::new(None)),
+            token_cache: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -88,7 +89,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::ManagedIdentity,
             config,
-            token_cache: Arc::new(Mutex::new(None)),
+            token_cache: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -100,7 +101,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::AccessToken,
             config,
-            token_cache: Arc::new(Mutex::new(None)),
+            token_cache: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -109,7 +110,7 @@ impl PyAzureCredential {
         PyAzureCredential {
             credential_type: AzureCredentialType::DefaultAzure,
             config: HashMap::new(),
-            token_cache: Arc::new(Mutex::new(None)),
+            token_cache: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -162,19 +163,31 @@ impl PyAzureCredential {
             return Ok(AuthMethod::aad_token(token));
         }
 
-        // Hold the lock for the entire check-and-refresh cycle.
-        // tokio::sync::Mutex is safe to hold across await points.
-        // This prevents concurrent callers from each independently fetching a new token
-        // when the cache is stale (TOCTOU race).
-        let mut cache_guard = self.token_cache.lock().await;
+        // ── Fast path: shared read lock (N concurrent readers allowed) ───────────
+        // Clone the token string before releasing the guard — we must not hold a
+        // read lock across the async token-fetch below.
+        {
+            let read_guard = self.token_cache.read().await;
+            if let Some(cached) = read_guard.as_ref() {
+                if cached.expires_at > Instant::now() {
+                    let token = cached.access_token.clone();
+                    return Ok(AuthMethod::aad_token(&token));
+                }
+            }
+        } // read_guard released here
 
-        if let Some(cached) = cache_guard.as_ref() {
+        // ── Slow path: exclusive write lock (serialises token refresh) ───────────
+        // Double-check after acquiring so concurrent waiters don't each hit the
+        // network — only the first writer fetches; the rest see the fresh token.
+        let mut write_guard = self.token_cache.write().await;
+        if let Some(cached) = write_guard.as_ref() {
             if cached.expires_at > Instant::now() {
-                return Ok(AuthMethod::aad_token(&cached.access_token));
+                let token = cached.access_token.clone();
+                return Ok(AuthMethod::aad_token(&token));
             }
         }
 
-        // Token is expired or missing; fetch a new one while still holding the lock.
+        // Fetch a new token while holding the exclusive write lock.
         let (token, expires_in) = match self.credential_type {
             AzureCredentialType::ServicePrincipal => {
                 let client_id = self
@@ -197,19 +210,18 @@ impl PyAzureCredential {
             AzureCredentialType::AccessToken => unreachable!(), // Handled above
         };
 
-        // Compute expiry with safety buffer and write directly into the held guard.
-        // Clamp the buffer so it never exceeds expires_in, preventing subtraction overflow
-        // if the token endpoint returns a small or zero expires_in value.
+        // Clamp the safety buffer so it never exceeds expires_in (subtraction overflow guard).
         let buffer_secs = ((expires_in as f64 * 0.10) as u64)
             .max(30)
             .min(600)
             .min(expires_in);
         let expires_at = Instant::now()
             + Duration::from_secs(expires_in.saturating_sub(buffer_secs));
-        *cache_guard = Some(CachedToken {
+        *write_guard = Some(CachedToken {
             access_token: token.clone(),
             expires_at,
         });
+        drop(write_guard); // release write lock before returning
 
         Ok(AuthMethod::aad_token(&token))
     }

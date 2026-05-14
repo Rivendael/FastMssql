@@ -138,14 +138,13 @@ The entry point configures the entire runtime environment:
 fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let mut builder = tokio::runtime::Builder::new_multi_thread();
 
-    // Tune thread pool for high RPS
     builder
-        .worker_threads((cpu_count / 2).max(1).min(8))
-        .max_blocking_threads((cpu_count * 32).min(512))
-        .thread_keep_alive(Duration::from_secs(900))
-        .thread_stack_size(4 * 1024 * 1024)
-        .global_queue_interval(7)
-        .event_interval(13);
+        .worker_threads(cpu_count.max(4).min(16))
+        .max_blocking_threads((cpu_count * 2).min(32))
+        .thread_keep_alive(Duration::from_secs(60))
+        .thread_stack_size(2 * 1024 * 1024)
+        .global_queue_interval(61)
+        .event_interval(61);
 
     pyo3_async_runtimes::tokio::init(builder);
     // ... register classes ...
@@ -154,12 +153,17 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 **Design Decisions:**
 
-- **Worker threads:** CPU count / 2 (fewer threads = less contention at high
-    RPS)
-- **Blocking threads:** CPU count × 32 (surge capacity for DB I/O)
-- **Keep-alive:** 15 minutes (prevents thread thrashing)
-- **Stack size:** 4 MB (allows more threads for high concurrency)
-- **Queue intervals:** Tuned for low-latency, high-throughput workloads
+- **Worker threads:** 1× CPU count, bounded 4–16. DB queries are async I/O-bound;
+    additional workers only add work-stealing overhead without improving throughput.
+- **Blocking threads:** CPU × 2, max 32. No `spawn_blocking` is used anywhere in
+    the codebase — all DB I/O is async via Tiberius. The small ceiling provides a
+    safety margin if future sync work is added, without ballooning virtual memory.
+- **Keep-alive:** 60 seconds. Amortises burst thread creation while reclaiming idle
+    thread stacks promptly (the previous 900 s kept surge threads alive 15 minutes).
+- **Stack size:** 2 MB — Tokio's recommended default for async runtimes.
+- **Queue intervals:** Tokio defaults (61). Previous values of 7/13 caused excessive
+    global-queue polling; 31 was mislabelled as "less frequent" but was actually
+    more frequent than the default.
 
 ### 2. Connection Class (`connection.rs`)
 
@@ -566,25 +570,25 @@ FastMSSQL uses a **tuned Tokio multi-threaded runtime:**
 let builder = tokio::runtime::Builder::new_multi_thread();
 
 builder
-    .worker_threads((cpu_count / 2).max(1).min(8))     // ← Few workers
-    .max_blocking_threads((cpu_count * 32).min(512))   // ← Many blockers
-    .thread_keep_alive(Duration::from_secs(900))       // ← Long lived
-    .thread_stack_size(4 * 1024 * 1024)                // ← Smaller stacks
-    .global_queue_interval(7)                           // ← Less contention
-    .event_interval(13);                                // ← Better cache locality
+    .worker_threads(cpu_count.max(4).min(16))          // ← 1× CPU, capped
+    .max_blocking_threads((cpu_count * 2).min(32))     // ← Minimal; no spawn_blocking used
+    .thread_keep_alive(Duration::from_secs(60))        // ← 1 min, not 15 min
+    .thread_stack_size(2 * 1024 * 1024)                // ← 2 MB (Tokio default)
+    .global_queue_interval(61)                          // ← Tokio default
+    .event_interval(61);                                // ← Tokio default
 ```
 
 **Rationale:**
 
-- **Fewer worker threads:** Reduces work-stealing contention when handling many
-    connections
-- **Many blocking threads:** SQL queries block, so we need capacity for surge
-    loads
-- **Long keep-alive:** Amortizes thread creation cost
-- **Small stacks:** More threads fit in memory, better for high concurrency
-- **Global queue interval:** Balances per-thread queues with global queue
-    (reduces contention)
-- **Event interval:** Batches event polling for cache efficiency
+- **1× CPU workers (max 16):** All DB I/O is async; workers only schedule tasks.
+    More workers would increase work-stealing overhead without improving throughput.
+- **Minimal blocking threads (max 32):** No `spawn_blocking` calls exist anywhere
+    in this codebase. The small pool is a safety margin for future additions.
+- **60 s keep-alive:** Smooths burst patterns while releasing idle thread stacks
+    promptly. 900 s kept surge threads alive for 15 minutes consuming virtual memory.
+- **2 MB stacks:** Tokio's recommended default; sufficient for async call depth.
+- **Tokio-default intervals (61):** No evidence custom values improve performance;
+    the previous values (7 / 13 / 31) caused excessive polling overhead.
 
 ### Task Model
 
