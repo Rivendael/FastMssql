@@ -1,15 +1,14 @@
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
-use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::{AuthMethod, Config, Row};
 use tokio::sync::RwLock;
 
 use crate::azure_auth::PyAzureCredential;
 use crate::batch::{bulk_insert, execute_batch, query_batch};
-use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast};
+use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast, params_as_sql_refs};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::ssl_config::PySslConfig;
@@ -67,11 +66,7 @@ impl PyConnection {
                 bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
             })?;
 
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
-            SmallVec::with_capacity(parameters.len());
-        for p in parameters {
-            tiberius_params.push(p as &dyn tiberius::ToSql);
-        }
+        let tiberius_params = params_as_sql_refs(parameters);
 
         let stream = conn
             .query(query, &tiberius_params)
@@ -81,7 +76,7 @@ impl PyConnection {
         let result = stream
             .into_first_result()
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
         drop(conn);
         Ok(result)
@@ -107,7 +102,7 @@ impl PyConnection {
         let result = stream
             .into_first_result()
             .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get results: {}", e)))?;
+            .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
         drop(conn);
         Ok(result)
@@ -126,11 +121,7 @@ impl PyConnection {
                 bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
             })?;
 
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
-            SmallVec::with_capacity(parameters.len());
-        for p in parameters {
-            tiberius_params.push(p as &dyn tiberius::ToSql);
-        }
+        let tiberius_params = params_as_sql_refs(parameters);
 
         let result = conn
             .execute(query, &tiberius_params)
@@ -382,12 +373,9 @@ impl PyConnection {
         let azure_credential = borrowed.azure_credential.clone();
 
         future_into_py(py, async move {
-            let is_connected = pool.read().await.is_some();
-
-            if is_connected {
-                return Ok(());
-            }
-
+            // ensure_pool_initialized_with_auth already contains the double-checked fast path
+            // (read-lock → check → write-lock → check again). A preliminary read here added
+            // a redundant lock cycle and a TOCTOU window without any benefit.
             let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
                 .await?;
             Ok(())
@@ -417,10 +405,9 @@ impl PyConnection {
         let azure_credential = self.azure_credential.clone();
 
         future_into_py(py, async move {
-            if pool.read().await.is_some() {
-                return Ok(true);
-            }
-
+            // Delegate entirely to ensure_pool_initialized_with_auth which already has
+            // the read-lock fast path + double-checked write-lock slow path. The previous
+            // preliminary read lock here was redundant and created a TOCTOU window.
             let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
                 .await?;
             Ok(true)
@@ -480,9 +467,7 @@ impl PyConnection {
         commands: &Bound<'p, PyList>,
     ) -> PyResult<Bound<'p, PyAny>> {
         execute_batch(
-            Arc::clone(&self.pool),
             Arc::clone(&self.config),
-            self.pool_config.clone(),
             self.azure_credential.clone(),
             py,
             commands,

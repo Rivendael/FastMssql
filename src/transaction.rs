@@ -2,7 +2,6 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3_async_runtimes::tokio::future_into_py;
-use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::{AuthMethod, Client, Config};
 use tokio::net::TcpStream;
@@ -11,7 +10,7 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::azure_auth::PyAzureCredential;
 use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_on_connection};
-use crate::parameter_conversion::convert_parameters_to_fast;
+use crate::parameter_conversion::{convert_parameters_to_fast, params_as_sql_refs};
 use crate::ssl_config::PySslConfig;
 use crate::types::{create_connection_error, create_sql_error};
 
@@ -137,10 +136,7 @@ impl Transaction {
 
             // Execute query on the held connection
             let execution_result = {
-                let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = fast_parameters
-                    .iter()
-                    .map(|p| p as &dyn tiberius::ToSql)
-                    .collect();
+                let tiberius_params = params_as_sql_refs(&fast_parameters);
 
                 let mut conn_guard = conn.lock().await;
                 let conn_ref = conn_guard
@@ -153,9 +149,7 @@ impl Transaction {
                     .map_err(|e| create_sql_error(e, "Query execution failed"))?
                     .into_first_result()
                     .await
-                    .map_err(|e| {
-                        PyRuntimeError::new_err(format!("Failed to get results: {}", e))
-                    })?;
+                    .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
                 drop(conn_guard); // Release lock after consuming all results
                 result
@@ -198,9 +192,7 @@ impl Transaction {
                     .map_err(|e| create_sql_error(e, "Query execution failed"))?
                     .into_first_result()
                     .await
-                    .map_err(|e| {
-                        PyRuntimeError::new_err(format!("Failed to get results: {}", e))
-                    })?;
+                    .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
                 drop(conn_guard); // Release lock after consuming all results
                 result
@@ -234,10 +226,7 @@ impl Transaction {
 
             // Execute command on the held connection
             let affected = {
-                let tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> = fast_parameters
-                    .iter()
-                    .map(|p| p as &dyn tiberius::ToSql)
-                    .collect();
+                let tiberius_params = params_as_sql_refs(&fast_parameters);
 
                 let mut conn_guard = conn.lock().await;
                 let conn_ref = conn_guard
@@ -348,9 +337,7 @@ impl Transaction {
                 conn_ref
                     .simple_query("BEGIN TRANSACTION")
                     .await
-                    .map_err(|e| {
-                        PyRuntimeError::new_err(format!("Failed to begin transaction: {}", e))
-                    })?;
+                    .map_err(|e| create_sql_error(e, "Failed to begin transaction"))?;
 
                 drop(conn_guard);
             }
@@ -372,9 +359,7 @@ impl Transaction {
             conn_ref
                 .simple_query("COMMIT TRANSACTION")
                 .await
-                .map_err(|e| {
-                    PyRuntimeError::new_err(format!("Failed to commit transaction: {}", e))
-                })?;
+                .map_err(|e| create_sql_error(e, "Failed to commit transaction"))?;
 
             drop(conn_guard);
             Ok(())
@@ -394,9 +379,7 @@ impl Transaction {
             conn_ref
                 .simple_query("ROLLBACK TRANSACTION")
                 .await
-                .map_err(|e| {
-                    PyRuntimeError::new_err(format!("Failed to rollback transaction: {}", e))
-                })?;
+                .map_err(|e| create_sql_error(e, "Failed to rollback transaction"))?;
 
             drop(conn_guard);
             Ok(())
@@ -447,10 +430,17 @@ impl Transaction {
             let mut conn_guard = conn.lock().await;
             if conn_guard.is_none() {
                 let tcp_stream = TcpStream::connect(config.get_addr()).await.map_err(|e| {
-                    create_connection_error(format!("Failed to connect to server: {}", e))
-                })?;
-
-                let compat_stream = tcp_stream.compat();
+                            create_connection_error(format!("Failed to connect to server: {}", e))
+                        })?;
+        
+                        // Disable Nagle algorithm — identical to pool connections in pool_manager.rs.
+                        // Without this, small TDS packets (common for parameterised queries) may be
+                        // buffered by the OS for up to 200 ms before transmission.
+                        tcp_stream.set_nodelay(true).map_err(|e| {
+                            create_connection_error(format!("Failed to set TCP_NODELAY: {}", e))
+                        })?;
+        
+                        let compat_stream = tcp_stream.compat();
 
                 // Configure authentication
                 let mut auth_config = (**config).clone();

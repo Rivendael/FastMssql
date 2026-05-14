@@ -78,37 +78,66 @@ impl PySslConfig {
 
         // Validate CA certificate path if provided
         if let Some(path_str) = ca_certificate_path {
+            use std::io::Read;
+
             let path = PathBuf::from(path_str);
-            if !path.exists() {
-                return Err(PyValueError::new_err(format!(
-                    "CA certificate file does not exist: {}",
-                    path_str
-                )));
-            }
 
-            // Check if the file is readable by trying to open it
-            match std::fs::File::open(&path) {
-                Ok(_) => {} // File is readable, continue validation
-                Err(e) => {
-                    return Err(PyValueError::new_err(format!(
-                        "CA certificate file is not readable: {} ({})",
-                        path_str, e
-                    )));
-                }
-            }
-
-            // Check file extension
+            // Check file extension first — provides an early, user-friendly error message
+            // before any I/O is attempted.
             if let Some(ext) = path.extension() {
                 let ext = ext.to_string_lossy().to_lowercase();
                 if !matches!(ext.as_str(), "pem" | "crt" | "cer" | "der") {
                     return Err(PyValueError::new_err(
-                        "CA certificate must be .pem, .crt, .cer, or .der file",
+                        "CA certificate must be a .pem, .crt, .cer, or .der file",
                     ));
                 }
             } else {
                 return Err(PyValueError::new_err(
-                    "CA certificate file must have .pem, .crt, .cer, or .der extension",
+                    "CA certificate file must have a .pem, .crt, .cer, or .der extension",
                 ));
+            }
+
+            // Open the file once — this confirms existence, readability, and lets us
+            // inspect the content magic bytes in a single syscall sequence.
+            let mut file = std::fs::File::open(&path).map_err(|e| {
+                PyValueError::new_err(format!(
+                    "CA certificate file cannot be opened: {} ({})",
+                    path_str, e
+                ))
+            })?;
+
+            // Read the first 11 bytes to check for recognised certificate magic.
+            //
+            // Two formats are accepted:
+            //   PEM  — starts with "-----BEGIN" (ASCII, typically "-----BEGIN CERTIFICATE-----")
+            //   DER  — starts with 0x30 (ASN.1 SEQUENCE tag); all X.509 DER certs begin with it
+            //
+            // Extensions alone are easily bypassed by file renaming or symlinks, so this
+            // content check provides defence-in-depth to catch misconfigurations early.
+            //
+            // Note: a TOCTOU window remains between this check and the TLS handshake
+            // (when tiberius re-reads the file via trust_cert_ca).  That window is
+            // inherent to tiberius's path-string API and cannot be fully closed here.
+            let mut magic = [0u8; 11];
+            let n = file.read(&mut magic).map_err(|e| {
+                PyValueError::new_err(format!(
+                    "Failed to read CA certificate file: {} ({})",
+                    path_str, e
+                ))
+            })?;
+
+            let is_pem = n >= 10 && magic[..10] == *b"-----BEGIN";
+            // ASN.1 DER SEQUENCE (0x30) — all well-formed X.509 certificates start with this.
+            let is_der = n >= 1 && magic[0] == 0x30;
+
+            if !is_pem && !is_der {
+                return Err(PyValueError::new_err(format!(
+                    "CA certificate file does not contain valid PEM or DER certificate data: {}. \
+                     PEM files must start with '-----BEGIN …'; DER files are binary ASN.1 starting \
+                     with byte 0x30. Ensure the file is a CA certificate, not a private key or \
+                     other credential.",
+                    path_str
+                )));
             }
         }
 

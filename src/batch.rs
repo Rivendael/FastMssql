@@ -1,6 +1,7 @@
 use crate::azure_auth::PyAzureCredential;
 use crate::parameter_conversion::{
-    FastParameter, TypedNull, convert_parameters_to_fast, python_to_fast_parameter,
+    FastParameter, TypedNull, convert_parameters_to_fast, params_as_sql_refs,
+    python_to_fast_parameter,
 };
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
@@ -12,7 +13,9 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use tiberius::Config;
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
+use tokio_util::compat::TokioAsyncWriteCompatExt;
 
 /// Parses batch items (SQL queries with parameters) from a Python list.
 pub fn parse_batch_items<'p>(
@@ -69,17 +72,18 @@ pub async fn execute_batch_on_connection(
     let mut all_results = Vec::with_capacity(batch_commands.len());
 
     for (sql, parameters) in batch_commands {
-        // Pre-allocate with exact capacity to avoid reallocation
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
-            SmallVec::with_capacity(parameters.len());
-        for p in &parameters {
-            tiberius_params.push(p as &dyn tiberius::ToSql);
-        }
-
-        let result = conn
-            .execute(sql, &tiberius_params)
-            .await
-            .map_err(|e| create_sql_error(e, "Batch item failed"))?;
+        // Fast path: skip SmallVec construction entirely for parameter-free statements
+        // (common for DDL like CREATE TABLE inside a batch).
+        let result = if parameters.is_empty() {
+            conn.execute(sql, &[])
+                .await
+                .map_err(|e| create_sql_error(e, "Batch item failed"))?
+        } else {
+            let tiberius_params = params_as_sql_refs(&parameters);
+            conn.execute(sql, &tiberius_params)
+                .await
+                .map_err(|e| create_sql_error(e, "Batch item failed"))?
+        };
 
         let affected: u64 = result.rows_affected().iter().sum();
         all_results.push(affected);
@@ -97,17 +101,17 @@ pub async fn query_batch_on_connection(
     let mut all_results = Vec::with_capacity(batch_queries.len());
 
     for (query, parameters) in batch_queries {
-        // Pre-allocate with exact capacity to avoid reallocation
-        let mut tiberius_params: SmallVec<[&dyn tiberius::ToSql; 16]> =
-            SmallVec::with_capacity(parameters.len());
-        for p in &parameters {
-            tiberius_params.push(p as &dyn tiberius::ToSql);
-        }
-
-        let stream = conn
-            .query(&query, &tiberius_params)
-            .await
-            .map_err(|e| create_sql_error(e, "Batch query execution failed"))?;
+        // Fast path: skip SmallVec construction entirely for parameter-free queries.
+        let stream = if parameters.is_empty() {
+            conn.query(&query, &[])
+                .await
+                .map_err(|e| create_sql_error(e, "Batch query execution failed"))?
+        } else {
+            let tiberius_params = params_as_sql_refs(&parameters);
+            conn.query(&query, &tiberius_params)
+                .await
+                .map_err(|e| create_sql_error(e, "Batch query execution failed"))?
+        };
 
         let rows = stream
             .into_first_result()
@@ -121,28 +125,52 @@ pub async fn query_batch_on_connection(
 }
 
 pub fn execute_batch<'p>(
-    pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
-    pool_config: PyPoolConfig,
     azure_credential: Option<PyAzureCredential>,
     py: Python<'p>,
     commands: &Bound<'p, PyList>,
 ) -> PyResult<Bound<'p, PyAny>> {
     let batch_commands = parse_batch_items(commands, py)?;
 
-    let pool = Arc::clone(&pool);
-    let config = Arc::clone(&config);
-    let pool_config = pool_config.clone();
-
     future_into_py(py, async move {
-        let pool_ref =
-            ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
-                .await?;
+        // ── Safety: dedicated connection, not a pooled one ─────────────────────────
+        //
+        // execute_batch wraps all commands in a single BEGIN / COMMIT transaction.
+        // If the caller's coroutine is cancelled (e.g. asyncio.Task.cancel()) while
+        // the transaction is open, the Rust future is dropped.  With a *pooled*
+        // connection the guard would silently return the connection to the pool with
+        // an open BEGIN TRANSACTION, corrupting the state seen by the next caller.
+        //
+        // By using a *dedicated* TCP connection instead:
+        //   • If the future is dropped, the TCP socket is closed by the OS.
+        //   • SQL Server detects the broken connection and automatically rolls back.
+        //   • The shared pool is never touched, so no poisoning is possible.
+        //
+        // The cost (one extra TCP + TDS handshake per batch call) is acceptable
+        // because batch operations are inherently heavy and latency-tolerant.
+        // ───────────────────────────────────────────────────────────────────────────
 
-        let mut conn = pool_ref
-            .get()
+        let tcp = TcpStream::connect(config.get_addr())
             .await
-            .map_err(|e| create_connection_error(format!("Pool error: {}", e)))?;
+            .map_err(|e| create_connection_error(format!("Failed to connect to server: {}", e)))?;
+
+        // Disable Nagle — same rationale as pool_manager.rs and transaction.rs.
+        tcp.set_nodelay(true)
+            .map_err(|e| create_connection_error(format!("Failed to set TCP_NODELAY: {}", e)))?;
+
+        // Apply Azure token (or leave config auth as-is for SQL / Windows auth).
+        let mut auth_config = (*config).clone();
+        if let Some(ref cred) = azure_credential {
+            let auth_method = cred
+                .to_auth_method()
+                .await
+                .map_err(|e| create_connection_error(format!("Authentication failed: {}", e)))?;
+            auth_config.authentication(auth_method);
+        }
+
+        let mut conn = tiberius::Client::connect(auth_config, tcp.compat_write())
+            .await
+            .map_err(|e| create_sql_error(e, "Failed to connect for batch execution"))?;
 
         conn.simple_query("BEGIN TRANSACTION")
             .await
@@ -150,20 +178,19 @@ pub fn execute_batch<'p>(
 
         let all_results = match execute_batch_on_connection(&mut conn, batch_commands).await {
             Ok(results) => results,
-            Err(e) => match conn.simple_query("ROLLBACK TRANSACTION").await {
-                Ok(_) => return Err(e),
-                Err(rollback_err) => {
-                    return Err(create_connection_error(format!(
-                        "Batch execution failed: {}. Critical: Transaction rollback also failed: {}. Connection may be in bad state.",
-                        e, rollback_err
-                    )));
-                }
-            },
+            Err(e) => {
+                // Best-effort rollback; ignore secondary errors.
+                let _ = conn.simple_query("ROLLBACK TRANSACTION").await;
+                return Err(e);
+            }
         };
 
-        conn.simple_query("COMMIT TRANSACTION").await.map_err(|e| {
-            create_sql_error(e, "Failed to commit batch transaction")
-        })?;
+        conn.simple_query("COMMIT TRANSACTION")
+            .await
+            .map_err(|e| create_sql_error(e, "Failed to commit batch transaction"))?;
+
+        // conn drops here — TCP connection closed cleanly.
+        // On future cancellation the OS closes the socket; SQL Server rolls back.
 
         Python::attach(|py| {
             let py_list = PyList::new(py, all_results)?;
@@ -211,7 +238,19 @@ pub fn query_batch<'p>(
 }
 
 /// Wraps a single SQL Server identifier part in square brackets and escapes `]` as `]]`.
-fn quote_identifier_part(part: &str) -> String {
+///
+/// Returns `Err` if `part` contains a null byte (`\x00`).  Null bytes are the only
+/// character not neutralised by bracket-quoting: some driver layers and C-string APIs
+/// treat `\x00` as a string terminator, which could silently truncate the identifier
+/// and produce unintended SQL.  All other Unicode characters — including right-to-left
+/// override codepoints (U+202E etc.) — are inert inside `[...]` and require no special
+/// handling because SQL Server parses bracket-quoted names literally at the byte level.
+fn quote_identifier_part(part: &str) -> PyResult<String> {
+    if part.contains('\x00') {
+        return Err(PyValueError::new_err(
+            "Identifier contains a null byte (\\x00), which is not allowed in SQL Server identifiers",
+        ));
+    }
     let mut quoted = String::with_capacity(part.len() + 2);
     quoted.push('[');
     for ch in part.chars() {
@@ -221,7 +260,7 @@ fn quote_identifier_part(part: &str) -> String {
         quoted.push(ch);
     }
     quoted.push(']');
-    quoted
+    Ok(quoted)
 }
 
 /// Quotes a (possibly multipart) SQL Server identifier, handling forms like:
@@ -232,8 +271,9 @@ fn quote_identifier_part(part: &str) -> String {
 /// - `mydb..users`   → `[mydb]..[users]`  (empty middle part preserved as-is)
 /// - `users`         → `[users]`
 ///
-/// This prevents SQL injection while keeping qualification semantics intact.
-fn quote_identifier(name: &str) -> String {
+/// Returns `Err` (propagated from [`quote_identifier_part`]) if any identifier part
+/// contains a null byte.
+fn quote_identifier(name: &str) -> PyResult<String> {
     let parts: Vec<&str> = name.split('.').collect();
     let mut result = String::with_capacity(name.len() + parts.len() * 2);
     for (i, part) in parts.iter().enumerate() {
@@ -243,10 +283,10 @@ fn quote_identifier(name: &str) -> String {
         if part.is_empty() {
             // preserve empty parts (e.g. the middle segment in db..table)
         } else {
-            result.push_str(&quote_identifier_part(part));
+            result.push_str(&quote_identifier_part(part)?);
         }
     }
-    result
+    Ok(result)
 }
 
 /// Fix untyped (U8/tinyint) NULL placeholders in a flat row-major buffer.
@@ -305,27 +345,53 @@ pub fn bulk_insert<'p>(
         ));
     }
 
-    let mut flat_data: Vec<FastParameter> = Vec::with_capacity(data_rows.len() * columns.len());
+    let col_count = columns.len();
+
+    // Hard limit for SQL Server is 2100. We use 2000 to be safe.
+    // Calculate rows_per_batch here (sync, GIL-held phase) so chunking drives
+    // conversion rather than being applied after a full allocation.
+    let rows_per_batch = (2000usize / col_count).max(1);
+    let chunk_capacity = rows_per_batch * col_count;
+
+    // Build owned chunks of at most `rows_per_batch` rows while still holding
+    // the GIL.  Each chunk is a self-contained Vec<FastParameter> so the async
+    // block can drop it immediately after its INSERT executes, keeping live
+    // memory proportional to one chunk rather than the entire dataset.
+    //
+    // Previously a single flat Vec was allocated for all rows up-front and kept
+    // alive until the very last await returned, doubling peak memory for large
+    // inputs.
+    let num_chunks = data_rows.len().div_ceil(rows_per_batch);
+    let mut chunks: Vec<Vec<FastParameter>> = Vec::with_capacity(num_chunks);
+    let mut current_chunk: Vec<FastParameter> = Vec::with_capacity(chunk_capacity);
+
     for row in data_rows.iter() {
         let row_list = row.cast::<PyList>()?;
-        if row_list.len() != columns.len() {
+        if row_list.len() != col_count {
             return Err(PyValueError::new_err(format!(
                 "Row has {} values but {} columns specified",
                 row_list.len(),
-                columns.len()
+                col_count
             )));
         }
         for value in row_list.iter() {
-            flat_data.push(python_to_fast_parameter(&value)?);
+            current_chunk.push(python_to_fast_parameter(&value)?);
+        }
+
+        // Once the chunk holds a full batch worth of rows, fix its null types
+        // and move it to the chunks list, then start a fresh allocation.
+        if current_chunk.len() >= chunk_capacity {
+            fix_bulk_null_types(&mut current_chunk, col_count);
+            chunks.push(current_chunk);
+            current_chunk = Vec::with_capacity(chunk_capacity);
         }
     }
 
-    let col_count = columns.len();
-
-    // Fix untyped (tinyint) NULLs so they match the type of their column siblings.
-    // Without this, a multi-row VALUES insert mixing NULLs with typed values causes
-    // SQL Server to fail with a conversion error during parameter type reconciliation.
-    fix_bulk_null_types(&mut flat_data, col_count);
+    // Flush the final (possibly partial) chunk.
+    if !current_chunk.is_empty() {
+        fix_bulk_null_types(&mut current_chunk, col_count);
+        chunks.push(current_chunk);
+    }
 
     future_into_py(py, async move {
         let pool_ref =
@@ -339,26 +405,19 @@ pub fn bulk_insert<'p>(
 
         let mut total_affected = 0u64;
 
-        // Hard limit for SQL Server is 2100. We use 2000 to be safe.
-        let max_params_per_request = 2000;
-        let rows_per_batch = max_params_per_request / col_count;
-
-        // Ensure we handle the case where a single row has > 2000 columns (unlikely but safe)
-        let rows_per_batch = if rows_per_batch == 0 {
-            1
-        } else {
-            rows_per_batch
-        };
-
-        // Quote identifiers to prevent SQL injection (bracket-quote per SQL Server rules)
-        let quoted_table = quote_identifier(&table_name);
+        // Quote identifiers to prevent SQL injection (bracket-quote per SQL Server rules).
+        // Returns Err if any name contains a null byte.
+        let quoted_table = quote_identifier(&table_name)?;
         let columns_sql = columns
             .iter()
             .map(|c| quote_identifier(c))
-            .collect::<Vec<_>>()
+            .collect::<PyResult<Vec<_>>>()?
             .join(", ");
 
-        for chunk in flat_data.chunks(rows_per_batch * col_count) {
+        // Drain chunks via into_iter: each Vec<FastParameter> is moved out and
+        // dropped at the end of its loop body, freeing memory progressively
+        // instead of holding all rows alive until the final query completes.
+        for chunk in chunks {
             let row_count_in_batch = chunk.len() / col_count;
 
             // Optimize: Use String with pre-allocated capacity instead of format!
@@ -393,7 +452,7 @@ pub fn bulk_insert<'p>(
             // Use SmallVec to avoid heap allocation for small parameter sets
             let mut params: SmallVec<[&dyn tiberius::ToSql; 128]> =
                 SmallVec::with_capacity(chunk.len());
-            for p in chunk {
+            for p in &chunk {
                 params.push(p as &dyn tiberius::ToSql);
             }
 
@@ -403,6 +462,8 @@ pub fn bulk_insert<'p>(
                 .map_err(|e| create_sql_error(e, "Batch execution failed"))?;
 
             total_affected += result.rows_affected().iter().sum::<u64>();
+            // `chunk` is dropped here — its FastParameter memory is freed before
+            // the next batch is sent.
         }
 
         Python::attach(|py| {
