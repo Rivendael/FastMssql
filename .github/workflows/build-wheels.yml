@@ -11,48 +11,67 @@ permissions:
 
 jobs:
   build-wheels:
-    name: Build wheels on ${{ matrix.os }} (${{ matrix.arch }} - ${{ matrix.manylinux || 'auto' }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            arch: x86_64
-            platform: linux
+      name: Build wheels on ${{ matrix.os }} (${{ matrix.arch }} - ${{ matrix.manylinux || 'auto' }})
+      runs-on: ${{ matrix.runner }}
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+            # --- Linux Intel ---
+            - os: ubuntu-latest
+              runner: ubuntu-latest
+              arch: x86_64
+              cibw_arch: x86_64
+              platform: linux
 
-          - os: windows-latest
-            arch: x64
-            platform: windows
+            # --- Linux NATIVE ARM64 (Fast native runner) ---
+            - os: ubuntu-latest
+              runner: ubuntu-24.04-arm
+              arch: aarch64
+              cibw_arch: aarch64
+              platform: linux
 
-          - os: macos-latest
-            arch: universal2
-            platform: macos
+            # --- Windows Intel ---
+            - os: windows-latest
+              runner: windows-latest
+              arch: x64
+              cibw_arch: AMD64
+              platform: windows
 
-    steps:
-      - name: Move temp (Windows only)
-        if: runner.os == 'Windows'
-        run: |
-          echo "TEMP=D:\temp" >> $GITHUB_ENV
-          echo "TMP=D:\temp" >> $GITHUB_ENV
-          mkdir D:\temp
+            # --- macOS Apple Silicon/Intel ---
+            - os: macos-latest
+              runner: macos-latest
+              arch: universal2
+              cibw_arch: universal2
+              platform: macos
 
-      - name: Set up QEMU
-        if: runner.os == 'Linux' && runner.arch == 'X64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
+      steps:
+        - name: Move temp (Windows only)
+          if: runner.os == 'Windows'
+          run: |
+            echo "TEMP=D:\temp" >> $GITHUB_ENV
+            echo "TMP=D:\temp" >> $GITHUB_ENV
+            mkdir D:\temp
 
-      - uses: actions/checkout@v4
+        # Automatically skips on the native ARM runner, runs on x86 if ever needed
+        - name: Set up QEMU
+          if: runner.os == 'Linux' && runner.arch == 'X64'
+          uses: docker/setup-qemu-action@v3
+          with:
+            platforms: all
 
-      - uses: pypa/cibuildwheel@v3.3.0
-        with:
-          extras: "uv"
+        - uses: actions/checkout@v4
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.platform }}
-          path: ./wheelhouse/*.whl
+        - uses: pypa/cibuildwheel@v3.3.0
+          with:
+            extras: "uv"
+          env:
+            CIBW_ARCHS: ${{ matrix.cibw_arch }}
+
+        - uses: actions/upload-artifact@v4
+          with:
+            name: wheels-${{ matrix.os }}-${{ matrix.platform }}-${{ matrix.cibw_arch }}
+            path: ./wheelhouse/*.whl
 
   build-sdist:
     name: Build source distribution
