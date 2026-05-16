@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tiberius::AuthMethod;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 #[derive(Clone, Debug)]
 struct CachedToken {
@@ -20,9 +20,15 @@ struct CachedToken {
 pub struct PyAzureCredential {
     pub credential_type: AzureCredentialType,
     pub config: HashMap<String, String>,
-    // Thread-safe token cache — RwLock allows concurrent reads (valid-token fast path)
-    // while serialising the rare write (token refresh).
+    // Allows N concurrent readers (fast-path cache hits) while serialising writes.
     token_cache: Arc<RwLock<Option<CachedToken>>>,
+    // Serialises the network refresh step without holding the RwLock across an await.
+    // Only one task performs the HTTP round-trip; every other expired-token caller
+    // queues here and then finds a fresh token on its double-check read.
+    refresh_mutex: Arc<Mutex<()>>,
+    // Shared, connection-pooling HTTP client — built once, reused on every refresh.
+    // reqwest::Client is Arc-based internally and is both Clone and Send + Sync.
+    client: Client,
 }
 
 /// Types of Azure credentials supported
@@ -63,6 +69,13 @@ impl AzureCredentialType {
     }
 }
 
+/// Build the shared HTTP client used by all token-refresh paths.
+/// A 30-second timeout is applied at the client level so individual
+/// requests do not need to set it themselves.
+fn build_http_client() -> Result<Client, reqwest::Error> {
+    Client::builder().timeout(Duration::from_secs(30)).build()
+}
+
 #[pymethods]
 impl PyAzureCredential {
     #[staticmethod]
@@ -76,6 +89,8 @@ impl PyAzureCredential {
             credential_type: AzureCredentialType::ServicePrincipal,
             config,
             token_cache: Arc::new(RwLock::new(None)),
+            refresh_mutex: Arc::new(Mutex::new(())),
+            client: build_http_client().expect("Failed to build HTTP client"),
         }
     }
 
@@ -90,6 +105,8 @@ impl PyAzureCredential {
             credential_type: AzureCredentialType::ManagedIdentity,
             config,
             token_cache: Arc::new(RwLock::new(None)),
+            refresh_mutex: Arc::new(Mutex::new(())),
+            client: build_http_client().expect("Failed to build HTTP client"),
         }
     }
 
@@ -102,6 +119,8 @@ impl PyAzureCredential {
             credential_type: AzureCredentialType::AccessToken,
             config,
             token_cache: Arc::new(RwLock::new(None)),
+            refresh_mutex: Arc::new(Mutex::new(())),
+            client: build_http_client().expect("Failed to build HTTP client"),
         }
     }
 
@@ -111,6 +130,8 @@ impl PyAzureCredential {
             credential_type: AzureCredentialType::DefaultAzure,
             config: HashMap::new(),
             token_cache: Arc::new(RwLock::new(None)),
+            refresh_mutex: Arc::new(Mutex::new(())),
+            client: build_http_client().expect("Failed to build HTTP client"),
         }
     }
 
@@ -155,7 +176,7 @@ impl PyAzureCredential {
     }
 
     pub async fn to_auth_method(&self) -> PyResult<AuthMethod> {
-        // For static access tokens, return directly without caching
+        // ── Static access tokens bypass all caching logic ────────────────────────
         if let AzureCredentialType::AccessToken = self.credential_type {
             let token = self
                 .get_config_value("access_token")
@@ -165,7 +186,7 @@ impl PyAzureCredential {
 
         // ── Fast path: shared read lock (N concurrent readers allowed) ───────────
         // Clone the token string before releasing the guard — we must not hold a
-        // read lock across the async token-fetch below.
+        // read lock across the async operations below.
         {
             let read_guard = self.token_cache.read().await;
             if let Some(cached) = read_guard.as_ref() {
@@ -174,20 +195,34 @@ impl PyAzureCredential {
                     return Ok(AuthMethod::aad_token(&token));
                 }
             }
-        } // read_guard released here
+        } // read_guard released here — no RwLock is held past this point
 
-        // ── Slow path: exclusive write lock (serialises token refresh) ───────────
-        // Double-check after acquiring so concurrent waiters don't each hit the
-        // network — only the first writer fetches; the rest see the fresh token.
-        let mut write_guard = self.token_cache.write().await;
-        if let Some(cached) = write_guard.as_ref() {
-            if cached.expires_at > Instant::now() {
-                let token = cached.access_token.clone();
-                return Ok(AuthMethod::aad_token(&token));
+        // ── Slow path: serialise refresh via a dedicated async mutex ─────────────
+        //
+        // Pattern: double-checked locking without holding the RwLock across I/O.
+        //
+        // 1. Acquire the lightweight refresh_mutex — only one task proceeds to
+        //    the network; every other expired-token caller lines up here.
+        // 2. Re-check the cache under a read lock inside the mutex (double-check).
+        //    If a previous waiter already refreshed the token, serve from cache.
+        // 3. If still expired, perform the HTTP round-trip with NO RwLock held.
+        // 4. Open a write lock only for the brief struct-assignment at the end.
+        //
+        // Result: the RwLock write guard is held for nanoseconds, never milliseconds.
+        let _refresh_guard = self.refresh_mutex.lock().await;
+
+        // Double-check: another waiter may have refreshed while we queued.
+        {
+            let read_guard = self.token_cache.read().await;
+            if let Some(cached) = read_guard.as_ref() {
+                if cached.expires_at > Instant::now() {
+                    let token = cached.access_token.clone();
+                    return Ok(AuthMethod::aad_token(&token));
+                }
             }
-        }
+        } // read_guard released — still no RwLock held
 
-        // Fetch a new token while holding the exclusive write lock.
+        // Perform the network request with no lock of any kind held.
         let (token, expires_in) = match self.credential_type {
             AzureCredentialType::ServicePrincipal => {
                 let client_id = self
@@ -204,7 +239,8 @@ impl PyAzureCredential {
             }
             AzureCredentialType::ManagedIdentity => {
                 let client_id = self.get_config_value("client_id");
-                self.acquire_managed_identity_token(client_id.cloned()).await?
+                self.acquire_managed_identity_token(client_id.cloned())
+                    .await?
             }
             AzureCredentialType::DefaultAzure => self.acquire_default_azure_token().await?,
             AzureCredentialType::AccessToken => unreachable!(), // Handled above
@@ -215,13 +251,17 @@ impl PyAzureCredential {
             .max(30)
             .min(600)
             .min(expires_in);
-        let expires_at = Instant::now()
-            + Duration::from_secs(expires_in.saturating_sub(buffer_secs));
-        *write_guard = Some(CachedToken {
-            access_token: token.clone(),
-            expires_at,
-        });
-        drop(write_guard); // release write lock before returning
+        let expires_at =
+            Instant::now() + Duration::from_secs(expires_in.saturating_sub(buffer_secs));
+
+        // Brief write lock: struct assignment only — no I/O.
+        {
+            let mut write_guard = self.token_cache.write().await;
+            *write_guard = Some(CachedToken {
+                access_token: token.clone(),
+                expires_at,
+            });
+        } // write_guard dropped here — _refresh_guard released when this fn returns
 
         Ok(AuthMethod::aad_token(&token))
     }
@@ -232,10 +272,6 @@ impl PyAzureCredential {
         client_secret: &str,
         tenant_id: &str,
     ) -> PyResult<(String, u64)> {
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to build HTTP client: {}", e)))?;
         let token_url = format!(
             "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
             tenant_id
@@ -248,12 +284,12 @@ impl PyAzureCredential {
             ("scope", "https://database.windows.net/.default"),
         ];
 
-        let response = client
+        // .form() sets Content-Type: application/x-www-form-urlencoded automatically
+        // and handles URL encoding — no need for serde_urlencoded or manual headers.
+        let response = self
+            .client
             .post(&token_url)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(serde_urlencoded::to_string(&params).map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to encode form params: {}", e))
-            })?)
+            .form(&params)
             .send()
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Token request failed: {}", e)))?;
@@ -287,7 +323,6 @@ impl PyAzureCredential {
         &self,
         client_id: Option<String>,
     ) -> PyResult<(String, u64)> {
-        let client = Client::new();
         // Azure Instance Metadata Service (IMDS) endpoint: official Azure endpoint for
         // accessing metadata and managed identity tokens from Azure compute resources.
         //
@@ -309,10 +344,11 @@ impl PyAzureCredential {
             url.query_pairs_mut().append_pair("client_id", id);
         }
 
-        let response = client
+        // Timeout is already set on self.client (30 s); no per-request override needed.
+        let response = self
+            .client
             .get(url)
             .header("Metadata", "true")
-            .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Token request failed: {}", e)))?;
@@ -388,8 +424,14 @@ impl PyAzureCredential {
                     PyRuntimeError::new_err("expiresOn not found in Azure CLI response")
                 })?;
 
-                let expires_at = chrono::NaiveDateTime::parse_from_str(expires_on, "%Y-%m-%d %H:%M:%S%.f")
-                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to parse expiresOn '{}': {}", expires_on, e)))?;
+                let expires_at =
+                    chrono::NaiveDateTime::parse_from_str(expires_on, "%Y-%m-%d %H:%M:%S%.f")
+                        .map_err(|e| {
+                            PyRuntimeError::new_err(format!(
+                                "Failed to parse expiresOn '{}': {}",
+                                expires_on, e
+                            ))
+                        })?;
 
                 let now_naive = chrono::Local::now().naive_local();
                 let expires_in = expires_at
