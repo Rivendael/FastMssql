@@ -54,12 +54,8 @@ impl From<tiberius::error::Error> for PoolConnectionError {
 impl From<PoolConnectionError> for pyo3::PyErr {
     fn from(e: PoolConnectionError) -> Self {
         match e {
-            PoolConnectionError::Tiberius(terr) => {
-                create_sql_error(terr, "Connection error")
-            }
-            PoolConnectionError::Io(err) => {
-                create_connection_error(format!("I/O error: {err}"))
-            }
+            PoolConnectionError::Tiberius(terr) => create_sql_error(terr, "Connection error"),
+            PoolConnectionError::Io(err) => create_connection_error(format!("I/O error: {err}")),
             PoolConnectionError::Auth(msg) => {
                 create_connection_error(format!("Authentication error: {msg}"))
             }
@@ -134,16 +130,23 @@ impl bb8::ManageConnection for AzureConnectionManager {
 
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         // Roll back any uncommitted transaction that might have leaked onto this
-        // connection (e.g., future dropped between BEGIN and COMMIT).
+        // connection (e.g., future dropped between BEGIN and COMMIT), then confirm
+        // the connection is still alive — combined into a single round-trip.
         // This runs only when test_on_check_out = true or on periodic lifetime /
         // idle-timeout health checks — never on every routine checkout.
-        // The SELECT 1 that follows confirms the connection is still alive.
-        conn.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+        conn.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION; SELECT 1")
             .await?;
-        conn.simple_query("SELECT 1").await?;
         Ok(())
     }
 
+    /// Returns `false` unconditionally.
+    ///
+    /// bb8 calls this synchronously on every connection return.  `tiberius::Client`
+    /// wraps an async TCP stream and exposes no synchronous liveness check, so
+    /// there is nothing meaningful to inspect here.  All real health-checking is
+    /// handled by [`is_valid`](AzureConnectionManager::is_valid), which runs a
+    /// real server round-trip on periodic lifetime / idle-timeout checks and,
+    /// optionally, on every checkout when `test_on_check_out = true`.
     fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
         false
     }
@@ -161,9 +164,7 @@ pub async fn establish_pool(
     pool_config: &PyPoolConfig,
 ) -> PyResult<ConnectionPool> {
     let manager = AzureConnectionManager::new(base_config.clone(), azure_credential);
-    let mut builder = Pool::builder()
-        .retry_connection(true)
-        .max_size(pool_config.max_size);
+    let mut builder = Pool::builder().max_size(pool_config.max_size);
 
     if let Some(min) = pool_config.min_idle {
         builder = builder.min_idle(Some(min));
@@ -184,10 +185,7 @@ pub async fn establish_pool(
         builder = builder.retry_connection(retry);
     }
 
-    let pool = builder
-        .build(manager)
-        .await
-        .map_err(pyo3::PyErr::from)?;
+    let pool = builder.build(manager).await.map_err(pyo3::PyErr::from)?;
 
     // Warmup pool if min_idle is configured to eliminate cold-start latency.
     if let Some(min_idle) = pool_config.min_idle {
@@ -225,8 +223,6 @@ pub async fn ensure_pool_initialized_with_auth(
     // so tokens are always fresh regardless of when bb8 decides to open them.
     let new_pool = establish_pool(&config, azure_credential, pool_config).await?;
     *write_guard = Some(new_pool.clone());
-    drop(write_guard);
-
     Ok(new_pool)
 }
 
@@ -250,8 +246,8 @@ pub async fn warmup_pool(
     // pool.get(); this outer deadline is a safety net to guarantee that
     // warmup_pool() always returns even if bb8's own timeout is misconfigured or
     // bypassed.
-    let warmup_budget = (connection_timeout * target_connections.max(1))
-        .min(std::time::Duration::from_secs(120));
+    let warmup_budget =
+        (connection_timeout * target_connections.max(1)).min(std::time::Duration::from_secs(120));
 
     let mut set: JoinSet<Result<(), bb8::RunError<PoolConnectionError>>> = JoinSet::new();
 
