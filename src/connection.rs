@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 
 use crate::azure_auth::PyAzureCredential;
 use crate::batch::{bulk_insert, execute_batch, query_batch};
+use crate::helpers::wrap_query_stream;
 use crate::parameter_conversion::{FastParameter, convert_parameters_to_fast, params_as_sql_refs};
 use crate::pool_config::PyPoolConfig;
 use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
@@ -67,15 +68,6 @@ impl PyConnection {
             bb8::RunError::User(e) => {
                 create_connection_error(format!("Failed to get connection from pool: {}", e))
             }
-        })
-    }
-
-    /// Wrap `Vec<Row>` into a `Py<PyAny>` via `PyQueryStream`.
-    fn wrap_query_stream(rows: Vec<Row>) -> PyResult<Py<PyAny>> {
-        Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let query_stream = crate::types::PyQueryStream::from_tiberius_rows(rows, py)?;
-            let py_result = Py::new(py, query_stream)?;
-            Ok(py_result.into_any())
         })
     }
 
@@ -285,7 +277,7 @@ impl PyConnection {
             let pool_ref = handles.ensure_connected().await?;
             let execution_result =
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
-            Self::wrap_query_stream(execution_result)
+            wrap_query_stream(execution_result)
         })
     }
 
@@ -303,7 +295,7 @@ impl PyConnection {
             let pool_ref = handles.ensure_connected().await?;
             let execution_result =
                 Self::execute_simple_query_async_gil_free(&pool_ref, &query).await?;
-            Self::wrap_query_stream(execution_result)
+            wrap_query_stream(execution_result)
         })
     }
 

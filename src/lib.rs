@@ -9,6 +9,7 @@ mod arrow_conversion;
 mod azure_auth;
 mod batch;
 mod connection;
+mod helpers;
 mod parameter_conversion;
 mod pool_config;
 mod pool_manager;
