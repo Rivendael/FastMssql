@@ -27,15 +27,39 @@ impl PyPoolConfig {
         test_on_check_out: Option<bool>,
         retry_connection: Option<bool>,
     ) -> PyResult<Self> {
-        if max_size == 0 {
-            return Err(PyValueError::new_err("max_size must be greater than 0"));
+        // Validate max_size >= 1
+        if max_size < 1 {
+            return Err(PyValueError::new_err("max_size must be >= 1"));
         }
 
+        // Validate min_idle <= max_size
         if let Some(min) = min_idle {
             if min > max_size {
                 return Err(PyValueError::new_err(
-                    "min_idle cannot be greater than max_size",
+                    format!("min_idle ({}) cannot be greater than max_size ({})", min, max_size),
                 ));
+            }
+        }
+
+        // Validate duration values are not negative (zero is allowed)
+        // max_lifetime_secs
+        if let Some(lt_secs) = max_lifetime_secs {
+            if lt_secs == 0 {
+                return Err(PyValueError::new_err("max_lifetime_secs must be > 0 if specified"));
+            }
+        }
+
+        // idle_timeout_secs
+        if let Some(it_secs) = idle_timeout_secs {
+            if it_secs == 0 {
+                return Err(PyValueError::new_err("idle_timeout_secs must be > 0 if specified"));
+            }
+        }
+
+        // connection_timeout_secs >= 1 second
+        if let Some(ct_secs) = connection_timeout_secs {
+            if ct_secs < 1 {
+                return Err(PyValueError::new_err("connection_timeout_secs must be >= 1"));
             }
         }
 
@@ -101,8 +125,14 @@ impl PyPoolConfig {
 
     /// Set the maximum lifetime of connections in seconds
     #[setter]
-    pub fn set_max_lifetime_secs(&mut self, value: Option<u64>) {
+    pub fn set_max_lifetime_secs(&mut self, value: Option<u64>) -> PyResult<()> {
+        if let Some(secs) = value {
+            if secs == 0 {
+                return Err(PyValueError::new_err("max_lifetime_secs must be > 0 if specified"));
+            }
+        }
         self.max_lifetime = value.map(std::time::Duration::from_secs);
+        Ok(())
     }
 
     /// Get the idle timeout in seconds
@@ -113,8 +143,14 @@ impl PyPoolConfig {
 
     /// Set the idle timeout in seconds
     #[setter]
-    pub fn set_idle_timeout_secs(&mut self, value: Option<u64>) {
+    pub fn set_idle_timeout_secs(&mut self, value: Option<u64>) -> PyResult<()> {
+        if let Some(secs) = value {
+            if secs == 0 {
+                return Err(PyValueError::new_err("idle_timeout_secs must be > 0 if specified"));
+            }
+        }
         self.idle_timeout = value.map(std::time::Duration::from_secs);
+        Ok(())
     }
 
     /// Get the connection timeout in seconds
@@ -125,8 +161,14 @@ impl PyPoolConfig {
 
     /// Set the connection timeout in seconds
     #[setter]
-    pub fn set_connection_timeout_secs(&mut self, value: Option<u64>) {
+    pub fn set_connection_timeout_secs(&mut self, value: Option<u64>) -> PyResult<()> {
+        if let Some(secs) = value {
+            if secs < 1 {
+                return Err(PyValueError::new_err("connection_timeout_secs must be >= 1"));
+            }
+        }
         self.connection_timeout = value.map(std::time::Duration::from_secs);
+        Ok(())
     }
 
     /// Get whether to test connections on check out

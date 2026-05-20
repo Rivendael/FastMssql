@@ -292,20 +292,7 @@ impl PyQueryStream {
     /// Returns the next FastRow, or raises StopIteration when complete
     pub fn __next__(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         if self.position < self.tiberius_rows.len() {
-            let fast_row = if let Some(cached) = &self.converted_cache[self.position] {
-                cached.clone()
-            } else {
-                let row = self.tiberius_rows[self.position]
-                    .take()
-                    .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
-                let column_info = self
-                    .column_info
-                    .as_ref()
-                    .ok_or_else(|| PyValueError::new_err("No column info"))?;
-                let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
-                self.converted_cache[self.position] = Some(fast_row.clone());
-                fast_row
-            };
+            let fast_row = self.get_or_convert_row(py, self.position)?;
             self.position += 1;
             Py::new(py, fast_row).map(|p| p.into_any())
         } else {
@@ -335,22 +322,8 @@ impl PyQueryStream {
             }
 
             let mut row_list = Vec::with_capacity(stop - start);
-            let column_info = self
-                .column_info
-                .as_ref()
-                .ok_or_else(|| PyValueError::new_err("No column info"))?;
-
             for i in start..stop {
-                let fast_row = if let Some(cached) = &self.converted_cache[i] {
-                    cached.clone()
-                } else {
-                    let row = self.tiberius_rows[i]
-                        .take()
-                        .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
-                    let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
-                    self.converted_cache[i] = Some(fast_row.clone());
-                    fast_row
-                };
+                let fast_row = self.get_or_convert_row(py, i)?;
                 row_list.push(Py::new(py, fast_row)?.into_any());
             }
 
@@ -362,6 +335,11 @@ impl PyQueryStream {
         if let Ok(index) = key.extract::<isize>() {
             let len = self.tiberius_rows.len() as isize;
             let actual_index = if index < 0 {
+                if index.abs() > len {
+                    return Err(pyo3::exceptions::PyIndexError::new_err(
+                        "Index out of range",
+                    ));
+                }
                 (len + index) as usize
             } else {
                 index as usize
@@ -373,20 +351,7 @@ impl PyQueryStream {
                 ));
             }
 
-            let fast_row = if let Some(cached) = &self.converted_cache[actual_index] {
-                cached.clone()
-            } else {
-                let row = self.tiberius_rows[actual_index]
-                    .take()
-                    .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
-                let column_info = self
-                    .column_info
-                    .as_ref()
-                    .ok_or_else(|| PyValueError::new_err("No column info"))?;
-                let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
-                self.converted_cache[actual_index] = Some(fast_row.clone());
-                fast_row
-            };
+            let fast_row = self.get_or_convert_row(py, actual_index)?;
 
             return Py::new(py, fast_row).map(|p| p.into_any());
         }
@@ -404,22 +369,8 @@ impl PyQueryStream {
             return Ok(pyo3::types::PyList::empty(py).into());
         }
 
-        let column_info = self
-            .column_info
-            .as_ref()
-            .ok_or_else(|| PyValueError::new_err("No column info"))?;
-
         for i in self.position..self.tiberius_rows.len() {
-            let fast_row = if let Some(cached) = &self.converted_cache[i] {
-                cached.clone()
-            } else {
-                let row = self.tiberius_rows[i]
-                    .take()
-                    .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
-                let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
-                self.converted_cache[i] = Some(fast_row.clone());
-                fast_row
-            };
+            let fast_row = self.get_or_convert_row(py, i)?;
             let py_row = Py::new(py, fast_row)?;
             row_list.push(py_row.into_any());
         }
@@ -439,22 +390,8 @@ impl PyQueryStream {
             return Ok(pyo3::types::PyList::empty(py).into());
         }
 
-        let column_info = self
-            .column_info
-            .as_ref()
-            .ok_or_else(|| PyValueError::new_err("No column info"))?;
-
         for i in self.position..end {
-            let fast_row = if let Some(cached) = &self.converted_cache[i] {
-                cached.clone()
-            } else {
-                let row = self.tiberius_rows[i]
-                    .take()
-                    .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
-                let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
-                self.converted_cache[i] = Some(fast_row.clone());
-                fast_row
-            };
+            let fast_row = self.get_or_convert_row(py, i)?;
             let py_row = Py::new(py, fast_row)?;
             row_list.push(py_row.into_any());
         }
@@ -512,20 +449,7 @@ impl PyQueryStream {
     /// Backwards compatibility: fetch one row
     pub fn fetchone(&mut self, py: Python<'_>) -> PyResult<Option<Py<PyFastRow>>> {
         if self.position < self.tiberius_rows.len() {
-            let fast_row = if let Some(cached) = &self.converted_cache[self.position] {
-                cached.clone()
-            } else {
-                let row = self.tiberius_rows[self.position]
-                    .take()
-                    .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
-                let column_info = self
-                    .column_info
-                    .as_ref()
-                    .ok_or_else(|| PyValueError::new_err("No column info"))?;
-                let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
-                self.converted_cache[self.position] = Some(fast_row.clone());
-                fast_row
-            };
+            let fast_row = self.get_or_convert_row(py, self.position)?;
             self.position += 1;
             Ok(Some(Py::new(py, fast_row)?))
         } else {
@@ -557,6 +481,24 @@ impl PyQueryStream {
 }
 
 impl PyQueryStream {
+    /// Private helper: check cache → convert from tiberius row → cache result
+    fn get_or_convert_row(&mut self, py: Python<'_>, index: usize) -> PyResult<PyFastRow> {
+        if let Some(cached) = &self.converted_cache[index] {
+            Ok(cached.clone())
+        } else {
+            let row = self.tiberius_rows[index]
+                .take()
+                .ok_or_else(|| PyValueError::new_err("Row already consumed"))?;
+            let column_info = self
+                .column_info
+                .as_ref()
+                .ok_or_else(|| PyValueError::new_err("No column info"))?;
+            let fast_row = PyFastRow::from_tiberius_row(row, py, Arc::clone(column_info))?;
+            self.converted_cache[index] = Some(fast_row.clone());
+            Ok(fast_row)
+        }
+    }
+
     /// Create a new QueryStream from Tiberius rows
     /// LAZY: stores raw rows, NO Python conversion (minimal GIL hold)
     /// Rows converted on-demand during iteration and cached for reset()

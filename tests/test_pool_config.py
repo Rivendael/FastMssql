@@ -51,13 +51,13 @@ class TestPoolConfigConstructor:
 
     def test_max_size_zero_invalid(self):
         """Test that max_size of 0 raises an error."""
-        with pytest.raises(ValueError, match="max_size must be greater than 0"):
+        with pytest.raises(ValueError, match="max_size must be >= 1"):
             PoolConfig(max_size=0)
 
     def test_min_idle_greater_than_max_size_invalid(self):
         """Test that min_idle > max_size raises an error."""
         with pytest.raises(
-            ValueError, match="min_idle cannot be greater than max_size"
+            ValueError, match=r"min_idle \(15\) cannot be greater than max_size \(10\)"
         ):
             PoolConfig(max_size=10, min_idle=15)
 

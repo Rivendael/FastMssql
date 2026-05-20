@@ -14,6 +14,25 @@ use crate::pool_manager::{ConnectionPool, ensure_pool_initialized_with_auth};
 use crate::ssl_config::PySslConfig;
 use crate::types::{create_connection_error, create_sql_error};
 
+/// Bundles the four cloned handles needed for async pool operations.
+struct ConnectionHandles {
+    pool: Arc<RwLock<Option<ConnectionPool>>>,
+    config: Arc<Config>,
+    pool_config: PyPoolConfig,
+    azure_credential: Option<PyAzureCredential>,
+}
+
+impl ConnectionHandles {
+    fn ensure_connected(&self) -> impl std::future::Future<Output = PyResult<ConnectionPool>> + '_ {
+        ensure_pool_initialized_with_auth(
+            self.pool.clone(),
+            self.config.clone(),
+            &self.pool_config,
+            self.azure_credential.clone(),
+        )
+    }
+}
+
 #[pyclass(name = "Connection")]
 pub struct PyConnection {
     pool: Arc<RwLock<Option<ConnectionPool>>>,
@@ -24,6 +43,42 @@ pub struct PyConnection {
 }
 
 impl PyConnection {
+    /// Clone the four fields needed for async pool operations into a single struct.
+    fn clone_handles(&self) -> ConnectionHandles {
+        ConnectionHandles {
+            pool: Arc::clone(&self.pool),
+            config: Arc::clone(&self.config),
+            pool_config: self.pool_config.clone(),
+            azure_credential: self.azure_credential.clone(),
+        }
+    }
+
+    /// Acquire a connection from the pool with standardized error mapping.
+    async fn get_pool_connection(
+        pool: &ConnectionPool,
+    ) -> PyResult<bb8::PooledConnection<'_, crate::pool_manager::AzureConnectionManager>> {
+        pool.get().await.map_err(|e| match e {
+            bb8::RunError::TimedOut => {
+                create_connection_error(
+                    "Connection pool timeout - all connections are busy. \
+                     Try reducing concurrent requests or increasing pool size.",
+                )
+            }
+            bb8::RunError::User(e) => {
+                create_connection_error(format!("Failed to get connection from pool: {}", e))
+            }
+        })
+    }
+
+    /// Wrap `Vec<Row>` into a `Py<PyAny>` via `PyQueryStream`.
+    fn wrap_query_stream(rows: Vec<Row>) -> PyResult<Py<PyAny>> {
+        Python::attach(|py| -> PyResult<Py<PyAny>> {
+            let query_stream = crate::types::PyQueryStream::from_tiberius_rows(rows, py)?;
+            let py_result = Py::new(py, query_stream)?;
+            Ok(py_result.into_any())
+        })
+    }
+
     /// For queries that return rows (SELECT statements)
     #[inline]
     async fn execute_query_async_gil_free(
@@ -60,11 +115,7 @@ impl PyConnection {
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<Vec<Row>> {
-        let mut conn = pool.get().await
-            .map_err(|e| match e {
-                bb8::RunError::TimedOut => create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size."),
-                bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
-            })?;
+        let mut conn = Self::get_pool_connection(pool).await?;
 
         let tiberius_params = params_as_sql_refs(parameters);
 
@@ -88,11 +139,7 @@ impl PyConnection {
         pool: &ConnectionPool,
         query: &str,
     ) -> PyResult<Vec<Row>> {
-        let mut conn = pool.get().await
-            .map_err(|e| match e {
-                bb8::RunError::TimedOut => create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size."),
-                bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
-            })?;
+        let mut conn = Self::get_pool_connection(pool).await?;
 
         let stream = conn
             .simple_query(query)
@@ -115,11 +162,7 @@ impl PyConnection {
         query: &str,
         parameters: &[FastParameter],
     ) -> PyResult<u64> {
-        let mut conn = pool.get().await
-            .map_err(|e| match e {
-                bb8::RunError::TimedOut => create_connection_error("Connection pool timeout - all connections are busy. Try reducing concurrent requests or increasing pool size."),
-                bb8::RunError::User(e) => create_connection_error(format!("Failed to get connection from pool: {}", e)),
-            })?;
+        let mut conn = Self::get_pool_connection(pool).await?;
 
         let tiberius_params = params_as_sql_refs(parameters);
 
@@ -236,26 +279,13 @@ impl PyConnection {
         parameters: Option<&Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
-
-        let pool = Arc::clone(&self.pool);
-        let config = Arc::clone(&self.config);
-        let pool_config = self.pool_config.clone();
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            let pool_ref =
-                ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
-                    .await?;
-
+            let pool_ref = handles.ensure_connected().await?;
             let execution_result =
                 Self::execute_query_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
-
-            Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let query_stream =
-                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
-                let py_result = Py::new(py, query_stream)?;
-                Ok(py_result.into_any())
-            })
+            Self::wrap_query_stream(execution_result)
         })
     }
 
@@ -267,25 +297,13 @@ impl PyConnection {
         py: Python<'p>,
         query: String,
     ) -> PyResult<Bound<'p, PyAny>> {
-        let pool = Arc::clone(&self.pool);
-        let config = Arc::clone(&self.config);
-        let pool_config = self.pool_config.clone();
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            let pool_ref =
-                ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
-                    .await?;
-
+            let pool_ref = handles.ensure_connected().await?;
             let execution_result =
                 Self::execute_simple_query_async_gil_free(&pool_ref, &query).await?;
-
-            Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let query_stream =
-                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
-                let py_result = Py::new(py, query_stream)?;
-                Ok(py_result.into_any())
-            })
+            Self::wrap_query_stream(execution_result)
         })
     }
 
@@ -299,20 +317,12 @@ impl PyConnection {
         parameters: Option<&Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
-
-        let pool = Arc::clone(&self.pool);
-        let config = Arc::clone(&self.config);
-        let pool_config = self.pool_config.clone();
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            let pool_ref =
-                ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
-                    .await?;
-
+            let pool_ref = handles.ensure_connected().await?;
             let affected_count =
                 Self::execute_command_async_gil_free(&pool_ref, &query, &fast_parameters).await?;
-
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 Ok(affected_count.into_pyobject(py)?.into_any().unbind())
             })
@@ -367,17 +377,10 @@ impl PyConnection {
     /// Enter context manager
     pub fn __aenter__<'p>(slf: &'p Bound<Self>, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let borrowed = slf.borrow();
-        let pool = Arc::clone(&borrowed.pool);
-        let config = Arc::clone(&borrowed.config);
-        let pool_config = borrowed.pool_config.clone();
-        let azure_credential = borrowed.azure_credential.clone();
+        let handles = borrowed.clone_handles();
 
         future_into_py(py, async move {
-            // ensure_pool_initialized_with_auth already contains the double-checked fast path
-            // (read-lock → check → write-lock → check again). A preliminary read here added
-            // a redundant lock cycle and a TOCTOU window without any benefit.
-            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
-                .await?;
+            let _ = handles.ensure_connected().await?;
             Ok(())
         })
     }
@@ -399,17 +402,10 @@ impl PyConnection {
 
     /// Explicitly establish a connection (initialize the pool if not already connected)
     pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        let pool = Arc::clone(&self.pool);
-        let config = Arc::clone(&self.config);
-        let pool_config = self.pool_config.clone();
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            // Delegate entirely to ensure_pool_initialized_with_auth which already has
-            // the read-lock fast path + double-checked write-lock slow path. The previous
-            // preliminary read lock here was redundant and created a TOCTOU window.
-            let _ = ensure_pool_initialized_with_auth(pool, config, &pool_config, azure_credential)
-                .await?;
+            let _ = handles.ensure_connected().await?;
             Ok(true)
         })
     }
@@ -432,11 +428,12 @@ impl PyConnection {
         py: Python<'p>,
         queries: &Bound<'p, PyList>,
     ) -> PyResult<Bound<'p, PyAny>> {
+        let handles = self.clone_handles();
         query_batch(
-            Arc::clone(&self.pool),
-            Arc::clone(&self.config),
-            self.pool_config.clone(),
-            self.azure_credential.clone(),
+            handles.pool,
+            handles.config,
+            handles.pool_config,
+            handles.azure_credential,
             py,
             queries,
         )
@@ -449,11 +446,12 @@ impl PyConnection {
         columns: Vec<String>,
         data_rows: &Bound<'p, PyList>,
     ) -> PyResult<Bound<'p, PyAny>> {
+        let handles = self.clone_handles();
         bulk_insert(
-            Arc::clone(&self.pool),
-            Arc::clone(&self.config),
-            self.pool_config.clone(),
-            self.azure_credential.clone(),
+            handles.pool,
+            handles.config,
+            handles.pool_config,
+            handles.azure_credential,
             py,
             table_name,
             columns,
@@ -466,11 +464,7 @@ impl PyConnection {
         py: Python<'p>,
         commands: &Bound<'p, PyList>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        execute_batch(
-            Arc::clone(&self.config),
-            self.azure_credential.clone(),
-            py,
-            commands,
-        )
+        let handles = self.clone_handles();
+        execute_batch(handles.config, handles.azure_credential, py, commands)
     }
 }

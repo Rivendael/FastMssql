@@ -576,6 +576,23 @@ async def test_query_stream_is_empty(test_config: Config):
         pytest.fail(f"Database not available: {e}")
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_query_stream_negative_index_underflow(test_config: Config):
+    """Test that a large negative index raises IndexError instead of underflowing."""
+    try:
+        async with Connection(test_config.connection_string) as conn:
+            result = await conn.query("SELECT 1 as id")
+            # Large negative index should raise IndexError, not panic/underflow
+            with pytest.raises(IndexError, match="Index out of range"):
+                _ = result[-999999]
+            # Also verify normal negative indexing still works
+            row = result[-1]
+            assert row["id"] == 1
+    except Exception as e:
+        pytest.fail(f"Database not available: {e}")
+
+
 # ============================================================================
 # ITERATION TESTS - Manual iteration over results
 # ============================================================================
