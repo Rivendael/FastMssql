@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use crate::azure_auth::PyAzureCredential;
 use crate::parameter_conversion::{
     FastParameter, TypedNull, convert_parameters_to_fast, params_as_sql_refs,
@@ -440,11 +442,9 @@ pub fn bulk_insert<'p>(
                     }
                     sql.push('@');
                     sql.push('P');
-                    // Optimized: write integer directly without format!
+                    // Optimized: write integer directly into pre-allocated buffer
                     let param_num = (r * col_count) + c;
-                    for digit in param_num.to_string().chars() {
-                        sql.push(digit);
-                    }
+                    let _ = write!(sql, "{}", param_num);
                 }
                 sql.push(')');
             }
