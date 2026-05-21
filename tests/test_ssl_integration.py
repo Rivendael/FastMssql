@@ -187,7 +187,7 @@ class TestSslConfigCombinations:
             )
 
             assert connection is not None
-            assert ssl_config.encryption_level == level
+            assert str(ssl_config.encryption_level) == level
 
     def test_ssl_config_with_sql_server_auth(self):
         """Test SSL configuration with SQL Server authentication."""
@@ -287,7 +287,7 @@ class TestSslConfigErrorHandling:
 
     def test_ssl_config_with_invalid_encryption_level_python(self):
         """Test that invalid encryption level raises appropriate error in Python wrapper."""
-        with pytest.raises(ValueError, match="Invalid encryption_level"):
+        with pytest.raises(ValueError, match="Invalid encryption level"):
             SslConfig(encryption_level="InvalidLevel")
 
     def test_ssl_config_with_directory_as_ca_path(self):
@@ -397,8 +397,8 @@ class TestSslConfigPerformance:
         )  # Check encryption level instead
 
         # Modifying one shouldn't affect others (no shared state)
-        assert config1.encryption_level == "Required"
-        assert config2.encryption_level == "LoginOnly"
+        assert config1.encryption_level == EncryptionLevel.Required
+        assert config2.encryption_level == EncryptionLevel.LoginOnly
 
 
 class TestSslConfigRealWorldScenarios:

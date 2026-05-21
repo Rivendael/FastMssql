@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 opt-level = 3                # Maximum optimization
 lto = "fat"                  # Full link-time optimization
 codegen-units = 1            # Better optimization, slower compile
-panic = "abort"              # Smaller binary, faster code
+panic = "unwind"             # Smaller binary, faster code
 strip = true                 # Remove debug symbols
 overflow-checks = true       # Enable overflow checks for safety
 
@@ -29,7 +29,7 @@ opt-level = 2
 [dependencies]
 pyo3 = { version = "0.28.3", features = ["extension-module", "abi3-py311", "chrono"] }
 pyo3-async-runtimes = { version = "0.28.0", features = ["tokio", "tokio-runtime"] }
-tokio = { version = "1.52.3", features = ["full"] }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "net", "sync", "time", "io-util", "process"] }
 tokio-util = { version = "0.7.18", features = ["compat"] }
 tiberius = { version = "0.12.3", features = ["chrono", "tds73", "rustls"], default-features = false }
 bb8 = "0.9.1"

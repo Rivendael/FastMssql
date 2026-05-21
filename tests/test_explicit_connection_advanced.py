@@ -923,7 +923,7 @@ class TestPasswordValidation:
     def test_connection_without_username_requires_authentication(self):
         """Creating a connection without username should require some form of authentication."""
         # Object creation should fail with no username and no authentication
-        with pytest.raises(ValueError, match="either username/password or azure_credential must be provided"):
+        with pytest.raises(ValueError, match="Either username/password or azure_credential must be provided"):
             Connection(server="localhost", database="testdb")
 
     def test_connection_with_connection_string_ignores_password_check(self):

@@ -10,12 +10,26 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::azure_auth::PyAzureCredential;
 use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_on_connection};
+use crate::helpers::wrap_query_stream;
 use crate::parameter_conversion::{convert_parameters_to_fast, params_as_sql_refs};
 use crate::ssl_config::PySslConfig;
 use crate::types::{create_connection_error, create_sql_error};
 
 /// Type for a single direct connection (not pooled)
 type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
+
+/// Bundles the three cloned handles needed for async transaction operations.
+struct TransactionHandles {
+    conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
+    config: Arc<Config>,
+    azure_credential: Option<PyAzureCredential>,
+}
+
+impl TransactionHandles {
+    async fn ensure_connected(&self) -> PyResult<()> {
+        Transaction::ensure_connected_inner(&self.conn, &self.config, self.azure_credential.as_ref()).await
+    }
+}
 
 /// A single dedicated connection (not pooled) for transaction support.
 /// This holds one physical database connection that persists across queries,
@@ -127,18 +141,15 @@ impl Transaction {
         parameters: Option<&Bound<'p, PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
-        let conn = Arc::clone(&self.conn);
-        let config = Arc::clone(&self.config);
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+            handles.ensure_connected().await?;
 
-            // Execute query on the held connection
             let execution_result = {
                 let tiberius_params = params_as_sql_refs(&fast_parameters);
 
-                let mut conn_guard = conn.lock().await;
+                let mut conn_guard = handles.conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
@@ -151,16 +162,11 @@ impl Transaction {
                     .await
                     .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
-                drop(conn_guard); // Release lock after consuming all results
+                drop(conn_guard);
                 result
             };
 
-            Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let query_stream =
-                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
-                let py_result = Py::new(py, query_stream)?;
-                Ok(py_result.into_any())
-            })
+            wrap_query_stream(execution_result)
         })
     }
 
@@ -172,16 +178,13 @@ impl Transaction {
         py: Python<'p>,
         query: String,
     ) -> PyResult<Bound<'p, PyAny>> {
-        let conn = Arc::clone(&self.conn);
-        let config = Arc::clone(&self.config);
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+            handles.ensure_connected().await?;
 
-            // Execute query on the held connection
             let execution_result = {
-                let mut conn_guard = conn.lock().await;
+                let mut conn_guard = handles.conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
@@ -194,16 +197,11 @@ impl Transaction {
                     .await
                     .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
-                drop(conn_guard); // Release lock after consuming all results
+                drop(conn_guard);
                 result
             };
 
-            Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let query_stream =
-                    crate::types::PyQueryStream::from_tiberius_rows(execution_result, py)?;
-                let py_result = Py::new(py, query_stream)?;
-                Ok(py_result.into_any())
-            })
+            wrap_query_stream(execution_result)
         })
     }
 
@@ -217,18 +215,15 @@ impl Transaction {
         parameters: Option<&Bound<'p, PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let fast_parameters = convert_parameters_to_fast(parameters, py)?;
-        let conn = Arc::clone(&self.conn);
-        let config = Arc::clone(&self.config);
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+            handles.ensure_connected().await?;
 
-            // Execute command on the held connection
             let affected = {
                 let tiberius_params = params_as_sql_refs(&fast_parameters);
 
-                let mut conn_guard = conn.lock().await;
+                let mut conn_guard = handles.conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
@@ -238,8 +233,7 @@ impl Transaction {
                     .await
                     .map_err(|e| create_sql_error(e, "Command execution failed"))?;
 
-                drop(conn_guard); // Release lock
-
+                drop(conn_guard);
                 result.total()
             };
 
@@ -257,15 +251,13 @@ impl Transaction {
         commands: &Bound<'p, PyList>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let batch_commands = parse_batch_items(commands, py)?;
-        let conn = Arc::clone(&self.conn);
-        let config = Arc::clone(&self.config);
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+            handles.ensure_connected().await?;
 
             let all_results = {
-                let mut conn_guard = conn.lock().await;
+                let mut conn_guard = handles.conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
@@ -289,15 +281,13 @@ impl Transaction {
         queries: &Bound<'p, PyList>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let batch_queries = parse_batch_items(queries, py)?;
-        let conn = Arc::clone(&self.conn);
-        let config = Arc::clone(&self.config);
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+            handles.ensure_connected().await?;
 
             let all_results = {
-                let mut conn_guard = conn.lock().await;
+                let mut conn_guard = handles.conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
@@ -308,8 +298,7 @@ impl Transaction {
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let mut py_results = Vec::with_capacity(all_results.len());
                 for result in all_results {
-                    let query_stream = crate::types::PyQueryStream::from_tiberius_rows(result, py)?;
-                    let py_result = Py::new(py, query_stream)?;
+                    let py_result = wrap_query_stream(result)?;
                     py_results.push(py_result.into_any());
                 }
                 let py_list = PyList::new(py, py_results)?;
@@ -320,16 +309,13 @@ impl Transaction {
 
     /// Begin a transaction
     pub fn begin<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
-        let conn = Arc::clone(&self.conn);
-        let config = Arc::clone(&self.config);
-        let azure_credential = self.azure_credential.clone();
+        let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            Self::ensure_connected(&conn, &config, azure_credential.as_ref()).await?;
+            handles.ensure_connected().await?;
 
-            // Execute BEGIN TRANSACTION
             {
-                let mut conn_guard = conn.lock().await;
+                let mut conn_guard = handles.conn.lock().await;
                 let conn_ref = conn_guard
                     .as_mut()
                     .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
@@ -351,18 +337,7 @@ impl Transaction {
         let conn = Arc::clone(&self.conn);
 
         future_into_py(py, async move {
-            let mut conn_guard = conn.lock().await;
-            let conn_ref = conn_guard
-                .as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
-
-            conn_ref
-                .simple_query("COMMIT TRANSACTION")
-                .await
-                .map_err(|e| create_sql_error(e, "Failed to commit transaction"))?;
-
-            drop(conn_guard);
-            Ok(())
+            Self::execute_transaction_command(&conn, "COMMIT TRANSACTION", "Failed to commit transaction").await
         })
     }
 
@@ -371,18 +346,7 @@ impl Transaction {
         let conn = Arc::clone(&self.conn);
 
         future_into_py(py, async move {
-            let mut conn_guard = conn.lock().await;
-            let conn_ref = conn_guard
-                .as_mut()
-                .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
-
-            conn_ref
-                .simple_query("ROLLBACK TRANSACTION")
-                .await
-                .map_err(|e| create_sql_error(e, "Failed to rollback transaction"))?;
-
-            drop(conn_guard);
-            Ok(())
+            Self::execute_transaction_command(&conn, "ROLLBACK TRANSACTION", "Failed to rollback transaction").await
         })
     }
 
@@ -391,16 +355,13 @@ impl Transaction {
         let conn = Arc::clone(&self.conn);
 
         future_into_py(py, async move {
-            {
-                let mut conn_guard = conn.lock().await;
-                if let Some(mut c) = conn_guard.take() {
-                    // Best-effort rollback: silently ignore errors (connection may already be
-                    // broken or no transaction may be active — both are fine).
-                    let _ = c.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION").await;
-                    // Connection is dropped here, closing the TCP stream.
-                }
+            let mut conn_guard = conn.lock().await;
+            if let Some(mut c) = conn_guard.take() {
+                // Best-effort rollback: silently ignore errors (connection may already be
+                // broken or no transaction may be active — both are fine).
+                let _ = c.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION").await;
+                // Connection is dropped here, closing the TCP stream.
             }
-
             Ok(())
         })
     }
@@ -418,42 +379,68 @@ impl Transaction {
 }
 
 impl Transaction {
+    /// Clone the three fields needed for async transaction operations into a single struct.
+    fn clone_handles(&self) -> TransactionHandles {
+        TransactionHandles {
+            conn: Arc::clone(&self.conn),
+            config: Arc::clone(&self.config),
+            azure_credential: self.azure_credential.clone(),
+        }
+    }
+
+    /// Execute a transaction control command (BEGIN/COMMIT/ROLLBACK).
+    async fn execute_transaction_command(
+        conn: &Arc<AsyncMutex<Option<SingleConnectionType>>>,
+        sql: &'static str,
+        label: &'static str,
+    ) -> PyResult<()> {
+        let mut conn_guard = conn.lock().await;
+        let conn_ref = conn_guard
+            .as_mut()
+            .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+
+        conn_ref
+            .simple_query(sql)
+            .await
+            .map_err(|e| create_sql_error(e, label))?;
+
+        drop(conn_guard);
+        Ok(())
+    }
+
     /// Ensure connection is established. Initializes connection if needed.
     /// Returns error if connection fails.
-    async fn ensure_connected(
+    async fn ensure_connected_inner(
         conn: &Arc<AsyncMutex<Option<SingleConnectionType>>>,
         config: &Arc<Config>,
         azure_credential: Option<&PyAzureCredential>,
     ) -> PyResult<()> {
-        // Establish connection if not already connected
-        {
-            let mut conn_guard = conn.lock().await;
-            if conn_guard.is_none() {
-                let tcp_stream = TcpStream::connect(config.get_addr()).await.map_err(|e| {
-                            create_connection_error(format!("Failed to connect to server: {}", e))
-                        })?;
-        
-                        // Disable Nagle algorithm — identical to pool connections in pool_manager.rs.
-                        // Without this, small TDS packets (common for parameterised queries) may be
-                        // buffered by the OS for up to 200 ms before transmission.
-                        tcp_stream.set_nodelay(true).map_err(|e| {
-                            create_connection_error(format!("Failed to set TCP_NODELAY: {}", e))
-                        })?;
-        
-                        let compat_stream = tcp_stream.compat();
+        let mut conn_guard = conn.lock().await;
+        if conn_guard.is_none() {
+            let tcp_stream = TcpStream::connect(config.get_addr()).await.map_err(|e| {
+                        create_connection_error(format!("Failed to connect to server: {}", e))
+                    })?;
 
-                // Configure authentication
-                let mut auth_config = (**config).clone();
-                if let Some(azure_cred) = azure_credential {
-                    let auth_method = azure_cred.to_auth_method().await?;
-                    auth_config.authentication(auth_method);
-                }
+            // Disable Nagle algorithm — identical to pool connections in pool_manager.rs.
+            // Without this, small TDS packets (common for parameterised queries) may be
+            // buffered by the OS for up to 200 ms before transmission.
+            tcp_stream.set_nodelay(true).map_err(|e| {
+                create_connection_error(format!("Failed to set TCP_NODELAY: {}", e))
+            })?;
 
-                let new_conn: SingleConnectionType = Client::connect(auth_config, compat_stream)
-                    .await
-                    .map_err(|e| create_sql_error(e, "Failed to connect to database"))?;
-                *conn_guard = Some(new_conn);
+            let compat_stream = tcp_stream.compat();
+
+            // Configure authentication
+            let mut auth_config = (**config).clone();
+            if let Some(azure_cred) = azure_credential {
+                let auth_method = azure_cred.to_auth_method().await?;
+                auth_config.authentication(auth_method);
             }
+
+            let new_conn: SingleConnectionType = Client::connect(auth_config, compat_stream)
+                .await
+                .map_err(|e| create_sql_error(e, "Failed to connect to database"))?;
+            *conn_guard = Some(new_conn);
         }
 
         Ok(())

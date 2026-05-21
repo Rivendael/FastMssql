@@ -52,7 +52,7 @@ def test_pool_config_max_size_zero_invalid():
     with pytest.raises(ValueError) as exc_info:
         PoolConfig(max_size=0)
 
-    assert "max_size must be greater than 0" in str(exc_info.value)
+    assert "max_size must be >= 1" in str(exc_info.value)
 
 
 def test_pool_config_min_idle_greater_than_max_invalid():
@@ -60,7 +60,7 @@ def test_pool_config_min_idle_greater_than_max_invalid():
     with pytest.raises(ValueError) as exc_info:
         PoolConfig(max_size=5, min_idle=10)
 
-    assert "min_idle cannot be greater than max_size" in str(exc_info.value)
+    assert "cannot be greater than max_size" in str(exc_info.value)
 
 
 def test_pool_config_setter_max_size():

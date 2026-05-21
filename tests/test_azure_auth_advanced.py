@@ -57,7 +57,7 @@ class TestAzureAuthenticationErrorScenarios(unittest.TestCase):
             )
 
         # Verify the error message mentions the conflict
-        self.assertIn("authentication method", str(context.exception))
+        self.assertIn("username/password", str(context.exception))
 
     def test_invalid_connection_parameters(self):
         """Test connection creation with invalid parameters."""
