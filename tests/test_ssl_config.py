@@ -148,7 +148,7 @@ def test_ssl_config_all_encryption_levels_as_enum():
 
 def test_ssl_config_invalid_encryption_level():
     """Test SSL config with invalid encryption level."""
-    with pytest.raises(ValueError, match="Invalid encryption_level"):
+    with pytest.raises(ValueError, match="Invalid encryption level"):
         SslConfig(encryption_level="Invalid")
 
 

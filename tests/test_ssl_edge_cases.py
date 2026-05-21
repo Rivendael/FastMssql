@@ -46,7 +46,7 @@ class TestSslConfigThreadSafety:
 
         # Verify all configs are independent
         for i, (thread_id, ssl_config) in enumerate(results):
-            assert ssl_config.encryption_level == "Required"
+            assert ssl_config.encryption_level == EncryptionLevel.Required
 
     def test_concurrent_ssl_config_property_access(self):
         """Test accessing SSL config properties concurrently."""
@@ -67,7 +67,7 @@ class TestSslConfigThreadSafety:
                     ca_path = ssl_config.ca_certificate_path
 
                     # Verify consistency
-                    assert encryption == "Required"
+                    assert encryption == EncryptionLevel.Required
                     assert trust is True
                     assert ca_path is None
 
@@ -197,7 +197,7 @@ class TestSslConfigExtremeInputs:
             ssl_config = SslConfig(
                 encryption_level=EncryptionLevel.Disabled
             )
-            assert ssl_config.encryption_level == "Disabled"
+            assert ssl_config.encryption_level == EncryptionLevel.Disabled
 
     def test_ssl_config_with_unicode_support(self):
         """Test SSL config supports Unicode."""
@@ -205,7 +205,7 @@ class TestSslConfigExtremeInputs:
             encryption_level=EncryptionLevel.Disabled,
             trust_server_certificate=True
         )
-        assert ssl_config.encryption_level == "Disabled"
+        assert ssl_config.encryption_level == EncryptionLevel.Disabled
 
 
 class TestSslConfigErrorRecovery:
@@ -407,7 +407,7 @@ class TestSslConfigCompatibility:
             encryption_level=EncryptionLevel.Disabled,
             trust_server_certificate=True
         )
-        assert ssl_config.encryption_level == "Disabled"
+        assert ssl_config.encryption_level == EncryptionLevel.Disabled
 
     def test_ssl_config_cross_platform_paths(self):
         """Test SSL config with different path formats."""
@@ -443,7 +443,7 @@ class TestSslConfigBoundaryConditions:
         """Test SSL config with minimal inputs."""
         # Minimal config should be allowed
         ssl_config = SslConfig(encryption_level=EncryptionLevel.Disabled)
-        assert ssl_config.encryption_level == "Disabled"
+        assert ssl_config.encryption_level == EncryptionLevel.Disabled
 
     def test_ssl_config_none_inputs(self):
         """Test SSL config with optional None inputs."""
