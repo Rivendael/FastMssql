@@ -326,7 +326,11 @@ impl PyConnection {
         _exc_value: Option<Bound<PyAny>>,
         _traceback: Option<Bound<PyAny>>,
     ) -> PyResult<Bound<'p, PyAny>> {
-        future_into_py(py, async move { Ok(()) })
+        let pool = Arc::clone(&self.pool);
+        future_into_py(py, async move {
+            *pool.write().await = None;
+            Ok(())
+        })
     }
 
     pub fn connect<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
