@@ -92,10 +92,6 @@ Rust in the hot path while providing a clean Python API.
   - Parameters: up to 16 stored on stack, no heap allocation
   - Avoids allocation overhead for typical query parameter counts
 
-- **parking_lot 0.12** — Faster mutex/RwLock than `std::sync`
-  - Lower overhead locking primitive
-  - Used for connection pool synchronization
-
 - **ahash 0.8** — Fast hashing algorithm
   - ~3x faster than SipHash for short strings
   - Used internally by Tokio and collections
@@ -616,7 +612,6 @@ simultaneously.
 | Primitive                  | Usage                    | Why                                                       |
 |----------------------------|--------------------------|-----------------------------------------------------------|
 | `Arc<Mutex<Option<Pool>>>` | Connection pool storage  | Shared ownership, single-threaded access to pool creation |
-| `parking_lot::Mutex`       | Pool lock                | Faster than `std::sync::Mutex`                            |
 | `Arc<Config>`              | Shared connection config | Zero-copy reference across tasks                          |
 
 ---
