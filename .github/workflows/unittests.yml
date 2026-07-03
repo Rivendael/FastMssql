@@ -75,7 +75,7 @@ jobs:
 
       - name: Build and install Python package with maturin
         run: |
-          uv run maturin develop --release
+          uv run maturin develop --release --uv $(which uv)
 
       - name: Wait for MSSQL to be ready
         run: |
