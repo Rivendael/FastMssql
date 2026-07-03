@@ -1,9 +1,9 @@
 use crate::type_mapping;
 use ahash::AHashMap as HashMap;
 use pyo3::exceptions::{PyException, PyRuntimeError};
-use pyo3::{create_exception, exceptions::PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use pyo3::{create_exception, exceptions::PyValueError};
 use std::sync::Arc;
 use tiberius::{ColumnType, Row, error::Error as TError};
 
@@ -30,20 +30,16 @@ pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
                 exc
             })
         }
-        TError::Io { kind: _, message } => {
-            Python::attach(|py| {
-                let exc = SqlConnectionError::new_err(format!("{base}: {message}"));
-                let _ = exc.value(py).setattr("message", message.as_str());
-                exc
-            })
-        }
-        TError::Tls(msg) => {
-            Python::attach(|py| {
-                let exc = TlsError::new_err(format!("{base}: {msg}"));
-                let _ = exc.value(py).setattr("message", msg.as_str());
-                exc
-            })
-        }
+        TError::Io { kind: _, message } => Python::attach(|py| {
+            let exc = SqlConnectionError::new_err(format!("{base}: {message}"));
+            let _ = exc.value(py).setattr("message", message.as_str());
+            exc
+        }),
+        TError::Tls(msg) => Python::attach(|py| {
+            let exc = TlsError::new_err(format!("{base}: {msg}"));
+            let _ = exc.value(py).setattr("message", msg.as_str());
+            exc
+        }),
         TError::Routing { host, port } => {
             let message = format!("server redirected to {host}:{port}");
             Python::attach(|py| {
@@ -81,7 +77,7 @@ pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
                 exc
             })
         }
-        _ => PyRuntimeError::new_err(format!("{base}: {err}"))
+        _ => PyRuntimeError::new_err(format!("{base}: {err}")),
     }
 }
 
@@ -465,18 +461,6 @@ impl PyQueryStream {
     /// Backwards compatibility: fetch all rows
     pub fn fetchall(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.all(py)
-    }
-
-    /// Convert query results to an Apache Arrow Table
-    pub fn to_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let column_info = self
-            .column_info
-            .as_ref()
-            .ok_or_else(|| PyValueError::new_err("No column information available"))?;
-
-        let arrays = crate::arrow_conversion::build_arrow_columns(&self.tiberius_rows, column_info, py)?;
-
-        crate::arrow_conversion::arrow_arrays_to_pyarrow_table(&column_info.names, arrays, py)
     }
 }
 

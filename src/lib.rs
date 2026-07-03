@@ -5,7 +5,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use pyo3::prelude::*;
 
-mod arrow_conversion;
 mod azure_auth;
 mod batch;
 mod connection;
