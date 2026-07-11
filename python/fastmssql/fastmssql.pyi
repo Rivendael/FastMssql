@@ -11,6 +11,7 @@ High-performance Rust-backed Python driver for SQL Server with:
 
 from typing import Any, Coroutine, Dict, List, Optional, Tuple
 from enum import StrEnum
+from .fastmssql import _RustConnection, _RustTransaction
 
 class PoolConfig:
     """
@@ -744,7 +745,7 @@ class Connection:
         """
         ...
 
-    async def __aenter__(self) -> Connection:
+    async def __aenter__(self) -> _RustConnection:
         """Async context manager entry (initializes pool)."""
         ...
 
@@ -875,7 +876,7 @@ class Transaction:
         """Return True if the underlying connection is currently established."""
         ...
 
-    async def __aenter__(self) -> Transaction:
+    async def __aenter__(self) -> _RustTransaction:
         """Async context manager entry (begins transaction)."""
         ...
 

@@ -73,7 +73,10 @@ Documentation = "https://github.com/Rivendael/FastMssql#readme"
 features = ["pyo3/abi3-py311"]
 module-name = "fastmssql"
 python-source = "python"
-include = ["fastmssql.pyi"]
+include = [
+    "python/fastmssql/*.pyi",
+    "python/fastmssql/py.typed",
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
