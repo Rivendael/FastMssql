@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -11,7 +12,7 @@ use tokio::sync::{Mutex, RwLock};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Secure string wrapper that zeroizes memory when dropped
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 struct SensitiveString(String);
 
 impl SensitiveString {
@@ -24,10 +25,25 @@ impl SensitiveString {
     }
 }
 
-#[derive(Clone, Debug)]
+impl fmt::Debug for SensitiveString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SensitiveString(***redacted***)")
+    }
+}
+
+#[derive(Clone)]
 struct CachedToken {
     access_token: SensitiveString,
     expires_at: Instant,
+}
+
+impl fmt::Debug for CachedToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CachedToken")
+            .field("access_token", &self.access_token)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 impl Drop for CachedToken {
@@ -46,16 +62,27 @@ pub enum AzureCredentialType {
 }
 
 #[pyclass(name = "AzureCredential", from_py_object)] // <-- Explicit opt-in
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PyAzureCredential {
     pub credential_type: AzureCredentialType,
     // Non-sensitive configuration (safe to store)
     pub config: HashMap<String, String>,
-    // Sensitive configuration (encrypted in memory, securely cleared)
+    // Sensitive configuration (zeroized on drop; never exposed via .config)
     sensitive_config: Arc<HashMap<String, SensitiveString>>,
     token_cache: Arc<RwLock<Option<CachedToken>>>,
     refresh_mutex: Arc<Mutex<()>>,
     client: Arc<Client>,
+}
+
+impl fmt::Debug for PyAzureCredential {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PyAzureCredential")
+            .field("credential_type", &self.credential_type)
+            .field("config", &self.config)
+            .field("sensitive_config", &"***redacted***")
+            .field("token_cache", &"***redacted***")
+            .finish()
+    }
 }
 
 impl Drop for PyAzureCredential {
@@ -422,10 +449,15 @@ impl PyAzureCredential {
         let az_path = std::env::var("AZURE_CLI_PATH")
             .unwrap_or_else(|_| Self::get_default_az_path().to_string());
 
-        // Validate that the path exists and is executable
+        // Check if this is a bare program name (no path separators)
+        // If so, allow PATH resolution and skip existence validation
         let path = Path::new(&az_path);
+        if !az_path.contains('/') && !az_path.contains('\\') {
+            // Bare program name - let the OS resolve it via PATH
+            return Ok(az_path);
+        }
 
-        // Check if path exists
+        // For explicit paths, validate that the path exists and is accessible
         if !path.exists() {
             return Err(PyRuntimeError::new_err(format!(
                 "Azure CLI executable not found at '{}'. Set AZURE_CLI_PATH environment variable if installed elsewhere.",
@@ -433,32 +465,30 @@ impl PyAzureCredential {
             )));
         }
 
-        // For absolute paths, verify it's a file (not a directory)
-        if path.is_absolute() {
-            if !path.is_file() {
+        // Verify it's a file (not a directory)
+        if !path.is_file() {
+            return Err(PyRuntimeError::new_err(format!(
+                "Azure CLI path '{}' is not a file",
+                az_path
+            )));
+        }
+
+        // Check executable permission (Unix-like systems)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&az_path).map_err(|e| {
+                PyRuntimeError::new_err(format!(
+                    "Cannot access Azure CLI at '{}': {}",
+                    az_path, e
+                ))
+            })?;
+            let permissions = metadata.permissions();
+            if permissions.mode() & 0o111 == 0 {
                 return Err(PyRuntimeError::new_err(format!(
-                    "Azure CLI path '{}' is not a file",
+                    "Azure CLI at '{}' is not executable",
                     az_path
                 )));
-            }
-
-            // Check executable permission (Unix-like systems)
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let metadata = std::fs::metadata(&az_path).map_err(|e| {
-                    PyRuntimeError::new_err(format!(
-                        "Cannot access Azure CLI at '{}': {}",
-                        az_path, e
-                    ))
-                })?;
-                let permissions = metadata.permissions();
-                if permissions.mode() & 0o111 == 0 {
-                    return Err(PyRuntimeError::new_err(format!(
-                        "Azure CLI at '{}' is not executable",
-                        az_path
-                    )));
-                }
             }
         }
 
