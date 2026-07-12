@@ -1,6 +1,6 @@
 [package]
 name = "fastmssql_core"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2024"
 
 [lib]
@@ -40,8 +40,8 @@ ahash = "0.8.12"              # Faster hashing algorithm (used in optimized_type
 smallvec = "1.15.2"          # Stack-allocated vectors for small collections
 mimalloc = { version = "0.1.52", default-features = false } # Microsoft's fast memory allocator
 slab = "0.4.12"              # Pinned sub-dependency due to CVE-2025-55159
-bytes = "1.12.0"             # Pinned sub-dependency due to CVE-2026-25541
-quinn-proto = "0.11.15"      # Pinned sub-dependency due to CVE-2026-31812
+bytes = "1.12.1"             # Pinned sub-dependency due to CVE-2026-25541
+quinn-proto = "0.11.16"      # Pinned sub-dependency due to CVE-2026-31812
 
 # Azure authentication dependencies
 reqwest = { version = "0.13.4", features = ["json", "form", "rustls"], default-features = false }
