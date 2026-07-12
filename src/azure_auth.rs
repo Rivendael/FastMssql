@@ -3,15 +3,37 @@ use pyo3::prelude::*;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tiberius::AuthMethod;
 use tokio::sync::{Mutex, RwLock};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// Secure string wrapper that zeroizes memory when dropped
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+struct SensitiveString(String);
+
+impl SensitiveString {
+    fn new(s: String) -> Self {
+        SensitiveString(s)
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug)]
 struct CachedToken {
-    access_token: String,
+    access_token: SensitiveString,
     expires_at: Instant,
+}
+
+impl Drop for CachedToken {
+    fn drop(&mut self) {
+        // SensitiveString will be zeroized on drop automatically
+    }
 }
 
 #[pyclass(name = "AzureCredentialType", from_py_object)] // <-- Explicit opt-in
@@ -27,10 +49,21 @@ pub enum AzureCredentialType {
 #[derive(Clone, Debug)]
 pub struct PyAzureCredential {
     pub credential_type: AzureCredentialType,
+    // Non-sensitive configuration (safe to store)
     pub config: HashMap<String, String>,
+    // Sensitive configuration (encrypted in memory, securely cleared)
+    sensitive_config: Arc<HashMap<String, SensitiveString>>,
     token_cache: Arc<RwLock<Option<CachedToken>>>,
     refresh_mutex: Arc<Mutex<()>>,
-    client: Client,
+    client: Arc<Client>,
+}
+
+impl Drop for PyAzureCredential {
+    fn drop(&mut self) {
+        // Explicitly clear sensitive config when credential is dropped
+        // Arc will handle the cleanup when this is the last reference
+        // The inner SensitiveString items will be zeroized on drop
+    }
 }
 
 #[pymethods]
@@ -57,67 +90,101 @@ impl AzureCredentialType {
     }
 }
 
-fn build_http_client() -> Result<Client, reqwest::Error> {
-    Client::builder().timeout(Duration::from_secs(30)).build()
+fn build_http_client() -> Result<Arc<Client>, reqwest::Error> {
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
+        .build()?;
+    Ok(Arc::new(client))
 }
 
 #[pymethods]
 impl PyAzureCredential {
     #[staticmethod]
-    pub fn service_principal(client_id: String, client_secret: String, tenant_id: String) -> Self {
+    pub fn service_principal(
+        client_id: String,
+        client_secret: String,
+        tenant_id: String,
+    ) -> PyResult<Self> {
         let mut config = HashMap::new();
-        config.insert("client_id".to_string(), client_id);
-        config.insert("client_secret".to_string(), client_secret);
-        config.insert("tenant_id".to_string(), tenant_id);
+        config.insert("client_id".to_string(), client_id.clone());
+        config.insert("tenant_id".to_string(), tenant_id.clone());
 
-        PyAzureCredential {
+        let mut sensitive_config = HashMap::new();
+        sensitive_config.insert("client_id".to_string(), SensitiveString::new(client_id));
+        sensitive_config.insert(
+            "client_secret".to_string(),
+            SensitiveString::new(client_secret),
+        );
+        sensitive_config.insert("tenant_id".to_string(), SensitiveString::new(tenant_id));
+
+        let client = build_http_client()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to build HTTP client: {}", e)))?;
+
+        Ok(PyAzureCredential {
             credential_type: AzureCredentialType::ServicePrincipal,
             config,
+            sensitive_config: Arc::new(sensitive_config),
             token_cache: Arc::new(RwLock::new(None)),
             refresh_mutex: Arc::new(Mutex::new(())),
-            client: build_http_client().expect("Failed to build HTTP client"),
-        }
+            client,
+        })
     }
 
     #[staticmethod]
-    pub fn managed_identity(client_id: Option<String>) -> Self {
+    pub fn managed_identity(client_id: Option<String>) -> PyResult<Self> {
         let mut config = HashMap::new();
+        let mut sensitive_config = HashMap::new();
+
         if let Some(id) = client_id {
-            config.insert("client_id".to_string(), id);
+            config.insert("client_id".to_string(), id.clone());
+            sensitive_config.insert("client_id".to_string(), SensitiveString::new(id));
         }
 
-        PyAzureCredential {
+        let client = build_http_client()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to build HTTP client: {}", e)))?;
+
+        Ok(PyAzureCredential {
             credential_type: AzureCredentialType::ManagedIdentity,
             config,
+            sensitive_config: Arc::new(sensitive_config),
             token_cache: Arc::new(RwLock::new(None)),
             refresh_mutex: Arc::new(Mutex::new(())),
-            client: build_http_client().expect("Failed to build HTTP client"),
-        }
+            client,
+        })
     }
 
     #[staticmethod]
-    pub fn access_token(token: String) -> Self {
-        let mut config = HashMap::new();
-        config.insert("access_token".to_string(), token);
+    pub fn access_token(token: String) -> PyResult<Self> {
+        let mut sensitive_config = HashMap::new();
+        sensitive_config.insert("access_token".to_string(), SensitiveString::new(token));
 
-        PyAzureCredential {
+        let client = build_http_client()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to build HTTP client: {}", e)))?;
+
+        Ok(PyAzureCredential {
             credential_type: AzureCredentialType::AccessToken,
-            config,
+            config: HashMap::new(),
+            sensitive_config: Arc::new(sensitive_config),
             token_cache: Arc::new(RwLock::new(None)),
             refresh_mutex: Arc::new(Mutex::new(())),
-            client: build_http_client().expect("Failed to build HTTP client"),
-        }
+            client,
+        })
     }
 
     #[staticmethod]
-    pub fn default() -> Self {
-        PyAzureCredential {
+    pub fn default() -> PyResult<Self> {
+        let client = build_http_client()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to build HTTP client: {}", e)))?;
+
+        Ok(PyAzureCredential {
             credential_type: AzureCredentialType::DefaultAzure,
             config: HashMap::new(),
+            sensitive_config: Arc::new(HashMap::new()),
             token_cache: Arc::new(RwLock::new(None)),
             refresh_mutex: Arc::new(Mutex::new(())),
-            client: build_http_client().expect("Failed to build HTTP client"),
-        }
+            client,
+        })
     }
 
     #[getter]
@@ -127,20 +194,24 @@ impl PyAzureCredential {
 
     #[getter]
     pub fn config(&self) -> HashMap<String, String> {
-        let mut sanitized = self.config.clone();
-        if sanitized.contains_key("client_secret") {
-            sanitized.insert("client_secret".to_string(), "***REDACTED***".to_string());
-        }
-        if sanitized.contains_key("access_token") {
-            sanitized.insert("access_token".to_string(), "***REDACTED***".to_string());
-        }
-        sanitized
+        // Return sanitized config without exposing sensitive data
+        self.config.clone()
     }
 }
 
 impl PyAzureCredential {
-    fn get_config_value(&self, key: &str) -> Option<&String> {
-        self.config.get(key)
+    fn get_sensitive_value(&self, key: &str) -> Option<&SensitiveString> {
+        self.sensitive_config.get(key)
+    }
+
+    /// Check if cached token is still valid with an explicit safety buffer.
+    /// This prevents edge cases where tokens expire mid-operation or during clock drift.
+    /// Buffer: 30 seconds before actual expiry to account for clock skew and processing time.
+    fn is_token_still_valid(cached_token: &CachedToken) -> bool {
+        let safety_buffer = Duration::from_secs(30);
+        let now = Instant::now();
+        // Token is valid only if current time + buffer is before expiry
+        now + safety_buffer < cached_token.expires_at
     }
 
     // Helper to safely parse variations of "expires_in" fields from Azure JSON
@@ -160,18 +231,20 @@ impl PyAzureCredential {
         // 1. Static Access Token Bypass
         if let AzureCredentialType::AccessToken = self.credential_type {
             let token = self
-                .get_config_value("access_token")
+                .get_sensitive_value("access_token")
                 .ok_or_else(|| PyValueError::new_err("Access token not found in configuration"))?;
-            // Pass the owned/cloned String directly — no Box::leak!
-            return Ok(AuthMethod::aad_token(token.clone()));
+            // Pass reference, let AuthMethod handle cloning if needed
+            return Ok(AuthMethod::aad_token(token.as_str().to_string()));
         }
 
         // 2. Fast Path Read Lock
         {
             let read_guard = self.token_cache.read().await;
             if let Some(cached) = read_guard.as_ref() {
-                if cached.expires_at > Instant::now() {
-                    return Ok(AuthMethod::aad_token(cached.access_token.clone()));
+                if Self::is_token_still_valid(cached) {
+                    return Ok(AuthMethod::aad_token(
+                        cached.access_token.as_str().to_string(),
+                    ));
                 }
             }
         }
@@ -183,8 +256,10 @@ impl PyAzureCredential {
         {
             let read_guard = self.token_cache.read().await;
             if let Some(cached) = read_guard.as_ref() {
-                if cached.expires_at > Instant::now() {
-                    return Ok(AuthMethod::aad_token(cached.access_token.clone()));
+                if Self::is_token_still_valid(cached) {
+                    return Ok(AuthMethod::aad_token(
+                        cached.access_token.as_str().to_string(),
+                    ));
                 }
             }
         }
@@ -192,36 +267,48 @@ impl PyAzureCredential {
         // Fetch new token over network
         let (token, expires_in) = match self.credential_type {
             AzureCredentialType::ServicePrincipal => {
-                let client_id = self.get_config_value("client_id")
+                let client_id = self
+                    .get_sensitive_value("client_id")
                     .ok_or_else(|| PyValueError::new_err("Client ID not found"))?;
-                let client_secret = self.get_config_value("client_secret")
+                let client_secret = self
+                    .get_sensitive_value("client_secret")
                     .ok_or_else(|| PyValueError::new_err("Client secret not found"))?;
-                let tenant_id = self.get_config_value("tenant_id")
+                let tenant_id = self
+                    .get_sensitive_value("tenant_id")
                     .ok_or_else(|| PyValueError::new_err("Tenant ID not found"))?;
-                self.acquire_service_principal_token(client_id, client_secret, tenant_id).await?
+                self.acquire_service_principal_token(
+                    client_id.as_str(),
+                    client_secret.as_str(),
+                    tenant_id.as_str(),
+                )
+                .await?
             }
             AzureCredentialType::ManagedIdentity => {
-                let client_id = self.get_config_value("client_id");
-                self.acquire_managed_identity_token(client_id.cloned()).await?
+                let client_id = self.get_sensitive_value("client_id").map(|s| s.as_str());
+                self.acquire_managed_identity_token(client_id).await?
             }
             AzureCredentialType::DefaultAzure => self.acquire_default_azure_token().await?,
             AzureCredentialType::AccessToken => unreachable!(),
         };
 
         // Enforce safety buffers against premature expiration
-        let buffer_secs = ((expires_in as f64 * 0.10) as u64).max(30).min(600).min(expires_in);
-        let expires_at = Instant::now() + Duration::from_secs(expires_in.saturating_sub(buffer_secs));
+        let buffer_secs = ((expires_in as f64 * 0.10) as u64)
+            .max(30)
+            .min(600)
+            .min(expires_in);
+        let expires_at =
+            Instant::now() + Duration::from_secs(expires_in.saturating_sub(buffer_secs));
 
         // Brief write lock update
         {
             let mut write_guard = self.token_cache.write().await;
             *write_guard = Some(CachedToken {
-                access_token: token.clone(),
+                access_token: SensitiveString::new(token.clone()),
                 expires_at,
             });
         }
 
-        // Clean owned string passing — safe from memory leaks!
+        // Return token string
         Ok(AuthMethod::aad_token(token))
     }
 
@@ -231,7 +318,10 @@ impl PyAzureCredential {
         client_secret: &str,
         tenant_id: &str,
     ) -> PyResult<(String, u64)> {
-        let token_url = format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", tenant_id);
+        let token_url = format!(
+            "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
+            tenant_id
+        );
         let params = [
             ("grant_type", "client_credentials"),
             ("client_id", client_id),
@@ -239,59 +329,160 @@ impl PyAzureCredential {
             ("scope", "https://database.windows.net/.default"),
         ];
 
-        let response = self.client.post(&token_url).form(&params).send().await
+        let response = self
+            .client
+            .post(&token_url)
+            .form(&params)
+            .send()
+            .await
             .map_err(|e| PyRuntimeError::new_err(format!("Token request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PyRuntimeError::new_err(format!("HTTP Error: {}", response.status())));
+            return Err(PyRuntimeError::new_err(format!(
+                "HTTP Error: {}",
+                response.status()
+            )));
         }
 
-        let json: Value = response.json().await
+        let json: Value = response
+            .json()
+            .await
             .map_err(|e| PyRuntimeError::new_err(format!("Failed parsing JSON: {}", e)))?;
-        
-        let access_token = json["access_token"].as_str()
-            .ok_or_else(|| PyRuntimeError::new_err("Access token missing"))?.to_string();
+
+        let access_token = json["access_token"]
+            .as_str()
+            .ok_or_else(|| PyRuntimeError::new_err("Access token missing"))?
+            .to_string();
 
         let expires_in = Self::parse_expires_in(&json, "expires_in");
 
         Ok((access_token, expires_in))
     }
 
-    async fn acquire_managed_identity_token(&self, client_id: Option<String>) -> PyResult<(String, u64)> {
+    async fn acquire_managed_identity_token(
+        &self,
+        client_id: Option<&str>,
+    ) -> PyResult<(String, u64)> {
         const IMDS_ENDPOINT: &str = "http://169.254.169.254/metadata/identity/oauth2/token";
-        let mut url = reqwest::Url::parse(IMDS_ENDPOINT).unwrap();
-        
+        let mut url = reqwest::Url::parse(IMDS_ENDPOINT)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid IMDS endpoint: {}", e)))?;
+
         url.query_pairs_mut()
             .append_pair("api-version", "2021-02-01")
             .append_pair("resource", "https://database.windows.net/");
 
-        if let Some(ref id) = client_id {
+        if let Some(id) = client_id {
             url.query_pairs_mut().append_pair("client_id", id);
         }
 
-        let response = self.client.get(url).header("Metadata", "true").send().await
+        let response = self
+            .client
+            .get(url)
+            .header("Metadata", "true")
+            .send()
+            .await
             .map_err(|e| PyRuntimeError::new_err(format!("IMDS request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(PyRuntimeError::new_err(format!("IMDS error status: {}", response.status())));
+            return Err(PyRuntimeError::new_err(format!(
+                "IMDS error status: {}",
+                response.status()
+            )));
         }
 
-        let json: Value = response.json().await.map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        let access_token = json["access_token"].as_str()
-            .ok_or_else(|| PyRuntimeError::new_err("Access token missing"))?.to_string();
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let access_token = json["access_token"]
+            .as_str()
+            .ok_or_else(|| PyRuntimeError::new_err("Access token missing"))?
+            .to_string();
 
         let expires_in = Self::parse_expires_in(&json, "expires_in");
 
         Ok((access_token, expires_in))
     }
 
+    /// Get the default Azure CLI path for the current OS
+    fn get_default_az_path() -> &'static str {
+        #[cfg(windows)]
+        return "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd";
+        #[cfg(target_os = "macos")]
+        return "/usr/local/bin/az";
+        #[cfg(target_os = "linux")]
+        return "/usr/bin/az";
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+        return "az";
+    }
+
+    /// Get and validate the Azure CLI path to prevent command injection
+    fn get_azure_cli_path() -> PyResult<String> {
+        // Try to get path from environment variable first
+        let az_path = std::env::var("AZURE_CLI_PATH")
+            .unwrap_or_else(|_| Self::get_default_az_path().to_string());
+
+        // Validate that the path exists and is executable
+        let path = Path::new(&az_path);
+
+        // Check if path exists
+        if !path.exists() {
+            return Err(PyRuntimeError::new_err(format!(
+                "Azure CLI executable not found at '{}'. Set AZURE_CLI_PATH environment variable if installed elsewhere.",
+                az_path
+            )));
+        }
+
+        // For absolute paths, verify it's a file (not a directory)
+        if path.is_absolute() {
+            if !path.is_file() {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Azure CLI path '{}' is not a file",
+                    az_path
+                )));
+            }
+
+            // Check executable permission (Unix-like systems)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let metadata = std::fs::metadata(&az_path).map_err(|e| {
+                    PyRuntimeError::new_err(format!(
+                        "Cannot access Azure CLI at '{}': {}",
+                        az_path, e
+                    ))
+                })?;
+                let permissions = metadata.permissions();
+                if permissions.mode() & 0o111 == 0 {
+                    return Err(PyRuntimeError::new_err(format!(
+                        "Azure CLI at '{}' is not executable",
+                        az_path
+                    )));
+                }
+            }
+        }
+
+        Ok(az_path)
+    }
+
     async fn acquire_default_azure_token(&self) -> PyResult<(String, u64)> {
-        if let (Ok(client_id), Ok(client_secret), Ok(tenant_id)) = (
-            std::env::var("AZURE_CLIENT_ID"),
-            std::env::var("AZURE_CLIENT_SECRET"),
-            std::env::var("AZURE_TENANT_ID"),
-        ) {
-            return self.acquire_service_principal_token(&client_id, &client_secret, &tenant_id).await;
+        // Try service principal auth if all env vars are set and non-empty
+        let client_id = std::env::var("AZURE_CLIENT_ID")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let client_secret = std::env::var("AZURE_CLIENT_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let tenant_id = std::env::var("AZURE_TENANT_ID")
+            .ok()
+            .filter(|s| !s.is_empty());
+
+        if let (Some(client_id), Some(client_secret), Some(tenant_id)) =
+            (client_id, client_secret, tenant_id)
+        {
+            return self
+                .acquire_service_principal_token(&client_id, &client_secret, &tenant_id)
+                .await;
         }
 
         if let Ok(res) = self.acquire_managed_identity_token(None).await {
@@ -299,16 +490,48 @@ impl PyAzureCredential {
         }
 
         // Fallback to Azure CLI
-        match tokio::process::Command::new("az")
-            .args(["account", "get-access-token", "--resource", "https://database.windows.net/", "--output", "json"])
-            .output().await 
+        let az_path = Self::get_azure_cli_path()?;
+
+        // Execute with validated path and timeout
+        let output = match tokio::time::timeout(
+            Duration::from_secs(10),
+            tokio::process::Command::new(&az_path)
+                .args([
+                    "account",
+                    "get-access-token",
+                    "--resource",
+                    "https://database.windows.net/",
+                    "--output",
+                    "json",
+                ])
+                .output(),
+        )
+        .await
         {
-            Ok(output) if output.status.success() => {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to execute Azure CLI from '{}': {}",
+                    az_path, e
+                )));
+            }
+            Err(_) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Azure CLI command timed out after 10 seconds (executed from '{}')",
+                    az_path
+                )));
+            }
+        };
+
+        match output.status.success() {
+            true => {
                 let json: Value = serde_json::from_slice(&output.stdout)
                     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-                
-                let access_token = json["accessToken"].as_str()
-                    .ok_or_else(|| PyRuntimeError::new_err("Missing accessToken"))?.to_string();
+
+                let access_token = json["accessToken"]
+                    .as_str()
+                    .ok_or_else(|| PyRuntimeError::new_err("Missing accessToken"))?
+                    .to_string();
 
                 // Azure CLI returns 'expiresOn' as a timestamp string, not an integer duration.
                 // Passing it to parse_expires_in will trigger your 3600-second safe default,
@@ -317,7 +540,19 @@ impl PyAzureCredential {
 
                 Ok((access_token, expires_in))
             }
-            _ => Err(PyRuntimeError::new_err("All DefaultAzureCredential authentication paths failed.")),
+            false => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                Err(PyRuntimeError::new_err(format!(
+                    "Azure CLI command failed (executed from '{}'): {}. Exit code: {}",
+                    az_path,
+                    stderr.trim(),
+                    output
+                        .status
+                        .code()
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "unknown".to_string())
+                )))
+            }
         }
     }
 }

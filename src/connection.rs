@@ -19,7 +19,7 @@ struct ConnectionHandles {
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
 }
 
 impl ConnectionHandles {
@@ -39,7 +39,7 @@ pub struct PyConnection {
     config: Arc<Config>,
     pool_config: PyPoolConfig,
     _ssl_config: Option<PySslConfig>,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
 }
 
 impl PyConnection {
@@ -212,7 +212,7 @@ impl PyConnection {
             config: Arc::new(config),
             pool_config: pool_config.unwrap_or_else(PyPoolConfig::default),
             _ssl_config: ssl_config,
-            azure_credential,
+            azure_credential: azure_credential.map(Arc::new),
         })
     }
 

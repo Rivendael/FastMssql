@@ -128,7 +128,7 @@ pub async fn query_batch_on_connection(
 
 pub fn execute_batch<'p>(
     config: Arc<Config>,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
     py: Python<'p>,
     commands: &Bound<'p, PyList>,
 ) -> PyResult<Bound<'p, PyAny>> {
@@ -205,7 +205,7 @@ pub fn query_batch<'p>(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
     py: Python<'p>,
     queries: &Bound<'p, PyList>,
 ) -> PyResult<Bound<'p, PyAny>> {
@@ -335,7 +335,7 @@ pub fn bulk_insert<'p>(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: PyPoolConfig,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
     py: Python<'p>,
     table_name: String,
     columns: Vec<String>,
