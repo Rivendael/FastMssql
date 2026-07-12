@@ -9,11 +9,9 @@ High-performance Rust-backed Python driver for SQL Server with:
 - Memory-efficient result handling
 """
 
-from typing import Any, Coroutine, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Coroutine, Dict, List, Optional, Tuple
 from enum import StrEnum
-
-if TYPE_CHECKING:
-    import pyarrow
+from .fastmssql import _RustConnection, _RustTransaction
 
 class PoolConfig:
     """
@@ -126,6 +124,7 @@ class SqlError(Exception):
         except SqlError as e:
             print(e.code, e.message, e.state)
     """
+
     code: int
     message: str
     state: int
@@ -140,6 +139,7 @@ class SqlConnectionError(Exception):
         host: Redirect target host for routing errors, if available.
         port: Redirect target port for routing errors, if available.
     """
+
     message: Optional[str]
     host: Optional[str]
     port: Optional[int]
@@ -152,6 +152,7 @@ class TlsError(Exception):
     Attributes:
         message: Human-readable error description.
     """
+
     message: str
     ...
 
@@ -162,6 +163,7 @@ class ProtocolError(Exception):
     Attributes:
         message: Human-readable error description.
     """
+
     message: str
     ...
 
@@ -172,6 +174,7 @@ class ConversionError(Exception):
     Attributes:
         message: Human-readable error description.
     """
+
     message: str
     ...
 
@@ -359,26 +362,6 @@ class QueryStream:
         """
         ...
 
-    def to_arrow(self) -> pyarrow.Table:
-        """
-        Convert query results to Apache Arrow Table.
-
-        Converts all rows to an Apache Arrow Table with column-oriented storage,
-        enabling efficient bulk data processing and integration with data analysis tools.
-
-        Returns:
-            pyarrow.Table: Column-oriented result representation with schema metadata
-
-        Raises:
-            ImportError: If PyArrow is not installed
-            RuntimeError: If conversion fails (empty results from Tiberius may lack schema info)
-
-        Note:
-            All rows are converted eagerly into Arrow arrays and loaded into memory.
-            For very large result sets, consider processing in batches.
-        """
-        ...
-
 class Parameter:
     """
     Parameter object for SQL queries with optional type hints.
@@ -489,6 +472,7 @@ class Parameters:
 
 class AzureCredentialType(StrEnum):
     """Azure credential type constants for authentication."""
+
     SERVICE_PRINCIPAL: str = "ServicePrincipal"
     MANAGED_IDENTITY: str = "ManagedIdentity"
     ACCESS_TOKEN: str = "AccessToken"
@@ -510,9 +494,7 @@ class AzureCredential:
 
     @staticmethod
     def service_principal(
-        client_id: str,
-        client_secret: str,
-        tenant_id: str
+        client_id: str, client_secret: str, tenant_id: str
     ) -> AzureCredential:
         """
         Create Azure credential for Service Principal authentication.
@@ -763,7 +745,7 @@ class Connection:
         """
         ...
 
-    async def __aenter__(self) -> Connection:
+    async def __aenter__(self) -> _RustConnection:
         """Async context manager entry (initializes pool)."""
         ...
 
@@ -894,7 +876,7 @@ class Transaction:
         """Return True if the underlying connection is currently established."""
         ...
 
-    async def __aenter__(self) -> Transaction:
+    async def __aenter__(self) -> _RustTransaction:
         """Async context manager entry (begins transaction)."""
         ...
 
@@ -905,7 +887,7 @@ class Transaction:
 class TypedNull(StrEnum):
     """Class to store a typed null value
 
-    This is required as some SQL Server features such as stored procedures etc. sometimes require type information for which is 
+    This is required as some SQL Server features such as stored procedures etc. sometimes require type information for which is
     not possible for nulls when just using `None`. In such cases, SQL Server will complain about being unable to cast 'tinyint'
     to the desired data type.
 
