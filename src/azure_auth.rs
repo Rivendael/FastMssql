@@ -461,8 +461,12 @@ impl PyAzureCredential {
     /// Get and validate the Azure CLI path to prevent command injection
     fn get_azure_cli_path() -> PyResult<String> {
         // Try to get path from environment variable first
+        // Treat empty/whitespace as unset to avoid attempting to execute an empty program name.
         let az_path = std::env::var("AZURE_CLI_PATH")
-            .unwrap_or_else(|_| Self::get_default_az_path().to_string());
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| Self::get_default_az_path().to_string());
 
         // Check if this is a bare program name (no path separators).
         // If so, allow PATH resolution and skip existence validation.

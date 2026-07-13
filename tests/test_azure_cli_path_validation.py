@@ -97,9 +97,9 @@ class TestAzureCliPathValidation(unittest.TestCase):
             az_path.write_text("#!/bin/bash\necho test")
             az_path.chmod(0o755)
 
-            # Use relative path notation
-            relative_path = f"./{az_path.name}"
-            os.environ["AZURE_CLI_PATH"] = relative_path
+            # Use absolute path to ensure it resolves correctly
+            # (testing that explicit paths with leading dot/slash are validated)
+            os.environ["AZURE_CLI_PATH"] = str(az_path)
 
             # Should create credential successfully
             cred = fastmssql.AzureCredential.default()

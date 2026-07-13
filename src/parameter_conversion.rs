@@ -138,7 +138,7 @@ fn python_params_to_fast_parameters(
     for param in params.iter() {
         if type_mapping::is_expandable_iterable(&param)? {
             // Calculate remaining budget and pass it to prevent unbounded generator expansion
-            let remaining = 2100 - result.len();
+            let remaining = (2100_usize).saturating_sub(result.len());
             expand_iterable_to_fast_params(&param, &mut result, remaining)?;
         } else {
             result.push(python_to_fast_parameter(&param)?);
