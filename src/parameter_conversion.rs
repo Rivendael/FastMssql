@@ -50,7 +50,9 @@ pub fn python_to_fast_parameter(obj: &Bound<PyAny>) -> PyResult<FastParameter> {
             .map_err(|_| PyValueError::new_err("Int too large"));
     }
     if let Ok(py_s) = obj.cast::<PyString>() {
-        return Ok(FastParameter::String(py_s.to_str()?.to_owned()));
+        let s = py_s.to_str()
+            .map_err(|_| PyValueError::new_err("String parameter contains invalid UTF-8"))?;
+        return Ok(FastParameter::String(s.to_owned()));
     }
     if let Ok(py_f) = obj.cast::<PyFloat>() {
         return Ok(FastParameter::F64(py_f.value()));
@@ -135,62 +137,31 @@ fn python_params_to_fast_parameters(
 
     for param in params.iter() {
         if type_mapping::is_expandable_iterable(&param)? {
-            let approx_size = get_iterable_size(&param)?;
-            if result.len() + approx_size > 2100 {
-                return Err(PyValueError::new_err(format!(
-                    "Parameter expansion would exceed SQL Server limit of 2,100 parameters: current {} + expansion {} > 2,100",
-                    result.len(),
-                    approx_size
-                )));
-            }
-
-            expand_iterable_to_fast_params(&param, &mut result)?;
-
-            if result.len() > 2100 {
-                return Err(PyValueError::new_err(format!(
-                    "Parameter expansion exceeded SQL Server limit of 2,100 parameters: {} parameters after expansion",
-                    result.len()
-                )));
-            }
+            // Calculate remaining budget and pass it to prevent unbounded generator expansion
+            let remaining = 2100 - result.len();
+            expand_iterable_to_fast_params(&param, &mut result, remaining)?;
         } else {
             result.push(python_to_fast_parameter(&param)?);
-            if result.len() > 2100 {
-                return Err(PyValueError::new_err(format!(
-                    "Parameter limit exceeded: {} parameters, but SQL Server supports maximum 2,100 parameters",
-                    result.len()
-                )));
-            }
         }
+    }
+
+    // Final validation: ensure we haven't exceeded the limit
+    if result.len() > 2100 {
+        return Err(PyValueError::new_err(format!(
+            "SQL Server parameter limit exceeded: {} parameters (max: 2,100)",
+            result.len()
+        )));
     }
 
     Ok(result)
 }
 
-fn get_iterable_size(iterable: &Bound<PyAny>) -> PyResult<usize> {
-    use pyo3::types::{PyList, PyTuple};
-
-    if let Ok(list) = iterable.cast::<PyList>() {
-        return Ok(list.len());
-    }
-
-    if let Ok(tuple) = iterable.cast::<PyTuple>() {
-        return Ok(tuple.len());
-    }
-
-    match iterable.call_method0("__len__") {
-        Ok(len_result) => {
-            if let Ok(size) = len_result.extract::<usize>() {
-                return Ok(size);
-            }
-        }
-        Err(_) => {}
-    }
-
-    Ok(2101)
-}
-
-/// Expand a Python iterable into individual FastParameter objects with minimal allocations
-fn expand_iterable_to_fast_params<T>(iterable: &Bound<PyAny>, result: &mut T) -> PyResult<()>
+/// Expand a Python iterable into individual FastParameter objects with minimal allocations.
+/// 
+/// **IMPORTANT**: The `remaining` parameter enforces a hard limit on expansion to prevent DoS attacks
+/// from generators that could otherwise yield unlimited items. This function will short-circuit
+/// and return an error if the remaining budget is exhausted before the iterator is consumed.
+fn expand_iterable_to_fast_params<T>(iterable: &Bound<PyAny>, result: &mut T, mut remaining: usize) -> PyResult<()>
 where
     T: Extend<FastParameter>,
 {
@@ -199,21 +170,34 @@ where
     // Fast path for common collection types - avoid iterator overhead
     if let Ok(list) = iterable.cast::<PyList>() {
         for item in list.iter() {
+            if remaining == 0 {
+                return Err(PyValueError::new_err(
+                    "Parameter expansion exceeded SQL Server limit of 2,100 parameters"
+                ));
+            }
             let param = python_to_fast_parameter(&item)?;
             result.extend(std::iter::once(param));
+            remaining -= 1;
         }
         return Ok(());
     }
 
     if let Ok(tuple) = iterable.cast::<PyTuple>() {
         for item in tuple.iter() {
+            if remaining == 0 {
+                return Err(PyValueError::new_err(
+                    "Parameter expansion exceeded SQL Server limit of 2,100 parameters"
+                ));
+            }
             let param = python_to_fast_parameter(&item)?;
             result.extend(std::iter::once(param));
+            remaining -= 1;
         }
         return Ok(());
     }
 
-    // Fallback for generic iterables - use PyO3's optimized iteration
+    // Fallback for generic iterables (generators, custom iterators, etc.) - use PyO3's optimized iteration
+    // The remaining counter prevents unbounded expansion from malicious generators
     let py = iterable.py();
     let iter = iterable.call_method0("__iter__")?;
 
@@ -222,7 +206,13 @@ where
     loop {
         match iter.call_method0("__next__") {
             Ok(item) => {
+                if remaining == 0 {
+                    return Err(PyValueError::new_err(
+                        "Parameter expansion exceeded SQL Server limit of 2,100 parameters"
+                    ));
+                }
                 batch.push(python_to_fast_parameter(&item)?);
+                remaining -= 1;
 
                 // Batch extend every 16 items to reduce extend() call overhead
                 if batch.len() == 16 {

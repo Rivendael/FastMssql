@@ -87,9 +87,13 @@ impl fmt::Debug for PyAzureCredential {
 
 impl Drop for PyAzureCredential {
     fn drop(&mut self) {
-        // Explicitly clear sensitive config when credential is dropped
-        // Arc will handle the cleanup when this is the last reference
-        // The inner SensitiveString items will be zeroized on drop
+        // If this is the last reference to the sensitive_config map, proactively zeroize and clear it.
+        if let Some(map) = Arc::get_mut(&mut self.sensitive_config) {
+            for v in map.values_mut() {
+                v.zeroize();
+            }
+            map.clear();
+        }
     }
 }
 

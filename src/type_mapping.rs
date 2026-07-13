@@ -6,18 +6,23 @@ use pyo3::{IntoPyObjectExt, Py, PyAny, prelude::*};
 use tiberius::{ColumnType, Row};
 
 /// Cached handle to `decimal.Decimal` — imported once, reused for every row.
-static DECIMAL_CLASS: OnceLock<Py<PyAny>> = OnceLock::new();
+/// Stored as `Option` to allow initialization via `get_or_init()` with fallible closure.
+static DECIMAL_CLASS: OnceLock<Option<Py<PyAny>>> = OnceLock::new();
 
 /// Return a `Bound` reference to `decimal.Decimal`, initializing the cache on
 /// the very first call and simply re-binding on every subsequent call.
 #[inline]
 fn get_decimal_class(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
-    if let Some(cls) = DECIMAL_CLASS.get() {
-        return Ok(cls.bind(py));
-    }
-    let cls = py.import("decimal")?.getattr("Decimal")?.unbind();
-    let _ = DECIMAL_CLASS.set(cls);
-    Ok(DECIMAL_CLASS.get().unwrap().bind(py))
+    let cls = DECIMAL_CLASS
+        .get_or_init(|| {
+            py.import("decimal")
+                .and_then(|m| m.getattr("Decimal"))
+                .map(|d| d.unbind())
+                .ok()
+        })
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("Failed to initialize decimal.Decimal"))?;
+    Ok(cls.bind(py))
 }
 
 /// Macro to eliminate boilerplate for identical scalar type conversions.
