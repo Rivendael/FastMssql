@@ -79,11 +79,11 @@ pub struct AzureConnectionManager {
     /// it is applied dynamically in `connect()`.
     base_config: Config,
     /// Azure credential, or `None` for non-Azure auth.
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
 }
 
 impl AzureConnectionManager {
-    pub fn new(base_config: Config, azure_credential: Option<PyAzureCredential>) -> Self {
+    pub fn new(base_config: Config, azure_credential: Option<Arc<PyAzureCredential>>) -> Self {
         Self {
             base_config,
             azure_credential,
@@ -160,7 +160,7 @@ pub type ConnectionPool = Pool<AzureConnectionManager>;
 
 pub async fn establish_pool(
     base_config: &Config,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
     pool_config: &PyPoolConfig,
 ) -> PyResult<ConnectionPool> {
     let manager = AzureConnectionManager::new(base_config.clone(), azure_credential);
@@ -203,7 +203,7 @@ pub async fn ensure_pool_initialized_with_auth(
     pool: Arc<RwLock<Option<ConnectionPool>>>,
     config: Arc<Config>,
     pool_config: &PyPoolConfig,
-    azure_credential: Option<PyAzureCredential>,
+    azure_credential: Option<Arc<PyAzureCredential>>,
 ) -> PyResult<ConnectionPool> {
     {
         let read_guard = pool.read().await;
