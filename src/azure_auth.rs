@@ -431,14 +431,10 @@ impl PyAzureCredential {
 
     /// Get the default Azure CLI path for the current OS
     fn get_default_az_path() -> &'static str {
-        #[cfg(windows)]
-        return "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd";
-        #[cfg(target_os = "macos")]
-        return "/usr/local/bin/az";
-        #[cfg(target_os = "linux")]
-        return "/usr/bin/az";
-        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-        return "az";
+        // Return bare program name on all platforms to leverage OS PATH resolution.
+        // This ensures compatibility with various installation methods (Homebrew on macOS,
+        // Snaps on Linux, custom installations, etc.) instead of hard-coding specific paths.
+        "az"
     }
 
     /// Get and validate the Azure CLI path to prevent command injection
