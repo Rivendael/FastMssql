@@ -252,6 +252,23 @@ impl PyAzureCredential {
         3600 // Safe default: 1 hour
     }
 
+    // Parse Azure CLI's "expiresOn" timestamp string (ISO 8601) and calculate expires_in
+    fn parse_expires_on(json: &Value, key: &str) -> u64 {
+        if let Some(timestamp_str) = json[key].as_str() {
+            // Try to parse ISO 8601 timestamp (e.g., "2026-01-18T12:00:00Z")
+            if let Ok(expires_dt) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
+                let now = chrono::Utc::now();
+                let expires_utc = expires_dt.with_timezone(&chrono::Utc);
+                
+                // Calculate duration in seconds. If already expired, return 0.
+                if let Ok(duration) = expires_utc.signed_duration_since(now).to_std() {
+                    return duration.as_secs();
+                }
+            }
+        }
+        3600 // Safe default: 1 hour if parsing fails
+    }
+
     pub async fn to_auth_method(&self) -> PyResult<AuthMethod> {
         // 1. Static Access Token Bypass
         if let AzureCredentialType::AccessToken = self.credential_type {
@@ -563,10 +580,9 @@ impl PyAzureCredential {
                     .ok_or_else(|| PyRuntimeError::new_err("Missing accessToken"))?
                     .to_string();
 
-                // Azure CLI returns 'expiresOn' as a timestamp string, not an integer duration.
-                // Passing it to parse_expires_in will trigger your 3600-second safe default,
-                // which is perfectly fine and resilient for a local CLI development fallback!
-                let expires_in = Self::parse_expires_in(&json, "expiresIn");
+                // Azure CLI returns 'expiresOn' as an ISO 8601 timestamp string.
+                // Parse it to calculate the actual token expiration duration.
+                let expires_in = Self::parse_expires_on(&json, "expiresOn");
 
                 Ok((access_token, expires_in))
             }
