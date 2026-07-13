@@ -231,14 +231,12 @@ impl PyAzureCredential {
         self.sensitive_config.get(key)
     }
 
-    /// Check if cached token is still valid with an explicit safety buffer.
-    /// This prevents edge cases where tokens expire mid-operation or during clock drift.
-    /// Buffer: 30 seconds before actual expiry to account for clock skew and processing time.
+    /// Check if cached token is still valid.
+    ///
+    /// Note: `expires_at` is already written with a safety buffer applied (see the
+    /// `buffer_secs` logic when caching), so we only need a simple comparison here.
     fn is_token_still_valid(cached_token: &CachedToken) -> bool {
-        let safety_buffer = Duration::from_secs(30);
-        let now = Instant::now();
-        // Token is valid only if current time + buffer is before expiry
-        now + safety_buffer < cached_token.expires_at
+        Instant::now() < cached_token.expires_at
     }
 
     // Helper to safely parse variations of "expires_in" fields from Azure JSON
@@ -449,10 +447,16 @@ impl PyAzureCredential {
         let az_path = std::env::var("AZURE_CLI_PATH")
             .unwrap_or_else(|_| Self::get_default_az_path().to_string());
 
-        // Check if this is a bare program name (no path separators)
-        // If so, allow PATH resolution and skip existence validation
+        // Check if this is a bare program name (no path separators).
+        // If so, allow PATH resolution and skip existence validation.
+        //
+        // On Windows, also treat drive-relative paths like `C:az.cmd` as explicit paths
+        // (they contain no separators but are still path-like).
         let path = Path::new(&az_path);
-        if !az_path.contains('/') && !az_path.contains('\\') {
+        let is_bare_name = !az_path.contains('/')
+            && !az_path.contains('\\')
+            && !(cfg!(windows) && az_path.contains(':'));
+        if is_bare_name {
             // Bare program name - let the OS resolve it via PATH
             return Ok(az_path);
         }
