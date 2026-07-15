@@ -12,6 +12,7 @@ create_exception!(crate::fastmssql, SqlConnectionError, PyException);
 create_exception!(crate::fastmssql, TlsError, PyException);
 create_exception!(crate::fastmssql, ProtocolError, PyException);
 create_exception!(crate::fastmssql, ConversionError, PyException);
+create_exception!(crate::fastmssql, QueryTimeoutError, PyException);
 
 pub fn create_sql_error(err: TError, base: &'static str) -> PyErr {
     match err {
@@ -86,6 +87,16 @@ pub fn create_connection_error(message: impl Into<String>) -> PyErr {
     let message = message.into();
     Python::attach(|py| {
         let exc = SqlConnectionError::new_err(message.clone());
+        let _ = exc.value(py).setattr("message", message.as_str());
+        exc
+    })
+}
+
+/// Creates a `QueryTimeoutError` with the `.message` attribute set to the provided message.
+pub fn create_timeout_error(message: impl Into<String>) -> PyErr {
+    let message = message.into();
+    Python::attach(|py| {
+        let exc = QueryTimeoutError::new_err(message.clone());
         let _ = exc.value(py).setattr("message", message.as_str());
         exc
     })

@@ -24,7 +24,7 @@ pub use pool_config::PyPoolConfig;
 pub use py_parameters::{Parameter, Parameters};
 pub use ssl_config::{EncryptionLevel, PySslConfig};
 pub use transaction::Transaction;
-pub use types::{PyFastRow, PyQueryStream, SqlError, SqlConnectionError, TlsError, ProtocolError, ConversionError};
+pub use types::{PyFastRow, PyQueryStream, SqlError, SqlConnectionError, TlsError, ProtocolError, ConversionError, QueryTimeoutError};
 
 use crate::parameter_conversion::TypedNull;
 
@@ -81,6 +81,7 @@ fn fastmssql(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add("TlsError", py.get_type::<TlsError>())?;
         m.add("ProtocolError", py.get_type::<ProtocolError>())?;
         m.add("ConversionError", py.get_type::<ConversionError>())?;
+        m.add("QueryTimeoutError", py.get_type::<QueryTimeoutError>())?;
     }
 
     m.add_function(wrap_pyfunction!(version, m)?)?;
