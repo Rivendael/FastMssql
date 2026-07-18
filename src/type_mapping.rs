@@ -130,12 +130,43 @@ fn handle_money4(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     }
 }
 
+/// Convert a tiberius `Numeric` to the canonical decimal string accepted by
+/// Python's `decimal.Decimal()` constructor.
+///
+/// `Numeric::to_string()` delegates to its `Debug` impl which formats as
+/// `"{int_part}.{dec_part:0scale$}"`. For negative sub-integer values (e.g.
+/// `-0.00001`, stored as `value=-1, scale=5`) `dec_part()` returns `-1`, so
+/// the string becomes `"0.-0001"` — not parseable by Python, raising
+/// `decimal.InvalidOperation`.
+///
+/// This function builds the string directly from the raw `value` (i128) and
+/// `scale` (u8), correctly handling all sign/magnitude combinations.
+#[inline]
+fn numeric_to_decimal_string(numeric: tiberius::numeric::Numeric) -> String {
+    let value = numeric.value();
+    let scale = numeric.scale() as usize;
+
+    if scale == 0 {
+        return format!("{}", value);
+    }
+
+    let sign = if value < 0 { "-" } else { "" };
+    let abs_value = value.unsigned_abs();
+    // Zero-pad to at least `scale + 1` digits so there is always an integer part.
+    let digits = format!("{:0>width$}", abs_value, width = scale + 1);
+    let split_pos = digits.len() - scale;
+    let (int_part, frac_part) = digits.split_at(split_pos);
+
+    format!("{}{}.{}", sign, int_part, frac_part)
+}
+
 #[inline(always)]
 fn handle_decimal(row: &Row, index: usize, py: Python) -> PyResult<Py<PyAny>> {
     match row.try_get::<tiberius::numeric::Numeric, usize>(index) {
         Ok(Some(numeric)) => {
             let decimal_class = get_decimal_class(py)?;
-            Ok(decimal_class.call1((numeric.to_string(),))?.unbind())
+            let s = numeric_to_decimal_string(numeric);
+            Ok(decimal_class.call1((s,))?.unbind())
         }
         Ok(None) => Ok(py.None()),
         Err(_) => Err(PyValueError::new_err(format!(

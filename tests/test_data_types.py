@@ -739,7 +739,7 @@ async def test_supported_bit_type(test_config: Config):
         f"BIT 1 should be Python True (bool), got {row.get('bit_col')!r} ({type(row.get('bit_col'))})"
     )
     assert isinstance(row.get("bit_col"), bool), (
-        f"BIT column should return bool, not int"
+        "BIT column should return bool, not int"
     )
 
 
@@ -908,6 +908,7 @@ async def test_nullable_float_columns(test_config: Config):
 # MONEY / SMALLMONEY precision tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_money_returns_decimal(test_config: Config):
@@ -1060,9 +1061,7 @@ async def test_bit_not_int(test_config: Config):
     isinstance(val, bool) returned False and 'val is True' failed.
     """
     async with Connection(test_config.connection_string) as conn:
-        result = await conn.query(
-            "SELECT CAST(1 AS BIT) AS t, CAST(0 AS BIT) AS f"
-        )
+        result = await conn.query("SELECT CAST(1 AS BIT) AS t, CAST(0 AS BIT) AS f")
     row = result.rows()[0]
     t_val = row.get("t")
     f_val = row.get("f")
@@ -1099,3 +1098,431 @@ async def test_bit_multiple_rows(test_config: Config):
 
     assert isinstance(rows[0].get("val"), bool)
     assert isinstance(rows[1].get("val"), bool)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_null_conversion(test_config: Config):
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            """
+            SELECT 
+                CAST(123.45678 AS NUMERIC(18, 5)) AS positive_value,
+                CAST(-0.00001 AS NUMERIC(18, 5)) AS negative_value,
+                CAST(NULL AS NUMERIC(18, 5)) AS null_value
+            """
+        )
+    row = result.rows()[0]
+    assert row.get("positive_value") == Decimal("123.45678")
+    assert row.get("negative_value") == Decimal("-0.00001")
+    assert row.get("null_value") is None
+
+
+# ---------------------------------------------------------------------------
+# FLOAT / REAL – type and precision
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_returns_python_float(test_config: Config):
+    """FLOAT (8-byte) columns must return Python float, not Decimal or int."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.5 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, float), f"FLOAT should return float, got {type(val)}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_returns_python_float(test_config: Config):
+    """REAL (4-byte) columns must return Python float."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.5 AS REAL) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, float), f"REAL should return float, got {type(val)}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_positive_value(test_config: Config):
+    """Positive FLOAT value round-trips within f64 precision."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(3.141592653589793 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert abs(val - 3.141592653589793) < 1e-14
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_negative_value(test_config: Config):
+    """Negative FLOAT value preserves sign and precision."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(-2.718281828 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, float)
+    assert abs(val - (-2.718281828)) < 1e-9
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_zero(test_config: Config):
+    """Zero FLOAT must round-trip as 0.0."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(0.0 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert val == 0.0
+    assert isinstance(val, float)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_null(test_config: Config):
+    """NULL FLOAT must come back as None."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(NULL AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert val is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_large_value(test_config: Config):
+    """Very large FLOAT value (near f64 max) must not overflow to None or error."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.7976931348623157e308 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert val is not None
+    assert isinstance(val, float)
+    assert val > 1e300
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_small_positive_value(test_config: Config):
+    """Very small positive FLOAT value must be readable (may denormalise to 0.0)."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(2.2250738585072014e-308 AS FLOAT) AS val"
+        )
+    val = result.rows()[0].get("val")
+    assert val is not None
+    assert isinstance(val, float)
+    assert val >= 0.0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_negative_small_value(test_config: Config):
+    """Negative small FLOAT value is readable and negative."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(-1.5e-10 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert val is not None
+    assert isinstance(val, float)
+    assert val < 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_multiple_rows(test_config: Config):
+    """FLOAT values are correct across multiple rows including NULL."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT CAST(1.1 AS FLOAT) AS val
+            UNION ALL SELECT CAST(-2.2 AS FLOAT)
+            UNION ALL SELECT CAST(0.0 AS FLOAT)
+            UNION ALL SELECT CAST(NULL AS FLOAT)
+        """)
+    rows = result.rows()
+    assert len(rows) == 4
+    assert abs(rows[0].get("val") - 1.1) < 1e-10
+    assert abs(rows[1].get("val") - (-2.2)) < 1e-10
+    assert rows[2].get("val") == 0.0
+    assert rows[3].get("val") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_nullable_column_via_table_var(test_config: Config):
+    """Nullable FLOAT column (Floatn wire type) non-null and null rows both work."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            DECLARE @t TABLE (col FLOAT NULL)
+            INSERT INTO @t VALUES (9.99), (NULL)
+            SELECT col FROM @t
+        """)
+    rows = result.rows()
+    assert len(rows) == 2
+    assert isinstance(rows[0].get("col"), float)
+    assert abs(rows[0].get("col") - 9.99) < 1e-10
+    assert rows[1].get("col") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_nullable_column_via_table_var(test_config: Config):
+    """Nullable REAL column (Floatn wire type) round-trips correctly."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            DECLARE @t TABLE (col REAL NULL)
+            INSERT INTO @t VALUES (3.14), (NULL)
+            SELECT col FROM @t
+        """)
+    rows = result.rows()
+    assert len(rows) == 2
+    assert isinstance(rows[0].get("col"), float)
+    assert abs(rows[0].get("col") - 3.14) < 0.001
+    assert rows[1].get("col") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float_not_decimal(test_config: Config):
+    """FLOAT must never be returned as Decimal; it is an approximate type."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.23456 AS FLOAT) AS val")
+    val = result.rows()[0].get("val")
+    assert not isinstance(val, Decimal), (
+        f"FLOAT should return float, not Decimal; got {type(val)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# DECIMAL / NUMERIC – exact representation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_returns_decimal_type(test_config: Config):
+    """DECIMAL and NUMERIC columns must return Python Decimal, not float."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT
+                CAST(1.5 AS DECIMAL(10, 1)) AS d,
+                CAST(1.5 AS NUMERIC(10, 1)) AS n
+        """)
+    row = result.rows()[0]
+    assert isinstance(row.get("d"), Decimal), (
+        f"DECIMAL should be Decimal, got {type(row.get('d'))}"
+    )
+    assert isinstance(row.get("n"), Decimal), (
+        f"NUMERIC should be Decimal, got {type(row.get('n'))}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_positive(test_config: Config):
+    """Positive DECIMAL value must round-trip exactly."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(123.45678 AS DECIMAL(18, 5)) AS val")
+    assert result.rows()[0].get("val") == Decimal("123.45678")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_negative_integer_part(test_config: Config):
+    """Negative DECIMAL with a non-zero integer part must preserve sign."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(-987.654 AS DECIMAL(18, 3)) AS val")
+    assert result.rows()[0].get("val") == Decimal("-987.654")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_negative_sub_integer(test_config: Config):
+    """Regression: negative sub-integer DECIMAL (value < 0, int_part == 0).
+
+    tiberius Numeric::to_string() produces '0.-0001' for NUMERIC(-0.00001, scale=5)
+    because dec_part() returns a negative i128, mangling the format string.
+    numeric_to_decimal_string() must produce '-0.00001' instead.
+    """
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(-0.00001 AS NUMERIC(18, 5)) AS val")
+    val = result.rows()[0].get("val")
+    assert val == Decimal("-0.00001"), f"Expected Decimal('-0.00001'), got {val!r}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_negative_sub_integer_various_scales(test_config: Config):
+    """Negative sub-integer values at scales 1..9 all format correctly."""
+    cases = [
+        ("DECIMAL(18, 1)", "-0.1", Decimal("-0.1")),
+        ("DECIMAL(18, 2)", "-0.01", Decimal("-0.01")),
+        ("DECIMAL(18, 3)", "-0.001", Decimal("-0.001")),
+        ("DECIMAL(18, 4)", "-0.0001", Decimal("-0.0001")),
+        ("DECIMAL(18, 5)", "-0.00001", Decimal("-0.00001")),
+        ("DECIMAL(18, 9)", "-0.000000001", Decimal("-0.000000001")),
+    ]
+    selects = ", ".join(
+        f"CAST({v} AS {t}) AS col_{i}" for i, (t, v, _) in enumerate(cases)
+    )
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(f"SELECT {selects}")
+    row = result.rows()[0]
+    for i, (_, _, expected) in enumerate(cases):
+        got = row.get(f"col_{i}")
+        assert got == expected, f"col_{i}: expected {expected!r}, got {got!r}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_zero(test_config: Config):
+    """Zero DECIMAL must round-trip as Decimal('0.000...')."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(0 AS DECIMAL(18, 5)) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, Decimal)
+    assert val == Decimal("0")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_null(test_config: Config):
+    """NULL DECIMAL/NUMERIC must come back as None."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT
+                CAST(NULL AS DECIMAL(18, 5)) AS d,
+                CAST(NULL AS NUMERIC(18, 5)) AS n
+        """)
+    row = result.rows()[0]
+    assert row.get("d") is None
+    assert row.get("n") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_scale_zero(test_config: Config):
+    """DECIMAL with scale 0 is an integer-like value but still returns Decimal."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(42 AS DECIMAL(10, 0)) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, Decimal)
+    assert val == Decimal("42")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_large_precision(test_config: Config):
+    """DECIMAL(28, 10) – high precision value must not lose digits."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(123456789.1234567890 AS DECIMAL(28, 10)) AS val"
+        )
+    val = result.rows()[0].get("val")
+    assert isinstance(val, Decimal)
+    assert val == Decimal("123456789.1234567890")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_max_sql_server_precision(test_config: Config):
+    """DECIMAL(38, 10) – uses SQL Server maximum precision without overflow."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query(
+            "SELECT CAST(1234567890123456789.1234567890 AS DECIMAL(38, 10)) AS val"
+        )
+    val = result.rows()[0].get("val")
+    assert isinstance(val, Decimal)
+    assert val == Decimal("1234567890123456789.1234567890")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_negative_large(test_config: Config):
+    """Large negative DECIMAL must preserve sign and all digits."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(-9999999.9999 AS DECIMAL(18, 4)) AS val")
+    assert result.rows()[0].get("val") == Decimal("-9999999.9999")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_not_float(test_config: Config):
+    """DECIMAL/NUMERIC must never silently become a float."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.1 AS DECIMAL(10, 1)) AS val")
+    val = result.rows()[0].get("val")
+    assert not isinstance(val, float), f"DECIMAL should not be float; got {type(val)}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_multiple_rows_with_null(test_config: Config):
+    """Multiple rows including NULL all convert correctly."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT CAST(1.1 AS DECIMAL(10, 2)) AS val
+            UNION ALL SELECT CAST(-2.2  AS DECIMAL(10, 2))
+            UNION ALL SELECT CAST(0     AS DECIMAL(10, 2))
+            UNION ALL SELECT CAST(NULL  AS DECIMAL(10, 2))
+        """)
+    rows = result.rows()
+    assert len(rows) == 4
+    assert rows[0].get("val") == Decimal("1.10")
+    assert rows[1].get("val") == Decimal("-2.20")
+    assert rows[2].get("val") == Decimal("0.00")
+    assert rows[3].get("val") is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decimal_vs_float_are_different_types(test_config: Config):
+    """DECIMAL and FLOAT columns carrying the same nominal value return different types."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            SELECT
+                CAST(1.5 AS FLOAT)        AS float_col,
+                CAST(1.5 AS DECIMAL(5,1)) AS decimal_col
+        """)
+    row = result.rows()[0]
+    assert isinstance(row.get("float_col"), float)
+    assert isinstance(row.get("decimal_col"), Decimal)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_numeric_nullable_column_via_table_var(test_config: Config):
+    """Nullable NUMERIC column uses Numericn wire type; non-null and null rows work."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("""
+            DECLARE @t TABLE (col NUMERIC(18, 5) NULL)
+            INSERT INTO @t VALUES (123.45678), (-0.00001), (NULL)
+            SELECT col FROM @t
+        """)
+    rows = result.rows()
+    assert len(rows) == 3
+    assert rows[0].get("col") == Decimal("123.45678")
+    assert rows[1].get("col") == Decimal("-0.00001")
+    assert rows[2].get("col") is None
+
+
+# ---------------------------------------------------------------------------
+# FLOAT precision: FLOAT(n) with n ≤ 24 is 4-byte; n > 24 is 8-byte
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float24_is_4_byte(test_config: Config):
+    """FLOAT(24) is stored as 4-byte real; value is readable as Python float."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.5 AS FLOAT(24)) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, float)
+    assert abs(val - 1.5) < 0.001
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_float53_is_8_byte(test_config: Config):
+    """FLOAT(53) is stored as 8-byte double; value is readable as Python float."""
+    async with Connection(test_config.connection_string) as conn:
+        result = await conn.query("SELECT CAST(1.5 AS FLOAT(53)) AS val")
+    val = result.rows()[0].get("val")
+    assert isinstance(val, float)
+    assert abs(val - 1.5) < 1e-14
