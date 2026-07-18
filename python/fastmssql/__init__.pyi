@@ -249,8 +249,24 @@ class Transaction:
         port: Optional[int] = None,
         instance_name: Optional[str] = None,
         application_name: Optional[str] = None,
+        query_timeout: Optional[int] = None,
     ) -> None:
-        """Initialize a dedicated non-pooled connection for transactions."""
+        """Initialize a dedicated non-pooled connection for transactions.
+        
+        Args:
+            connection_string: Complete ADO.NET-style connection string (takes precedence)
+            ssl_config: SSL/TLS configuration
+            azure_credential: Azure Active Directory credential for authentication
+            server: SQL Server hostname or IP address
+            database: Database name
+            username: Username for SQL authentication (required when using individual parameters)
+            password: Password for SQL authentication
+            application_intent: Sets ApplicationIntent to "ReadOnly" or "ReadWrite" (default: ReadWrite)
+            port: TCP port number (default: 1433)
+            instance_name: Named instance of SQL Server
+            application_name: Application name for SQL Server connection
+            query_timeout: Query timeout in milliseconds. None means no timeout.
+        """
         ...
 
     def query(

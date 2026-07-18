@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tiberius::{AuthMethod, Client, Config};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::{timeout, Duration};
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::azure_auth::PyAzureCredential;
@@ -13,7 +14,7 @@ use crate::batch::{execute_batch_on_connection, parse_batch_items, query_batch_o
 use crate::helpers::wrap_query_stream;
 use crate::parameter_conversion::{convert_parameters_to_fast, params_as_sql_refs};
 use crate::ssl_config::PySslConfig;
-use crate::types::{create_connection_error, create_sql_error};
+use crate::types::{create_connection_error, create_sql_error, create_timeout_error};
 
 /// Type for a single direct connection (not pooled)
 type SingleConnectionType = Client<tokio_util::compat::Compat<TcpStream>>;
@@ -23,6 +24,7 @@ struct TransactionHandles {
     conn: Arc<AsyncMutex<Option<SingleConnectionType>>>,
     config: Arc<Config>,
     azure_credential: Option<PyAzureCredential>,
+    query_timeout: Option<Duration>,
 }
 
 impl TransactionHandles {
@@ -40,12 +42,13 @@ pub struct Transaction {
     config: Arc<Config>,
     _ssl_config: Option<PySslConfig>,
     azure_credential: Option<PyAzureCredential>,
+    query_timeout: Option<Duration>,
 }
 
 #[pymethods]
 impl Transaction {
     #[new]
-    #[pyo3(signature = (connection_string = None, ssl_config = None, azure_credential = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None))]
+    #[pyo3(signature = (connection_string = None, ssl_config = None, azure_credential = None, server = None, database = None, username = None, password = None, application_intent = None, port = None, instance_name = None, application_name = None, query_timeout = None))]
     pub fn new(
         connection_string: Option<String>,
         ssl_config: Option<PySslConfig>,
@@ -58,6 +61,7 @@ impl Transaction {
         port: Option<u16>,
         instance_name: Option<String>,
         application_name: Option<String>,
+        query_timeout: Option<u64>,
     ) -> PyResult<Self> {
         // Store the original server parameter for validation before it gets reassigned
         let server_param = server.clone();
@@ -128,6 +132,7 @@ impl Transaction {
             config: Arc::new(config),
             _ssl_config: ssl_config,
             azure_credential,
+            query_timeout: query_timeout.map(Duration::from_millis),
         })
     }
 
@@ -144,29 +149,35 @@ impl Transaction {
         let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            handles.ensure_connected().await?;
+            Self::apply_timeout(handles.query_timeout, async {
+                handles.ensure_connected().await?;
 
-            let execution_result = {
-                let tiberius_params = params_as_sql_refs(&fast_parameters);
+                let execution_result = {
+                    let tiberius_params = params_as_sql_refs(&fast_parameters);
 
-                let mut conn_guard = handles.conn.lock().await;
-                let conn_ref = conn_guard
-                    .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                    let mut conn_guard = handles.conn.lock().await;
+                    let conn_ref = conn_guard
+                        .as_mut()
+                        .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
-                let result = conn_ref
-                    .query(&query, &tiberius_params)
-                    .await
-                    .map_err(|e| create_sql_error(e, "Query execution failed"))?
-                    .into_first_result()
-                    .await
-                    .map_err(|e| create_sql_error(e, "Failed to get results"))?;
+                    // Validate that the connection is still alive before executing the query
+                    Self::validate_connection(conn_ref, &handles.conn).await?;
 
-                drop(conn_guard);
-                result
-            };
+                    let result = conn_ref
+                        .query(&query, &tiberius_params)
+                        .await
+                        .map_err(|e| create_sql_error(e, "Query execution failed"))?
+                        .into_first_result()
+                        .await
+                        .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
-            wrap_query_stream(execution_result)
+                    drop(conn_guard);
+                    result
+                };
+
+                wrap_query_stream(execution_result)
+            })
+            .await
         })
     }
 
@@ -181,27 +192,33 @@ impl Transaction {
         let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            handles.ensure_connected().await?;
+            Self::apply_timeout(handles.query_timeout, async {
+                handles.ensure_connected().await?;
 
-            let execution_result = {
-                let mut conn_guard = handles.conn.lock().await;
-                let conn_ref = conn_guard
-                    .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                let execution_result = {
+                    let mut conn_guard = handles.conn.lock().await;
+                    let conn_ref = conn_guard
+                        .as_mut()
+                        .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
-                let result = conn_ref
-                    .simple_query(&query)
-                    .await
-                    .map_err(|e| create_sql_error(e, "Query execution failed"))?
-                    .into_first_result()
-                    .await
-                    .map_err(|e| create_sql_error(e, "Failed to get results"))?;
+                    // Validate that the connection is still alive before executing the query
+                    Self::validate_connection(conn_ref, &handles.conn).await?;
 
-                drop(conn_guard);
-                result
-            };
+                    let result = conn_ref
+                        .simple_query(&query)
+                        .await
+                        .map_err(|e| create_sql_error(e, "Query execution failed"))?
+                        .into_first_result()
+                        .await
+                        .map_err(|e| create_sql_error(e, "Failed to get results"))?;
 
-            wrap_query_stream(execution_result)
+                    drop(conn_guard);
+                    result
+                };
+
+                wrap_query_stream(execution_result)
+            })
+            .await
         })
     }
 
@@ -218,26 +235,32 @@ impl Transaction {
         let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            handles.ensure_connected().await?;
+            Self::apply_timeout(handles.query_timeout, async {
+                handles.ensure_connected().await?;
 
-            let affected = {
-                let tiberius_params = params_as_sql_refs(&fast_parameters);
+                let affected = {
+                    let tiberius_params = params_as_sql_refs(&fast_parameters);
 
-                let mut conn_guard = handles.conn.lock().await;
-                let conn_ref = conn_guard
-                    .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                    let mut conn_guard = handles.conn.lock().await;
+                    let conn_ref = conn_guard
+                        .as_mut()
+                        .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
-                let result = conn_ref
-                    .execute(&command, &tiberius_params)
-                    .await
-                    .map_err(|e| create_sql_error(e, "Command execution failed"))?;
+                    // Validate that the connection is still alive before executing the command
+                    Self::validate_connection(conn_ref, &handles.conn).await?;
 
-                drop(conn_guard);
-                result.total()
-            };
+                    let result = conn_ref
+                        .execute(&command, &tiberius_params)
+                        .await
+                        .map_err(|e| create_sql_error(e, "Command execution failed"))?;
 
-            Ok(affected)
+                    drop(conn_guard);
+                    result.total()
+                };
+
+                Ok(affected)
+            })
+            .await
         })
     }
 
@@ -254,21 +277,27 @@ impl Transaction {
         let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            handles.ensure_connected().await?;
+            Self::apply_timeout(handles.query_timeout, async {
+                handles.ensure_connected().await?;
 
-            let all_results = {
-                let mut conn_guard = handles.conn.lock().await;
-                let conn_ref = conn_guard
-                    .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                let all_results = {
+                    let mut conn_guard = handles.conn.lock().await;
+                    let conn_ref = conn_guard
+                        .as_mut()
+                        .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
-                execute_batch_on_connection(conn_ref, batch_commands).await?
-            };
+                    // Validate that the connection is still alive before executing batch commands
+                    Self::validate_connection(conn_ref, &handles.conn).await?;
 
-            Python::attach(|py| {
-                let py_list = PyList::new(py, all_results)?;
-                Ok(py_list.into_any().unbind())
+                    execute_batch_on_connection(conn_ref, batch_commands).await?
+                };
+
+                Python::attach(|py| {
+                    let py_list = PyList::new(py, all_results)?;
+                    Ok(py_list.into_any().unbind())
+                })
             })
+            .await
         })
     }
 
@@ -284,26 +313,32 @@ impl Transaction {
         let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            handles.ensure_connected().await?;
+            Self::apply_timeout(handles.query_timeout, async {
+                handles.ensure_connected().await?;
 
-            let all_results = {
-                let mut conn_guard = handles.conn.lock().await;
-                let conn_ref = conn_guard
-                    .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                let all_results = {
+                    let mut conn_guard = handles.conn.lock().await;
+                    let conn_ref = conn_guard
+                        .as_mut()
+                        .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
-                query_batch_on_connection(conn_ref, batch_queries).await?
-            };
+                    // Validate that the connection is still alive before executing batch queries
+                    Self::validate_connection(conn_ref, &handles.conn).await?;
 
-            Python::attach(|py| -> PyResult<Py<PyAny>> {
-                let mut py_results = Vec::with_capacity(all_results.len());
-                for result in all_results {
-                    let py_result = wrap_query_stream(result)?;
-                    py_results.push(py_result.into_any());
-                }
-                let py_list = PyList::new(py, py_results)?;
-                Ok(py_list.into_any().unbind())
+                    query_batch_on_connection(conn_ref, batch_queries).await?
+                };
+
+                Python::attach(|py| -> PyResult<Py<PyAny>> {
+                    let mut py_results = Vec::with_capacity(all_results.len());
+                    for result in all_results {
+                        let py_result = wrap_query_stream(result)?;
+                        py_results.push(py_result.into_any());
+                    }
+                    let py_list = PyList::new(py, py_results)?;
+                    Ok(py_list.into_any().unbind())
+                })
             })
+            .await
         })
     }
 
@@ -312,68 +347,106 @@ impl Transaction {
         let handles = self.clone_handles();
 
         future_into_py(py, async move {
-            handles.ensure_connected().await?;
+            Self::apply_timeout(handles.query_timeout, async {
+                handles.ensure_connected().await?;
 
-            {
-                let mut conn_guard = handles.conn.lock().await;
-                let conn_ref = conn_guard
-                    .as_mut()
-                    .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+                {
+                    let mut conn_guard = handles.conn.lock().await;
+                    let conn_ref = conn_guard
+                        .as_mut()
+                        .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
-                conn_ref
-                    .simple_query("BEGIN TRANSACTION")
-                    .await
-                    .map_err(|e| create_sql_error(e, "Failed to begin transaction"))?;
+                    // Validate that the connection is still alive before starting transaction
+                    Self::validate_connection(conn_ref, &handles.conn).await?;
 
-                drop(conn_guard);
-            }
+                    conn_ref
+                        .simple_query("BEGIN TRANSACTION")
+                        .await
+                        .map_err(|e| create_sql_error(e, "Failed to begin transaction"))?;
 
-            Ok(())
+                    drop(conn_guard);
+                }
+
+                Ok(())
+            })
+            .await
         })
     }
 
     /// Commit the current transaction
     pub fn commit<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
+        let query_timeout = self.query_timeout;
 
         future_into_py(py, async move {
-            Self::execute_transaction_command(&conn, "COMMIT TRANSACTION", "Failed to commit transaction").await
+            Self::apply_timeout(query_timeout, Self::execute_transaction_command(&conn, "COMMIT TRANSACTION", "Failed to commit transaction"))
+            .await
         })
     }
 
     /// Rollback the current transaction
     pub fn rollback<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
+        let query_timeout = self.query_timeout;
 
         future_into_py(py, async move {
-            Self::execute_transaction_command(&conn, "ROLLBACK TRANSACTION", "Failed to rollback transaction").await
+            Self::apply_timeout(query_timeout, Self::execute_transaction_command(&conn, "ROLLBACK TRANSACTION", "Failed to rollback transaction"))
+            .await
         })
     }
 
     /// Close the connection
+    /// Attempts a best-effort rollback to clean up any open transactions on the server.
+    /// Logs warnings if the rollback fails but still closes the connection.
+    /// Always succeeds (returns Ok) since connection closure is the critical operation.
     pub fn close<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let conn = Arc::clone(&self.conn);
+        let query_timeout = self.query_timeout;
 
         future_into_py(py, async move {
-            let mut conn_guard = conn.lock().await;
-            if let Some(mut c) = conn_guard.take() {
-                // Best-effort rollback: silently ignore errors (connection may already be
-                // broken or no transaction may be active — both are fine).
-                let _ = c.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION").await;
-                // Connection is dropped here, closing the TCP stream.
-            }
-            Ok(())
+            Self::apply_timeout(query_timeout, async {
+                let mut conn_guard = conn.lock().await;
+                if let Some(mut c) = conn_guard.take() {
+                    // Attempt rollback to clean up any open transactions on the server.
+                    // This prevents server-side resource leaks and held locks.
+                    match c.simple_query("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION").await {
+                        Ok(_) => {
+                            // Rollback succeeded - transaction is cleaned up on server.
+                        }
+                        Err(e) => {
+                            // Rollback failed: log the error so it's not silently ignored.
+                            // This can happen if:
+                            // - Connection is already broken (TCP stream disconnected)
+                            // - Server closed the connection unexpectedly
+                            // - The connection is in an invalid state
+                            //
+                            // We still close the connection below (best-effort cleanup).
+                            // This log message will appear on stderr and can be captured by Python.
+                            eprintln!(
+                                "WARNING: Failed to rollback transaction during connection close: {}. \
+                                The transaction may still be open on the server, potentially holding locks.",
+                                e
+                            );
+                        }
+                    }
+                    // Connection is dropped here, closing the TCP stream.
+                    // This ensures the connection is always closed regardless of rollback success.
+                }
+                Ok(())
+            })
+            .await
         })
     }
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        // Derive connectivity from the actual connection object rather than a stale flag.
-        // If the lock is held (query in progress), the connection is active → true.
-        // If we can peek and it's Some, connected. If None, not connected.
+        // Only return true if we can acquire the lock and verify the connection exists.
+        // If the lock is held by another task, we cannot reliably determine connection state,
+        // so conservatively return false. This ensures the method accurately reflects whether
+        // the connection is available and can be used.
         match self.conn.try_lock() {
             Ok(guard) => guard.is_some(),
-            Err(_) => true,
+            Err(_) => false,  // Lock held → cannot verify state, return conservative false
         }
     }
 }
@@ -385,6 +458,47 @@ impl Transaction {
             conn: Arc::clone(&self.conn),
             config: Arc::clone(&self.config),
             azure_credential: self.azure_credential.clone(),
+            query_timeout: self.query_timeout,
+        }
+    }
+
+    /// Validate that the connection is still alive by attempting a simple query.
+    /// If the connection is stale or broken, closes it and returns an error.
+    /// This prevents silent failures from using dead connections.
+    ///
+    /// # Arguments
+    /// * `conn_ref` - Mutable reference to the connection
+    /// * `conn` - Arc reference to the connection for cleanup on failure
+    ///
+    /// # Returns
+    /// Ok(()) if connection is valid, Err with clear message if connection is dead
+    async fn validate_connection(
+        conn_ref: &mut SingleConnectionType,
+        conn: &Arc<AsyncMutex<Option<SingleConnectionType>>>,
+    ) -> PyResult<()> {
+        // Attempt a simple query to verify the connection is still usable.
+        // This catches stale TCP connections that exist as Some() but are no longer functional.
+        let validation_result = conn_ref.simple_query("SELECT 1").await;
+
+        match validation_result {
+            Ok(_) => {
+                // Connection is healthy, continue without dropping the lock
+                Ok(())
+            }
+            Err(ref e) => {
+                // Connection is stale or broken. Close it to allow reconnection on next use.
+                let error_msg = e.to_string();
+                
+                let mut conn_guard = conn.lock().await;
+                *conn_guard = None;
+                drop(conn_guard);
+
+                Err(PyRuntimeError::new_err(format!(
+                    "Connection validation failed - connection is stale or broken: {}. \
+                     Connection will be re-established on next operation.",
+                    error_msg
+                )))
+            }
         }
     }
 
@@ -399,6 +513,16 @@ impl Transaction {
             .as_mut()
             .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
 
+        // Validate that the connection is still alive before executing transaction command
+        Self::validate_connection(conn_ref, conn).await?;
+
+        // Re-acquire the lock after validation (validate_connection may have closed it on error)
+        drop(conn_guard);
+        let mut conn_guard = conn.lock().await;
+        let conn_ref = conn_guard
+            .as_mut()
+            .ok_or_else(|| PyRuntimeError::new_err("Connection is not established"))?;
+
         conn_ref
             .simple_query(sql)
             .await
@@ -406,6 +530,26 @@ impl Transaction {
 
         drop(conn_guard);
         Ok(())
+    }
+
+    /// Helper method to apply a timeout to an async operation
+    /// Returns a timeout error if the operation takes longer than configured timeout
+    async fn apply_timeout<F, T>(query_timeout: Option<Duration>, future: F) -> PyResult<T>
+    where
+        F: std::future::Future<Output = PyResult<T>>,
+    {
+        match query_timeout {
+            Some(duration) => match timeout(duration, future).await {
+                Ok(result) => result,
+                Err(_) => {
+                    Err(create_timeout_error(format!(
+                        "Query execution exceeded timeout of {}ms",
+                        duration.as_millis()
+                    )))
+                }
+            },
+            None => future.await,
+        }
     }
 
     /// Ensure connection is established. Initializes connection if needed.
