@@ -149,6 +149,6 @@ dev = [
     "python-dotenv==1.2.2",
     "cibuildwheel[uv]>=4.1.0",
     "wheel==0.47.0",
-    "filelock==3.29.5",
+    "filelock==4.2.1",
     "uvloop==0.22.1"
 ]
